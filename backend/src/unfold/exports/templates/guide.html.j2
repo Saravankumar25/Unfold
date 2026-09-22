@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ project.name }} — Project Guide</title>
+<style>
+{% include "_styles.css.j2" %}
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="wordmark">Unfold</div>
+  <div>
+    <div class="eyebrow">Project Guide</div>
+    <h1>{{ project.name }}</h1>
+    <p class="tagline">Prepare your project.</p>
+    <table class="meta">
+      {% if project.source %}<tr><th>Source</th><td class="mono">{{ project.source }}</td></tr>{% endif %}
+      {% if project.commit_sha %}<tr><th>Commit</th><td class="mono">{{ project.commit_sha | short_sha }}</td></tr>{% endif %}
+      {% if project.technical_level %}<tr><th>Level</th><td>{{ project.technical_level | capitalize }}</td></tr>{% endif %}
+      <tr><th>Generated</th><td>{{ project.generated_at | date }}</td></tr>
+      {% if project.estimated_read_minutes %}<tr><th>Read time</th><td>about {{ project.estimated_read_minutes }} min</td></tr>{% endif %}
+      <tr><th>Sections</th><td>{{ sections | length }}</td></tr>
+    </table>
+  </div>
+  <div class="cover-foot">Every explanation is grounded in the repository. Citations like <sup class="cite">E3</sup>
+    point to the evidence appendix; claim badges show how strongly each statement is supported.</div>
+</section>
+
+<section class="toc">
+  <div class="eyebrow">Contents</div>
+  <h2>Table of contents</h2>
+  <ol>
+  {% for v in sections %}
+    <li><span class="num">{{ "%02d" | format(loop.index) }}</span>
+      <span class="title"><a href="#{{ v.anchor }}">{{ v.section.title }}</a></span>
+      {% if v.section.target_minutes %}<span class="mins">{{ "%.0f" | format(v.section.target_minutes) }} min</span>{% endif %}</li>
+  {% endfor %}
+    <li><span class="num">—</span><span class="title"><a href="#claim-legend">How to read claim badges</a></span></li>
+    <li><span class="num">—</span><span class="title"><a href="#evidence">Evidence appendix</a></span></li>
+  </ol>
+</section>
+
+{% for v in sections %}
+{% set s = v.section %}
+<section class="section" id="{{ v.anchor }}">
+  <div class="eyebrow">Section {{ loop.index }}{% if s.kind == "backbone" %} · essentials{% endif %}</div>
+  <h2>{{ s.title }}</h2>
+  {% if s.content is none %}
+    <p class="missing">This section is not available ({{ s.status }}).</p>
+  {% else %}
+    {% if s.content.summary %}<p class="section-summary">{{ s.content.summary | inline }}</p>{% endif %}
+    {% for item in v.blocks %}
+      {% set b = item.block %}
+      {% if item.type == "heading" %}
+        {% if b.level == 3 %}<h4>{{ b.text | inline }}</h4>{% else %}<h3>{{ b.text | inline }}</h3>{% endif %}
+      {% elif item.type == "paragraph" %}
+        <p>{{ b.text | inline }}</p>
+      {% elif item.type == "bullets" %}
+        {% if b.ordered %}<ol>{% else %}<ul>{% endif %}
+        {% for it in b.items %}<li>{{ it | inline }}</li>{% endfor %}
+        {% if b.ordered %}</ol>{% else %}</ul>{% endif %}
+      {% elif item.type == "callout" %}
+        <div class="callout {{ b.tone }}"><span class="tone">{{ b.tone }}</span><p>{{ b.text | inline }}</p></div>
+      {% elif item.type == "code" %}
+        <figure class="codefig"><pre class="code"><code>{{ b.code }}</code></pre>
+          {% if item.code_caption or b.caption %}<figcaption>{% if item.code_caption %}{{ item.code_caption }}{% endif %}{% if item.code_caption and b.caption %} — {% endif %}{% if b.caption %}{{ b.caption | inline }}{% endif %}</figcaption>{% endif %}
+        </figure>
+      {% elif item.type == "diagram" %}
+        {% if item.diagram %}
+        <figure class="diagram">
+          <div class="diagram-title">{{ item.diagram.title }}</div>
+          <pre class="mermaid">{{ item.diagram.mermaid }}</pre>
+          {% if item.caption %}<figcaption>{{ item.caption | inline }}</figcaption>{% endif %}
+        </figure>
+        {% else %}
+        <p class="missing">Diagram unavailable{% if item.caption %}: {{ item.caption | inline }}{% endif %}</p>
+        {% endif %}
+      {% elif item.type == "table" %}
+        <table class="data">
+          <thead><tr>{% for h in b.headers %}<th>{{ h | inline }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in b.rows %}<tr>{% for cell in row %}<td>{{ cell | inline }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+      {% elif item.type == "qa" %}
+        <div class="qa"><div class="q"><span class="kind">{{ b.kind }}</span>{{ b.question | inline }}</div>
+          <div class="a"><p>{{ b.answer | inline }}</p></div></div>
+      {% elif item.type == "glossary" %}
+        <dl class="glossary">{% for g in b.items %}<dt>{{ g.term | inline }}</dt><dd>{{ g.definition | inline }}</dd>{% endfor %}</dl>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+  {% if v.claims %}
+  <div class="claims">
+    <h3>Claims in this section</h3>
+    <ul>
+    {% for c in v.claims %}
+      <li><span class="badge {{ c.status_class }}">{{ status_label(c.status) }}</span> {{ c.text | inline }}
+        {% if c.evidence %}<span class="refs">{{ c.evidence | join(", ") }}</span>{% endif %}
+        {% if c.note %}<span class="dim"> — {{ c.note }}</span>{% endif %}</li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+
+<section class="appendix" id="claim-legend">
+  <div class="eyebrow">Reading this guide</div>
+  <h2>How to read claim badges</h2>
+  <ul class="legend">
+  {% for l in legend %}
+    <li><span class="badge {{ l.status_class }}">{{ l.label }}</span> {{ l.help }}</li>
+  {% endfor %}
+  </ul>
+</section>
+
+<section class="appendix" id="evidence">
+  <div class="eyebrow">Appendix</div>
+  <h2>Evidence</h2>
+  <p class="dim">Citation labels are numbered per section. Each points to a range of lines in the repository.</p>
+  {% for v in sections if v.evidence %}
+    <h3>{{ loop.index }}. {{ v.section.title }}</h3>
+    <table class="evidence">
+    {% for e in v.evidence %}
+      <tr><td class="label">{{ e.label }}</td><td class="path">{{ e.path }}{% if e.lines %}:{{ e.lines }}{% endif %}</td></tr>
+    {% endfor %}
+    </table>
+  {% else %}
+    <p class="dim">No evidence references were recorded.</p>
+  {% endfor %}
+</section>
+</body>
+</html>

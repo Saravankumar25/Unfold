@@ -1,0 +1,119 @@
+[project]
+name = "unfold"
+version = "0.1.0"
+description = "Unfold backend: repository understanding engine (API, worker, AI pipeline)"
+
+authors = [
+    { name = "udarshmarthala", email = "103487639+udarshmarthala@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.0",
+    "arq>=0.28.0",
+    "asyncpg>=0.31.0",
+    "bm25s>=0.3.11",
+    "deepagents>=0.7.17",
+    "fastapi>=0.141.1",
+    "fastembed>=0.8.0",
+    "google-genai>=2.24.0",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "langchain-core>=1.6.4",
+    "langgraph>=1.2.12",
+    "langgraph-checkpoint-postgres>=3.1.2",
+    "minio>=7.2.20",
+    "neo4j>=6.3.1",
+    "networkx>=3.7",
+    "opentelemetry-exporter-otlp>=1.44.0",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "opentelemetry-sdk>=1.44.0",
+    "orjson>=3.12.0",
+    "playwright>=1.63.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "python-hcl2>=8.1.4",
+    "python-multipart>=0.0.32",
+    "pyyaml>=6.0.3",
+    "qdrant-client>=1.19.1",
+    "redis>=5",
+    "sqlalchemy[asyncio]>=2.0.54",
+    "sse-starlette>=3.4.11",
+    "structlog>=26.1.0",
+    "tomli-w>=1.2.0",
+    "tree-sitter>=0.26.0",
+    "tree-sitter-language-pack>=1.20.0",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "poethepoet>=0.48.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.8",
+    "testcontainers>=4.15.0",
+]
+
+[project.scripts]
+unfold-api = "unfold.api.main:run"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "SIM", "PT", "T20"]
+ignore = ["S101", "E501", "RUF001", "RUF002", "RUF003", "S311"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "T20"]
+"migrations/**" = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src/unfold"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+disallow_untyped_decorators = false
+disallow_subclassing_any = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = [
+  "integration: needs docker compose data stores",
+  "e2e: needs full stack + Gemini keys",
+  "llm: calls the real Gemini API",
+]
+addopts = "-q --import-mode=importlib -m 'not integration and not e2e and not llm'"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.poe.tasks]
+lint = "ruff check src tests"
+fmt = "ruff format src tests"
+fmt-check = "ruff format --check src tests"
+typecheck = "mypy"
+test = "pytest"
+test-integration = "pytest -m integration"
+test-e2e = "pytest -m e2e"
+test-llm = "pytest -m llm"
+migrate = "alembic upgrade head"
+api = "uvicorn unfold.api.main:app --reload --port 8000"
+worker = "arq unfold.worker.settings.WorkerSettings"
+eval-offline = "python -m unfold.evaluation.offline"
+eval-online = "python -m unfold.evaluation.online"
+llm-models = "python -m unfold.llm.cli models"
+llm-ping = "python -m unfold.llm.cli ping"

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ project.name }} — {{ chat_title }}</title>
+<style>
+{% include "_styles.css.j2" %}
+</style>
+</head>
+<body>
+<section class="chat-head">
+  <div class="wordmark">Unfold</div>
+  <div class="eyebrow" style="margin-top: 14pt">Chat learning notes · {{ project.name }}</div>
+  <h2>{{ chat_title }}</h2>
+  <table class="meta">
+    {% if project.source %}<tr><th>Source</th><td class="mono">{{ project.source }}</td></tr>{% endif %}
+    {% if project.commit_sha %}<tr><th>Commit</th><td class="mono">{{ project.commit_sha | short_sha }}</td></tr>{% endif %}
+    <tr><th>Generated</th><td>{{ project.generated_at | date }}</td></tr>
+    <tr><th>Messages</th><td>{{ messages | length }}</td></tr>
+  </table>
+  <hr style="border: none; border-top: 1px solid var(--line); margin: 12pt 0 16pt">
+</section>
+
+{% for m in messages %}
+<div class="msg {{ m.role }}">
+  <div class="who">{% if m.role == "user" %}You asked{% else %}Unfold answered{% endif %} · {{ m.created_at | datetime }}{% if m.mode and m.mode != "default" %} · <span class="kind">{{ m.mode }}</span>{% endif %}</div>
+  <div class="body">
+    {% if m.role == "user" %}{{ m.text | inline }}{% else %}{{ m.text | md }}{% endif %}
+  </div>
+  {% if m.evidence %}
+  <div class="refs">Evidence: {% for e in m.evidence %}{{ e.path }}:{{ e.start_line }}{% if e.end_line != e.start_line %}–{{ e.end_line }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if learning_notes %}
+<section class="notes">
+  <div class="eyebrow">Summary</div>
+  <h2>Learning notes</h2>
+  <ul>{% for n in learning_notes %}<li>{{ n | inline }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+</body>
+</html>

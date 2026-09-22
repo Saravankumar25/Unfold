@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unfold — Prepare your project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #14161C;
+    --ink-soft: #4A4D57;
+    --paper: #F5F2EA;
+    --paper-dim: #ECE7DA;
+    --blueprint: #24506B;
+    --blueprint-deep: #17364A;
+    --signal: #C98A2C;
+    --signal-soft: #E2B564;
+    --crease: #B8B2A6;
+    --crease-line: rgba(20,22,28,0.10);
+    --radius-s: 3px;
+    --radius-m: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #F0EEE6;
+      --ink-soft: #B7B3A6;
+      --paper: #14161C;
+      --paper-dim: #1B1E26;
+      --blueprint: #6FA9CF;
+      --blueprint-deep: #8FC0E0;
+      --signal: #E2B564;
+      --signal-soft: #F0CE93;
+      --crease: #3C3F49;
+      --crease-line: rgba(240,238,230,0.10);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #F0EEE6;
+    --ink-soft: #B7B3A6;
+    --paper: #14161C;
+    --paper-dim: #1B1E26;
+    --blueprint: #6FA9CF;
+    --blueprint-deep: #8FC0E0;
+    --signal: #E2B564;
+    --signal-soft: #F0CE93;
+    --crease: #3C3F49;
+    --crease-line: rgba(240,238,230,0.10);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--signal-soft); color: var(--blueprint-deep); }
+
+  /* fold-crease background device: diagonal lines evoking a folded sheet unfolding */
+  .crease-field {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      repeating-linear-gradient(115deg, transparent 0 158px, var(--crease-line) 158px 159px),
+      repeating-linear-gradient(25deg, transparent 0 220px, var(--crease-line) 220px 221px);
+    opacity: .6;
+  }
+
+  header {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px clamp(20px, 5vw, 64px) 0;
+  }
+  .wordmark {
+    font-family: "Fraunces", serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  .wordmark::before {
+    content: "◤";
+    color: var(--signal);
+    margin-right: 8px;
+    font-size: 15px;
+    display: inline-block;
+    transform: translateY(-2px);
+  }
+  nav a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 14px;
+    margin-left: 28px;
+  }
+  nav a:hover { color: var(--ink); }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    z-index: 2;
+    padding: clamp(48px, 9vw, 108px) clamp(20px, 5vw, 64px) clamp(40px, 6vw, 72px);
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .hero-eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    color: var(--blueprint);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 26px;
+    opacity: 0;
+    animation: rise 0.7s cubic-bezier(.2,.8,.2,1) 0.15s forwards;
+  }
+  .hero-eyebrow .dash { width: 26px; height: 1px; background: var(--blueprint); display: inline-block; }
+
+  .hero h1 {
+    font-family: "Fraunces", serif;
+    font-weight: 340;
+    font-style: italic;
+    font-size: clamp(56px, 10vw, 132px);
+    line-height: 0.92;
+    letter-spacing: -0.015em;
+    margin: 0 0 30px;
+    max-width: 15ch;
+  }
+  .hero h1 .fold1 { display: block; opacity: 0; transform: translateY(38px) rotateX(18deg); transform-origin: bottom left; animation: unfoldPanel 0.9s cubic-bezier(.2,.8,.2,1) 0.28s forwards; }
+  .hero h1 .fold2 { display: block; font-style: normal; font-weight: 620; color: var(--blueprint); opacity: 0; transform: translateY(38px) rotateX(18deg); transform-origin: bottom left; animation: unfoldPanel 0.9s cubic-bezier(.2,.8,.2,1) 0.44s forwards; }
+
+  @keyframes unfoldPanel {
+    to { opacity: 1; transform: translateY(0) rotateX(0); }
+  }
+  @keyframes rise {
+    to { opacity: 1; }
+  }
+
+  .hero-sub {
+    font-size: clamp(16px, 1.8vw, 19px);
+    color: var(--ink-soft);
+    max-width: 46ch;
+    line-height: 1.55;
+    margin: 0 0 40px;
+    opacity: 0;
+    animation: rise 0.7s ease 0.6s forwards;
+  }
+
+  .repo-form {
+    opacity: 0;
+    animation: rise 0.7s ease 0.72s forwards;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    max-width: 640px;
+    background: var(--paper-dim);
+    border: 1px solid var(--crease-line);
+    border-radius: var(--radius-m);
+    padding: 8px;
+  }
+  .repo-form input {
+    flex: 1 1 260px;
+    border: none;
+    background: transparent;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 14.5px;
+    color: var(--ink);
+    padding: 12px 14px;
+    outline: none;
+    min-width: 0;
+  }
+  .repo-form input::placeholder { color: var(--ink-soft); opacity: .7; }
+  .repo-form button {
+    background: var(--blueprint);
+    color: var(--paper);
+    border: none;
+    border-radius: var(--radius-s);
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 600;
+    font-size: 14.5px;
+    padding: 12px 22px;
+    cursor: pointer;
+    transition: background .18s ease, transform .18s ease;
+  }
+  .repo-form button:hover { background: var(--blueprint-deep); transform: translateY(-1px); }
+  .repo-form button:active { transform: translateY(0); }
+  .repo-form button:focus-visible, .repo-form input:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+  .hero-meta {
+    opacity: 0;
+    animation: rise 0.7s ease 0.85s forwards;
+    display: flex;
+    gap: 22px;
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    flex-wrap: wrap;
+  }
+  .hero-meta span { display: flex; align-items: center; gap: 7px; }
+  .hero-meta .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); }
+
+  /* STAGE STRIP — cycling analysis demo */
+  .stage-panel {
+    position: relative;
+    z-index: 2;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 clamp(20px, 5vw, 64px) clamp(40px, 7vw, 90px);
+  }
+  .stage-box {
+    border: 1px solid var(--crease-line);
+    border-radius: var(--radius-m);
+    background: var(--paper-dim);
+    padding: 22px 26px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13.5px;
+  }
+  .stage-box .crosshair { color: var(--signal); font-size: 15px; }
+  .stage-box .stage-text { color: var(--ink-soft); transition: opacity .3s ease; }
+  .stage-box .stage-text b { color: var(--ink); font-weight: 500; }
+  .stage-box .bar {
+    flex: 1;
+    height: 3px;
+    background: var(--crease-line);
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 220px;
+  }
+  .stage-box .bar span {
+    display: block; height: 100%; width: 30%;
+    background: linear-gradient(90deg, var(--blueprint), var(--signal));
+    animation: sweep 2.6s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0% { transform: translateX(-100%); width: 40%; }
+    50% { width: 60%; }
+    100% { transform: translateX(340%); width: 40%; }
+  }
+
+  /* SECTIONS */
+  section { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; padding: clamp(50px, 7vw, 100px) clamp(20px, 5vw, 64px); }
+  .divider {
+    max-width: 1180px; margin: 0 auto;
+    padding: 0 clamp(20px, 5vw, 64px);
+  }
+  .divider hr { border: none; border-top: 1px solid var(--crease-line); margin: 0; }
+
+  .section-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 48px; flex-wrap: wrap; }
+  .section-head h2 {
+    font-family: "Fraunces", serif;
+    font-weight: 480;
+    font-size: clamp(30px, 4vw, 44px);
+    margin: 0;
+    letter-spacing: -0.01em;
+    max-width: 14ch;
+  }
+  .section-head p { color: var(--ink-soft); max-width: 36ch; font-size: 15px; line-height: 1.6; margin: 0; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--crease-line); border: 1px solid var(--crease-line); border-radius: var(--radius-m); overflow: hidden; }
+  .step { background: var(--paper); padding: 34px 28px; }
+  .step .num { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--signal); margin-bottom: 18px; }
+  .step h3 { font-family: "Fraunces", serif; font-weight: 500; font-size: 22px; margin: 0 0 10px; }
+  .step p { color: var(--ink-soft); font-size: 14.5px; line-height: 1.6; margin: 0; }
+
+  .showcase { display: grid; grid-template-columns: 1.1fr 1fr; gap: 44px; align-items: center; }
+  .showcase-copy h2 { font-family: "Fraunces", serif; font-weight: 480; font-size: clamp(28px, 3.6vw, 40px); margin: 0 0 18px; letter-spacing: -0.01em; }
+  .showcase-copy p { color: var(--ink-soft); font-size: 15.5px; line-height: 1.7; max-width: 42ch; margin: 0 0 28px; }
+  .showcase-copy ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .showcase-copy li { display: flex; gap: 12px; font-size: 14.5px; color: var(--ink); align-items: baseline; }
+  .showcase-copy li::before { content: "◈"; color: var(--blueprint); font-size: 11px; }
+
+  .mock {
+    border: 1px solid var(--crease-line);
+    border-radius: var(--radius-m);
+    background: var(--paper-dim);
+    padding: 18px;
+  }
+  .mock-bar { display: flex; gap: 6px; margin-bottom: 14px; }
+  .mock-bar span { width: 8px; height: 8px; border-radius: 50%; background: var(--crease-line); }
+  .mock-row { display: grid; grid-template-columns: 90px 1fr; gap: 14px; }
+  .mock-toc { display: flex; flex-direction: column; gap: 9px; }
+  .mock-toc .t { height: 7px; border-radius: 2px; background: var(--crease-line); }
+  .mock-toc .t.active { background: var(--blueprint); width: 70%; }
+  .mock-body .l { height: 8px; border-radius: 2px; background: var(--crease-line); margin-bottom: 9px; }
+  .mock-body .l.short { width: 60%; }
+  .mock-body .diagram { height: 64px; border: 1px dashed var(--crease); border-radius: var(--radius-s); margin: 14px 0; display: flex; align-items: center; justify-content: center; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-soft); }
+  .mock-chip { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--signal); border: 1px solid var(--signal-soft); border-radius: 20px; padding: 3px 9px; margin-top: 8px; }
+
+  .mock.chat { display: flex; flex-direction: column; gap: 10px; }
+  .bubble { max-width: 82%; padding: 10px 13px; border-radius: 10px; font-size: 12.5px; line-height: 1.5; }
+  .bubble.user { align-self: flex-end; background: var(--blueprint); color: var(--paper); border-bottom-right-radius: 3px; }
+  .bubble.bot { align-self: flex-start; background: var(--paper); border: 1px solid var(--crease-line); border-bottom-left-radius: 3px; }
+  .bubble.bot .tag { display: block; margin-top: 6px; font-family: "IBM Plex Mono", monospace; font-size: 9.5px; color: var(--blueprint); }
+
+  footer {
+    position: relative; z-index: 2;
+    padding: 40px clamp(20px, 5vw, 64px) calc(40px + env(safe-area-inset-bottom, 0px));
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;
+    color: var(--ink-soft); font-size: 13px;
+    max-width: 1180px; margin: 0 auto;
+  }
+
+  @media (max-width: 760px) {
+    .steps { grid-template-columns: 1fr; }
+    .showcase { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="crease-field" aria-hidden="true"></div>
+
+<header>
+  <div class="wordmark">Unfold</div>
+  <nav>
+    <a href="#how">How it works</a>
+    <a href="#inside">Inside</a>
+  </nav>
+</header>
+
+<section class="hero" style="padding-bottom:0;">
+  <div class="hero-eyebrow"><span class="dash"></span> repository → understanding</div>
+  <h1>
+    <span class="fold1">Prepare your</span>
+    <span class="fold2">project.</span>
+  </h1>
+  <p class="hero-sub">Drop a public repository or a ZIP. Unfold reconstructs how it works, maps the architecture, and builds a guide you can actually walk into an interview with.</p>
+  <form class="repo-form" onsubmit="return false;">
+    <input type="text" placeholder="github.com/you/your-project" aria-label="Repository URL">
+    <button type="submit">Unfold it</button>
+  </form>
+  <div class="hero-meta">
+    <span><span class="dot"></span> No sign-in required</span>
+    <span><span class="dot"></span> Works on public repos &amp; ZIPs</span>
+    <span><span class="dot"></span> ~45–60 min guide</span>
+  </div>
+</section>
+
+<div class="stage-panel">
+  <div class="stage-box">
+    <span class="crosshair">✛</span>
+    <span class="stage-text">Currently: <b id="stageWord">Fetching project</b></span>
+    <span class="bar"><span></span></span>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<section id="how">
+  <div class="section-head">
+    <h2>From code to comprehension, in three folds</h2>
+    <p>Unfold doesn't summarize files — it reconstructs the project as a connected system, then teaches it back to you.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="num">01</div>
+      <h3>Ingest, safely</h3>
+      <p>Static, read-only analysis of your repository or ZIP. Nothing is installed or executed — ever.</p>
+    </div>
+    <div class="step">
+      <div class="num">02</div>
+      <h3>Map the system</h3>
+      <p>A knowledge graph and hybrid retrieval index reconstruct how every part of the project actually connects.</p>
+    </div>
+    <div class="step">
+      <div class="num">03</div>
+      <h3>Teach it back</h3>
+      <p>A structured, evidence-grounded guide — plus a chatbot for going deeper wherever you need to.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<section id="inside">
+  <div class="showcase">
+    <div class="showcase-copy">
+      <h2>A guide you'd actually study from</h2>
+      <p>Architecture, workflows, repository structure, and tradeoffs — written at your level, grounded in your actual source.</p>
+      <ul>
+        <li>Diagrams generated from the real dependency graph</li>
+        <li>Contextual actions: simplify, go deeper, show evidence</li>
+        <li>Interview and viva questions, built from your project</li>
+      </ul>
+    </div>
+    <div class="mock">
+      <div class="mock-bar"><span></span><span></span><span></span></div>
+      <div class="mock-row">
+        <div class="mock-toc">
+          <div class="t active"></div><div class="t"></div><div class="t"></div><div class="t"></div><div class="t"></div>
+        </div>
+        <div class="mock-body">
+          <div class="l"></div><div class="l short"></div>
+          <div class="diagram">⌁ architecture diagram</div>
+          <div class="l"></div><div class="l short"></div>
+          <span class="mock-chip">Show evidence</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="showcase">
+    <div class="mock chat">
+      <div class="bubble user">Why is Redis used here?</div>
+      <div class="bubble bot">For job-queue backed analysis stages, so long-running repo scans don't block the API.<span class="tag">⌁ worker.py · queue.py</span></div>
+      <div class="bubble user">Trace auth end to end</div>
+    </div>
+    <div class="showcase-copy">
+      <h2>Ask anything, get the receipts</h2>
+      <p>Every answer is grounded in your repository, your graph, and your guide — with the source it came from, right there.</p>
+      <ul>
+        <li>Grounded in repo evidence, not general guesses</li>
+        <li>Remembers guide context and chat history</li>
+        <li>Ready for "what would break at 100× scale?"</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"><hr></div>
+
+<footer>
+  <div class="wordmark" style="font-size:16px;">Unfold</div>
+  <div>Prepare your project.</div>
+</footer>
+
+<script>
+  const stages = ["Fetching project","Inspecting repository","Detecting languages & frameworks","Mapping repository structure","Building project knowledge graph","Understanding major subsystems","Indexing project knowledge","Reconstructing workflows","Generating diagrams","Finalizing Project Guide"];
+  let i = 0;
+  const el = document.getElementById("stageWord");
+  setInterval(() => {
+    i = (i + 1) % stages.length;
+    if (el) { el.style.opacity = 0; setTimeout(() => { el.textContent = stages[i]; el.style.opacity = 1; }, 220); }
+  }, 2200);
+</script>
+</body>
+</html>

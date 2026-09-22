@@ -1,0 +1,86 @@
+name: unfold
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    <<: *restart
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-unfold}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-unfold}
+      POSTGRES_DB: ${POSTGRES_DB:-unfold}
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy: {resources: {limits: {memory: 512m}}}
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports: ["${REDIS_PORT:-6379}:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy: {resources: {limits: {memory: 320m}}}
+
+  neo4j:
+    <<: *restart
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-unfold-neo4j-pass}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports: ["${NEO4J_HTTP_PORT:-7474}:7474", "${NEO4J_BOLT_PORT:-7687}:7687"]
+    volumes: [neo4j-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy: {resources: {limits: {memory: 1200m}}}
+
+  qdrant:
+    <<: *restart
+    image: qdrant/qdrant:v1.19.0
+    ports: ["${QDRANT_PORT:-6333}:6333"]
+    volumes: [qdrant-data:/qdrant/storage]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy: {resources: {limits: {memory: 768m}}}
+
+  minio:
+    <<: *restart
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORE_ACCESS_KEY:-unfold}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORE_SECRET_KEY:-unfold-minio-secret}
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy: {resources: {limits: {memory: 384m}}}
+
+volumes:
+  postgres-data:
+  redis-data:
+  neo4j-data:
+  qdrant-data:
+  minio-data:

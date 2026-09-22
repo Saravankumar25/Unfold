@@ -1,0 +1,135 @@
+/* Unfold print styles. Visual language from docs/design/project-guide.html (light theme), print-safe fonts only:
+   nothing is fetched — named fonts are used only when installed locally, then generic fallbacks. */
+:root {
+  --ink: #14161C; --ink-soft: #5B5E68; --ink-faint: #8A8D96;
+  --paper: #FFFFFF; --paper-dim: #F1EEE6; --panel: #FBFAF6;
+  --blueprint: #24506B; --blueprint-deep: #17364A; --blueprint-soft: #E3EDF3;
+  --signal: #B87A22; --signal-soft: #F2E0BC;
+  --line: rgba(20,22,28,0.12); --line-strong: rgba(20,22,28,0.22);
+  --ok: #2F6B3F; --ok-soft: #DCEBDD; --warn: #9A5B12; --bad: #9B2C2C; --bad-soft: #F4DADA;
+  --serif: "Fraunces", Georgia, "Times New Roman", "DejaVu Serif", "Liberation Serif", serif;
+  --sans: "Space Grotesk", "Segoe UI", "Helvetica Neue", Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "SFMono-Regular", Menlo, "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+@page { size: A4; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 10.5pt;
+       line-height: 1.6; }
+h1, h2, h3, h4 { font-family: var(--serif); font-weight: 500; color: var(--ink); break-after: avoid;
+                 page-break-after: avoid; }
+h2 { font-size: 20pt; margin: 0 0 10pt; letter-spacing: -0.005em; }
+h3 { font-size: 13.5pt; margin: 16pt 0 6pt; }
+h4 { font-size: 11.5pt; margin: 12pt 0 4pt; }
+p { margin: 0 0 9pt; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 10pt; padding-left: 18pt; }
+li { margin-bottom: 3pt; }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--paper-dim); border-radius: 3px; padding: 0 3px; }
+sup.cite { font-family: var(--mono); font-size: 6.5pt; color: var(--blueprint); margin-left: 1px;
+           vertical-align: super; line-height: 0; }
+.mono { font-family: var(--mono); }
+.eyebrow { font-family: var(--mono); font-size: 8.5pt; color: var(--blueprint); text-transform: uppercase;
+           letter-spacing: 0.06em; margin-bottom: 6pt; }
+.dim { color: var(--ink-soft); }
+
+/* cover */
+.cover { height: 250mm; display: flex; flex-direction: column; justify-content: space-between;
+         break-after: page; page-break-after: always; padding: 8mm 2mm 0; }
+.wordmark { font-family: var(--serif); font-weight: 600; font-size: 16pt; }
+.wordmark::before { content: "\25E4"; color: var(--signal); margin-right: 6px; font-size: 11pt; }
+.cover h1 { font-size: 34pt; line-height: 1.08; margin: 0 0 8pt; letter-spacing: -0.01em; }
+.cover .tagline { font-family: var(--serif); font-style: italic; font-size: 15pt; color: var(--blueprint); margin: 0 0 22pt; }
+.meta { border-collapse: collapse; font-size: 9.5pt; }
+.meta th { text-align: left; font-family: var(--mono); font-weight: 400; font-size: 8pt; color: var(--ink-faint);
+           text-transform: uppercase; letter-spacing: 0.05em; padding: 3pt 16pt 3pt 0; vertical-align: top; }
+.meta td { padding: 3pt 0; word-break: break-all; }
+.cover-foot { font-size: 8.5pt; color: var(--ink-faint); border-top: 1px solid var(--line); padding-top: 8pt; }
+
+/* table of contents */
+.toc { break-after: page; page-break-after: always; }
+.toc ol { list-style: none; padding: 0; margin: 0; }
+.toc li { display: flex; gap: 10pt; padding: 6pt 0; border-bottom: 1px solid var(--line); font-size: 11pt; }
+.toc .num { font-family: var(--mono); color: var(--blueprint); width: 22pt; flex: none; }
+.toc .title { flex: 1; }
+.toc .mins { font-family: var(--mono); font-size: 8.5pt; color: var(--ink-faint); }
+.toc a { color: inherit; text-decoration: none; }
+
+/* sections */
+.section { break-before: page; page-break-before: always; }
+.section-summary { font-size: 11pt; color: var(--ink-soft); margin-bottom: 12pt; }
+.callout { border-left: 3px solid var(--signal); background: var(--signal-soft); border-radius: 0 4px 4px 0;
+           padding: 8pt 11pt; margin: 10pt 0 12pt; break-inside: avoid; page-break-inside: avoid; }
+.callout .tone { font-family: var(--mono); font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em;
+                 display: block; margin-bottom: 2pt; color: var(--signal); }
+.callout.tip { border-color: var(--ok); background: var(--ok-soft); } .callout.tip .tone { color: var(--ok); }
+.callout.warning { border-color: var(--bad); background: var(--bad-soft); } .callout.warning .tone { color: var(--bad); }
+.callout.insight { border-color: var(--blueprint); background: var(--blueprint-soft); }
+.callout.insight .tone { color: var(--blueprint); }
+.callout p:last-child { margin-bottom: 0; }
+figure { margin: 10pt 0 14pt; break-inside: avoid; page-break-inside: avoid; }
+figcaption { font-family: var(--mono); font-size: 8pt; color: var(--ink-faint); margin-top: 5pt; }
+pre.code { background: var(--paper-dim); border: 1px solid var(--line); border-radius: 6px; padding: 8pt 10pt;
+           font-family: var(--mono); font-size: 8.3pt; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+           margin: 0; break-inside: avoid; page-break-inside: avoid; }
+pre.code code { background: none; padding: 0; font-size: inherit; }
+.diagram { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 10pt; }
+.diagram .diagram-title { font-family: var(--sans); font-weight: 600; font-size: 9.5pt; margin-bottom: 6pt; }
+pre.mermaid { margin: 0; text-align: center; font-family: var(--mono); font-size: 8pt; white-space: pre-wrap; }
+pre.mermaid[data-processed] { white-space: normal; }
+pre.mermaid svg { max-width: 100%; height: auto; max-height: 215mm; }
+.mermaid-failed { text-align: left !important; background: var(--paper-dim); border: 1px dashed var(--line-strong);
+                  border-radius: 6px; padding: 8pt 10pt; color: var(--ink-soft); white-space: pre-wrap !important; }
+.mermaid-failed::before { content: "Diagram could not be rendered \2014 source shown"; display: block;
+                          font-family: var(--sans); font-size: 7.5pt; text-transform: uppercase;
+                          letter-spacing: 0.05em; color: var(--bad); margin-bottom: 4pt; }
+.missing { border: 1px dashed var(--line-strong); border-radius: 6px; padding: 8pt 10pt; color: var(--ink-faint);
+           font-size: 9pt; }
+table.data { width: 100%; border-collapse: collapse; margin: 8pt 0 14pt; font-size: 9pt; break-inside: avoid;
+             page-break-inside: avoid; }
+table.data th { text-align: left; font-weight: 600; border-bottom: 1.5px solid var(--line-strong); padding: 4pt 6pt;
+                background: var(--panel); }
+table.data td { border-bottom: 1px solid var(--line); padding: 4pt 6pt; vertical-align: top; }
+.qa { border: 1px solid var(--line); border-radius: 8px; padding: 9pt 11pt; margin: 10pt 0; break-inside: avoid;
+      page-break-inside: avoid; }
+.qa .q { font-weight: 600; margin-bottom: 4pt; }
+.qa .a p:last-child { margin-bottom: 0; }
+.kind { display: inline-block; font-family: var(--mono); font-size: 7pt; text-transform: uppercase;
+        letter-spacing: 0.05em; border: 1px solid var(--blueprint); color: var(--blueprint); border-radius: 10px;
+        padding: 0 6pt; margin-right: 6pt; vertical-align: 1px; }
+dl.glossary { margin: 6pt 0 12pt; }
+dl.glossary dt { font-weight: 600; margin-top: 6pt; }
+dl.glossary dd { margin: 0 0 0 12pt; color: var(--ink-soft); }
+
+/* claims */
+.badge { display: inline-block; font-family: var(--mono); font-size: 6.8pt; letter-spacing: 0.04em;
+         text-transform: uppercase; border-radius: 3px; padding: 1pt 5pt; white-space: nowrap; vertical-align: 1px; }
+.badge.verified { background: var(--ok-soft); color: var(--ok); }
+.badge.strongly_inferred { background: var(--blueprint-soft); color: var(--blueprint-deep); }
+.badge.inferred { background: var(--signal-soft); color: var(--warn); }
+.badge.unsupported { background: var(--bad-soft); color: var(--bad); }
+.badge.proposed { background: #ECE6F3; color: #5A3E7A; }
+.badge.unknown { background: var(--paper-dim); color: var(--ink-soft); }
+.claims { margin-top: 14pt; border-top: 1px solid var(--line); padding-top: 8pt; }
+.claims h3 { font-size: 11pt; margin-top: 0; }
+.claims ul { list-style: none; padding: 0; }
+.claims li { font-size: 9pt; padding: 3pt 0; border-bottom: 1px dotted var(--line); break-inside: avoid; }
+.claims .refs { font-family: var(--mono); font-size: 7.5pt; color: var(--blueprint); }
+.legend { list-style: none; padding: 0; }
+.legend li { font-size: 9pt; margin-bottom: 4pt; }
+.appendix { break-before: page; page-break-before: always; }
+.appendix h3 { font-size: 11pt; }
+table.evidence { width: 100%; border-collapse: collapse; font-size: 8.3pt; margin-bottom: 10pt; }
+table.evidence td { border-bottom: 1px solid var(--line); padding: 2.5pt 5pt; vertical-align: top; }
+table.evidence td.label { font-family: var(--mono); color: var(--blueprint); width: 30pt; }
+table.evidence td.path { font-family: var(--mono); word-break: break-all; }
+
+/* chat */
+.msg { margin: 0 0 12pt; break-inside: avoid-page; }
+.msg .who { font-family: var(--mono); font-size: 7.5pt; color: var(--ink-faint); text-transform: uppercase;
+            letter-spacing: 0.05em; margin-bottom: 3pt; }
+.msg.user .body { font-weight: 600; font-size: 11pt; border-left: 3px solid var(--blueprint); padding-left: 9pt; }
+.msg.assistant .body { border: 1px solid var(--line); border-radius: 8px; padding: 9pt 11pt; background: var(--panel); }
+.msg .body p:last-child { margin-bottom: 0; }
+.msg .body pre.code { margin: 6pt 0; }
+.msg .refs { font-family: var(--mono); font-size: 7.5pt; color: var(--blueprint); margin-top: 4pt; }
+.notes { break-before: page; page-break-before: always; }

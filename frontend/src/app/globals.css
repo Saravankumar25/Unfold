@@ -1,0 +1,348 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens from docs/design/{landing,project-guide,chatbot}.html.
+ * App surfaces (guide, chat) use the guide palette; the landing page overrides a few tokens via `.theme-landing`.
+ */
+:root {
+  --ink: #14161c;
+  --ink-soft: #5b5e68;
+  --ink-faint: #767983; /* design #8A8D96 darkened slightly for AA contrast on paper */
+  --paper: #fbfaf6;
+  --paper-dim: #f1eee6;
+  --panel: #ffffff;
+  --blueprint: #24506b;
+  --blueprint-deep: #17364a;
+  --signal: #9a6519; /* design #B87A22 darkened for AA text contrast */
+  --signal-soft: #f2e0bc;
+  --line: rgba(20, 22, 28, 0.1);
+  --line-strong: rgba(20, 22, 28, 0.16);
+  --crease: #b8b2a6;
+  --danger: #a3372b;
+  --danger-soft: #f6dfda;
+  --ok: #2f6b45;
+  --ok-soft: #dcefe2;
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --sidebar-w: 264px;
+  --rail-w: 340px;
+  --topbar-h: 53px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #edebe3;
+    --ink-soft: #a6a9b2;
+    --ink-faint: #8a8d96;
+    --paper: #14161c;
+    --paper-dim: #1a1d24;
+    --panel: #1e212a;
+    --blueprint: #74aed2;
+    --blueprint-deep: #98c6e4;
+    --signal: #e2b564;
+    --signal-soft: #3a3020;
+    --line: rgba(237, 235, 227, 0.1);
+    --line-strong: rgba(237, 235, 227, 0.18);
+    --crease: #3c3f49;
+    --danger: #f08b7d;
+    --danger-soft: #3b211d;
+    --ok: #7fc79a;
+    --ok-soft: #1c3226;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ink: #edebe3;
+  --ink-soft: #a6a9b2;
+  --ink-faint: #8a8d96;
+  --paper: #14161c;
+  --paper-dim: #1a1d24;
+  --panel: #1e212a;
+  --blueprint: #74aed2;
+  --blueprint-deep: #98c6e4;
+  --signal: #e2b564;
+  --signal-soft: #3a3020;
+  --line: rgba(237, 235, 227, 0.1);
+  --line-strong: rgba(237, 235, 227, 0.18);
+  --crease: #3c3f49;
+  --danger: #f08b7d;
+  --danger-soft: #3b211d;
+  --ok: #7fc79a;
+  --ok-soft: #1c3226;
+  color-scheme: dark;
+}
+
+/* Landing palette (landing.html) */
+.theme-landing {
+  --ink-soft: #4a4d57;
+  --paper: #f5f2ea;
+  --paper-dim: #ece7da;
+  --crease-line: rgba(20, 22, 28, 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-landing {
+    --ink: #f0eee6;
+    --ink-soft: #b7b3a6;
+    --paper: #14161c;
+    --paper-dim: #1b1e26;
+    --blueprint: #6fa9cf;
+    --blueprint-deep: #8fc0e0;
+    --crease-line: rgba(240, 238, 230, 0.1);
+  }
+}
+:root[data-theme="dark"] .theme-landing {
+  --ink: #f0eee6;
+  --ink-soft: #b7b3a6;
+  --paper: #14161c;
+  --paper-dim: #1b1e26;
+  --blueprint: #6fa9cf;
+  --blueprint-deep: #8fc0e0;
+  --crease-line: rgba(240, 238, 230, 0.1);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-paper: var(--paper);
+  --color-paper-dim: var(--paper-dim);
+  --color-panel: var(--panel);
+  --color-blueprint: var(--blueprint);
+  --color-blueprint-deep: var(--blueprint-deep);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-crease: var(--crease);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --radius-s: var(--radius-s);
+  --radius-m: var(--radius-m);
+  --font-serif: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-sans: var(--font-grotesk), "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--signal-soft);
+  color: var(--blueprint-deep);
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* Wordmark with the folded-corner glyph */
+.wordmark {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.wordmark::before {
+  content: "◤";
+  color: var(--signal);
+  margin-right: 0.4em;
+  font-size: 0.7em;
+  display: inline-block;
+  transform: translateY(-0.12em);
+}
+
+/* Landing: fold-crease background device */
+.crease-field {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    repeating-linear-gradient(115deg, transparent 0 158px, var(--crease-line) 158px 159px),
+    repeating-linear-gradient(25deg, transparent 0 220px, var(--crease-line) 220px 221px);
+  opacity: 0.6;
+}
+
+.stage-sweep {
+  display: block;
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, var(--blueprint), var(--signal));
+  animation: sweep 2.6s ease-in-out infinite;
+}
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+    width: 40%;
+  }
+  50% {
+    width: 60%;
+  }
+  100% {
+    transform: translateX(340%);
+    width: 40%;
+  }
+}
+
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  display: inline-block;
+  animation: bounce 1.2s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Guide prose (project-guide.html .guide-section) */
+.prose-guide p {
+  font-size: 15.5px;
+  line-height: 1.75;
+  margin: 0 0 16px;
+  max-width: 66ch;
+}
+.prose-guide ul,
+.prose-guide ol {
+  padding-left: 20px;
+  margin: 0 0 16px;
+  max-width: 66ch;
+}
+.prose-guide ul {
+  list-style: disc;
+}
+.prose-guide ol {
+  list-style: decimal;
+}
+.prose-guide li {
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 6px;
+}
+.prose-guide :not(pre) > code,
+.prose-chat :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.05em 0.35em;
+}
+
+.prose-chat p {
+  margin: 0 0 10px;
+}
+.prose-chat p:last-child {
+  margin-bottom: 0;
+}
+.prose-chat ul {
+  list-style: disc;
+  padding-left: 18px;
+  margin: 0 0 10px;
+}
+.prose-chat ol {
+  list-style: decimal;
+  padding-left: 18px;
+  margin: 0 0 10px;
+}
+.prose-chat li {
+  margin-bottom: 4px;
+}
+
+/* Shiki output (dual theme via CSS variables) */
+.shiki-host pre.shiki {
+  margin: 0;
+  background: transparent !important;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.shiki-host pre.shiki span {
+  color: var(--shiki-light);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shiki-host pre.shiki span {
+    color: var(--shiki-dark);
+  }
+}
+:root[data-theme="dark"] .shiki-host pre.shiki span {
+  color: var(--shiki-dark);
+}
+.shiki-host.with-lines pre.shiki code {
+  counter-reset: line var(--start-line, 0);
+}
+.shiki-host.with-lines pre.shiki .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 3.2em;
+  margin-right: 1em;
+  text-align: right;
+  color: var(--ink-faint);
+  user-select: none;
+}
+
+.mermaid-host svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* React Flow theming */
+.react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: var(--ink-faint);
+  --xy-edge-label-background-color: var(--panel);
+  --xy-edge-label-color: var(--ink-soft);
+  --xy-controls-button-background-color: var(--panel);
+  --xy-controls-button-background-color-hover: var(--paper-dim);
+  --xy-controls-button-color: var(--ink);
+  --xy-controls-button-border-color: var(--line-strong);
+  --xy-minimap-background-color: var(--paper-dim);
+  --xy-attribution-background-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
