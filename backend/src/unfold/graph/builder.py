@@ -14,6 +14,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 from unfold.core.logging import get_logger
+from unfold.domain.enums import Proof
 from unfold.graph.models import (
     INFERRED_NODE_LABELS,
     REL_TYPES,
@@ -272,6 +273,7 @@ class GraphBuilder:
                     "analyzer": "graph_builder",
                     "analysis_version": ver,
                     "evidence_ids": [],
+                    "proof": "static",
                 },
             )
         for r in ir.relationships:
@@ -284,6 +286,7 @@ class GraphBuilder:
                 "analyzer": r.provenance.analyzer,
                 "analysis_version": ver,
                 "evidence_ids": list(r.provenance.evidence_ids)[:50],
+                "proof": Proof.INFERRED.value if r.provenance.source == "inferred" else r.proof.value,
             }
             for k, v in r.properties.items():
                 scalar = _scalar(v)
@@ -402,6 +405,7 @@ class GraphBuilder:
                         "analyzer": rel.analyzer,
                         "analysis_version": "inferred",
                         "evidence_ids": list(rel.evidence_ids)[:50],
+                        "proof": Proof.INFERRED.value,
                     },
                 }
             )

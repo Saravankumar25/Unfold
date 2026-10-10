@@ -11,6 +11,14 @@ class TechnicalLevel(StrEnum):
     EXPERIENCED = "experienced"
 
 
+class Proof(StrEnum):
+    """How an edge or fact is known. `INFERRED` is never drawn as a diagram edge (investigation engine §4)."""
+
+    STATIC = "static"  # parser saw it: import, decorator route, class definition
+    HEURISTIC = "heuristic"  # name-resolution match or framework convention
+    INFERRED = "inferred"  # LLM or retrieval proximity only
+
+
 class InputType(StrEnum):
     GITHUB = "github"
     ZIP = "zip"

@@ -113,7 +113,7 @@ No analyzer executes code, imports repository modules, or shells out.
 
 ## 8. Project IR (`unfold.project_ir`)
 
-`ProjectIR` (pydantic, `IR_SCHEMA_VERSION`) fields per ESD §9. Every entity has `id` (§3), `provenance: Provenance{source: deterministic|inferred, analyzer, confidence, evidence_ids}` and file/line refs. `RelationshipIR{source_id, target_id, type, provenance}`. Builder is a pure function `build_ir(meta, inventory, analyses) -> ProjectIR`. Snapshot: gzip JSON at `projects/{id}/ir/{version}.json.gz`.
+`ProjectIR` (pydantic, `IR_SCHEMA_VERSION`) fields per ESD §9. Every entity has `id` (§3), `provenance: Provenance{source: deterministic|inferred, analyzer, confidence, evidence_ids}` and file/line refs. `RelationshipIR{source_id, target_id, type, provenance, proof}` (`proof` static|heuristic|inferred, default static; inferred is never drawn). `ProjectIR.unresolved_calls` lists calls to project-named or dynamic callees the analyzers could not resolve (never edges, capped at 5000). `unfold.understand` (`RepoMap`, `trace_flow`, `build_architecture`) derives symbol lookup, flows and the architecture model from the IR. Builder is a pure function `build_ir(meta, inventory, analyses) -> ProjectIR`. Snapshot: gzip JSON at `projects/{id}/ir/{version}.json.gz`.
 
 `project_ir.complexity.score(ir) -> ComplexityProfile{level: small|medium|large, score, investigators, target_read_minutes, retrieval_breadth, agent_budget}` from deterministic signals (files, LOC, languages, services, data stores, infra, AI presence, relationship count).
 

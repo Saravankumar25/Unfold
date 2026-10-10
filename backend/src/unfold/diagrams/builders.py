@@ -22,6 +22,7 @@ from unfold.core.ids import diagram_id
 from unfold.diagrams.inputs import SubsystemView
 from unfold.diagrams.models import MAX_NODES, DiagramEdge, DiagramGroup, DiagramNode, DiagramSpec
 from unfold.diagrams.validate import validate_spec
+from unfold.domain.enums import Proof
 from unfold.project_ir.schema import (
     AIComponentIR,
     EndpointIR,
@@ -1072,6 +1073,7 @@ def build_all(
     project_id: str, ir: ProjectIR, subsystems: list[SubsystemView], workflows: list[WorkflowFinding]
 ) -> list[DiagramSpec]:
     """Every diagram the IR supports, validated, in a stable order."""
+    ir = ir.model_copy(update={"relationships": [r for r in ir.relationships if r.proof != Proof.INFERRED]})
     specs: list[DiagramSpec | None] = [
         architecture(ir, subsystems, project_id=project_id),
         module_dependencies(ir, project_id=project_id),
