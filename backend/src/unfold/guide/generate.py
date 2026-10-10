@@ -206,6 +206,29 @@ def grade_claims(
     return records, claim_quality(records)
 
 
+def unstated_claims(
+    claims: Sequence[ClaimRecord], chunk_texts: Mapping[str, str], prose: str
+) -> list[ClaimRecord]:
+    """Project facts left unsupported or inferred whose unverified names (identifiers the cited evidence does not
+    contain, or all of them when nothing is cited) occur nowhere in the chapter's `prose`: the model listed a
+    claim the chapter never makes, so no statement of fact is standing on it. A claim with no such name is never
+    returned: without one there is nothing to show it is absent."""
+    low = prose.lower()
+    out: list[ClaimRecord] = []
+    for c in claims:
+        if c.kind is not ClaimKind.PROJECT_FACT or c.status not in (
+            ClaimStatus.UNSUPPORTED,
+            ClaimStatus.INFERRED,
+            ClaimStatus.UNKNOWN,
+        ):
+            continue
+        cited = " ".join(chunk_texts[i] for i in c.evidence_ids if i in chunk_texts).lower()
+        names = {n for n in _identifiers(c.text) if not _contains_word(cited, n)}
+        if names and not any(_contains_word(low, n) for n in names):
+            out.append(c)
+    return out
+
+
 def claim_quality(records: Sequence[ClaimRecord]) -> dict[str, object]:
     """Counts by status of already graded claims (what `GuideSectionRow.quality_scores` stores)."""
     counts = {s: sum(1 for r in records if r.status is s) for s in ClaimStatus}

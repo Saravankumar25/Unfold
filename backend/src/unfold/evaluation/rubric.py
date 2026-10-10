@@ -396,9 +396,15 @@ def uncertainty_honesty(sections: Sequence[GuideSection]) -> Score:
     stated = sum(len(_GAPS.findall(_prose(s))) for s in _chapters(sections))
     ratio = 1.0 if left == 0 else stated / (stated + left)
     resolved = sum(g for s in sections if isinstance(g := s.quality.get("gaps"), int))  # reported, not scored
+    unstated = sum(g for s in sections if isinstance(g := s.quality.get("claims_not_stated"), int))
     return _score(
         ratio,
-        {"unverified_facts_left": left, "gaps_stated": stated, "statements_qualified_or_removed": resolved},
+        {
+            "unverified_facts_left": left,
+            "gaps_stated": stated,
+            "statements_qualified_or_removed": resolved,
+            "claims_not_stated": unstated,  # listed by the writer, never made by the chapter, so dropped
+        },
     )
 
 

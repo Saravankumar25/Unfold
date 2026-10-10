@@ -34,12 +34,13 @@ from unfold.graph.builder import GraphBuilder
 from unfold.graph.communities import detect as detect_subsystems
 from unfold.graph.communities import entity_subsystems
 from unfold.guide.critique import critique_section
-from unfold.guide.generate import claim_quality, grade_claims, project_facts
+from unfold.guide.generate import claim_quality, grade_claims, project_facts, unstated_claims
 from unfold.guide.input_hash import chapter_input_hash, evidence_ids
 from unfold.guide.models import (
     PLANNER_VERSION,
     Block,
     ChapterPlan,
+    CodeBlock,
     DiagramBlock,
     GuidePlan,
     ResearchBrief,
@@ -50,7 +51,7 @@ from unfold.guide.research import Investigator, ResearchCaps
 from unfold.guide.revise import RevisionItem, plan_revision, run_revision_loop
 from unfold.guide.rewrite import Rewriter
 from unfold.guide.verification_models import SemanticCritique, StoredVerification, VerificationResult
-from unfold.guide.verify import cited_paths, text_from_chunks, verify_section, with_critique
+from unfold.guide.verify import block_texts, cited_paths, text_from_chunks, verify_section, with_critique
 from unfold.guide.write import SectionEvidenceMissing, WrittenSection, write_chapter
 from unfold.indexing.chunking import chunk_project
 from unfold.indexing.dense import DenseIndex
@@ -743,8 +744,24 @@ class _Run:
                     }
                 )
             out_claims.append(c)
+        # a claim the model listed but the chapter never makes (its unverified names are not in the prose) stands
+        # behind no statement; it is recorded here and left out of `claims`, which describe what the guide says
+        prose = " ".join(
+            [outcome.content.summary]
+            + [t for b in outcome.content.blocks for t in block_texts(b)]
+            + [b.code for b in outcome.content.blocks if isinstance(b, CodeBlock)]
+        )
+        cited_ids = sorted({i for c in out_claims for i in c.evidence_ids})
+        cited_text = {c.id: c.text for c in await self.chunks.get_many(self.pid, cited_ids)}
+        unstated = unstated_claims(out_claims, cited_text, prose)
+        out_claims = [c for c in out_claims if c not in unstated]
+        skipped = {c.text[:120] for c in unstated}
         gaps = (
-            [r.subject[:140] for r in outcome.verification.deterministic if not r.ok]
+            [
+                r.subject[:140]
+                for r in outcome.verification.deterministic
+                if not r.ok and r.subject not in skipped
+            ]
             if outcome.verification.verdict == "accept_with_gaps"
             else []
         )
@@ -753,6 +770,7 @@ class _Run:
             rounds=outcome.rounds,
             stopped_by=state.stopped or outcome.stopped_by,
             gaps=gaps,
+            unstated=[c.text for c in unstated],
             critique=state.critique is not None,
         )
         quality = {
@@ -760,6 +778,7 @@ class _Run:
             "verdict": outcome.verification.verdict,
             "revision_rounds": outcome.rounds,
             "gaps": len(gaps),
+            "claims_not_stated": len(unstated),
             "semantic": outcome.verification.semantic,
         }
         return _Verified(

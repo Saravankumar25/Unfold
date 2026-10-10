@@ -68,4 +68,5 @@ class StoredVerification(BaseModel):
     rounds: int = 0
     stopped_by: str = "accept"  # accept | cap | no_improvement | budget
     gaps: list[str] = Field(default_factory=list)  # statements that were qualified or removed (clipped text)
+    unstated: list[str] = Field(default_factory=list)  # claims dropped because the chapter never makes them
     critique: bool = False  # the semantic critique ran
