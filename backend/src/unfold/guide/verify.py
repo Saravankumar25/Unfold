@@ -55,8 +55,29 @@ _CODE_EXT = frozenset(
     {"py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "rb", "php", "cs", "c", "cc", "cpp", "h", "hpp"}
     | {"tf", "yml", "yaml", "json", "toml", "md", "sql", "sh", "kt", "swift"}
 )
-_WORD = re.compile(r"[a-z_][a-z0-9_]{2,}")
-CLAIM_MATCH = 0.5  # word overlap a block needs with a claim to be the one that made it
+_WORD = re.compile(r"[a-z][a-z0-9]{2,}")
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_STOP = frozenset(
+    {
+        "the",
+        "and",
+        "with",
+        "for",
+        "that",
+        "this",
+        "are",
+        "its",
+        "from",
+        "into",
+        "using",
+        "uses",
+        "used",
+        "has",
+    }
+    | {"have", "can", "will", "not", "but", "all", "any", "each", "which", "when", "where", "then", "than"}
+    | {"also", "only", "over", "under", "here", "there", "their", "they", "them", "was", "were", "been"}
+)
+CLAIM_MATCH = 0.5  # word overlap a sentence needs with a claim to be the one that made it
 
 
 # --- primitives shared with evaluation.rubric --------------------------------------------------------------------
@@ -169,8 +190,23 @@ def with_critique(
 # --- checks ----------------------------------------------------------------------------------------------------
 
 
+def _stem(w: str) -> str:
+    """Crude on purpose: `creates`, `created` and `create_app` must meet in `creat`."""
+    for suffix in ("ing", "ed", "es", "s"):
+        if w.endswith(suffix) and len(w) - len(suffix) >= 3:
+            w = w[: -len(suffix)]
+            break
+    return w[:-1] if w.endswith("e") and len(w) > 3 else w
+
+
 def words(text: str) -> set[str]:
-    return set(_WORD.findall(text.lower()))
+    """Content words of a text, stemmed, identifiers split at underscores; what claims and sentences are matched on."""
+    return {_stem(w) for w in _WORD.findall(text.lower().replace("_", " "))} - _STOP
+
+
+def sentences(block: Block) -> list[str]:
+    """The units a claim can have been made in: sentences of prose, list items, table cells."""
+    return [u for t in block_texts(block) for u in _SENTENCE.split(t.strip()) if u]
 
 
 def _mentions(text: str, name: str) -> bool:
@@ -260,11 +296,11 @@ def verify_section(
         hits = [b for b, t in texts.items() if len(names) == 2 and all(_mentions(t, n) for n in names)]
         return hits[0] if hits else None
 
+    units = [(f"b{i}", words(u)) for i, block in enumerate(content.blocks) for u in sentences(block)]
+
     def place_claim(text: str) -> str | None:
         want = words(text)
-        best = max(
-            ((len(want & words(t)) / len(want), b) for b, t in texts.items() if want), default=(0.0, "")
-        )
+        best = max(((len(want & w) / len(want), b) for b, w in units if want), default=(0.0, ""))
         return best[1] if best[0] >= CLAIM_MATCH else None
 
     for claim in claims:

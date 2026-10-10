@@ -41,7 +41,7 @@ log = get_logger(__name__)
 
 SECTION_CONTEXT_TOKENS = 9_000  # brief + excerpts + facts
 MIN_EXCERPT_TOKENS = 2_000
-WRITER_PROMPT_VERSION = "4"
+WRITER_PROMPT_VERSION = "5"
 _RELATION = re.compile(
     r"\b(calls?|invokes?|imports?|reads?|writes?|queries|uses?|depends on|delegates? to|hands|forwards?|"
     r"enqueues?|publishes?|consumes?|passes)\b",
@@ -55,7 +55,8 @@ _WRITER_SYSTEM = (
     "verified facts. Every paragraph, bullet and callout that states a fact about the code ends with an evidence "
     "label, e.g. [E3], or a `path:L12-L40` location. Every code block quotes the excerpt verbatim (no ellipses) "
     "and sets `path` and `start_line` (the file line of its first line). For every claim "
-    "about the project add an entry to `claims` with the labels that support it in `evidence`; use kind "
+    "about the project add an entry to `claims` whose text is the sentence of your chapter that makes it, in the "
+    "chapter's own words, with the labels that support it in `evidence`; use kind "
     "'project_fact' for things the code shows, 'inference' for reasoned conclusions, 'improvement' for "
     "suggestions. Where the brief lists a question as not established, or the evidence does not cover something, "
     'say so plainly, one sentence per gap (for example: "The evidence does not show how X is retried."), instead '

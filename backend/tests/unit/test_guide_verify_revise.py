@@ -399,3 +399,32 @@ async def test_a_failure_that_is_not_a_claim_falls_back_to_the_whole_block(
     out = await run_revision_loop(_claims_verifier(world, [bad]), _no_fix, content, max_rounds=1)
     assert out.content.blocks == []  # no real citation at all: removed whole
     assert out.dispositions == {bad.text: "removed"}
+
+
+def test_a_paraphrased_claim_is_placed_at_the_sentence_that_made_it(
+    world: tuple[ProjectIR, dict[str, str]],
+) -> None:
+    """The claim restates one bullet in other words; matching against the whole list diluted it below the
+    threshold and the unsupported statement stayed in the guide unplaced (seen on the fastapi_rag run)."""
+    from unfold.guide.models import BulletsBlock
+
+    claim = ClaimRecord(
+        text="The application is created with CORS middleware and routers using settings.",
+        status=ClaimStatus.INFERRED,
+        evidence_ids=["c1"],
+    )
+    content = _content(
+        _para("Startup [E1]."),
+        BulletsBlock(
+            items=[
+                "`a` loads configuration [E1].",
+                "`create_app` creates the application, adds CORS middleware and includes the routers [E1].",
+                "`b` returns a value [E1].",
+                "The settings object is cached [E1].",
+            ]
+        ),
+    )
+    r = _verify(world, content, [claim])
+    failed = [c for c in r.deterministic if not c.ok]
+    assert [(c.check, c.block) for c in failed] == [("claim_supported", "b1")]
+    assert r.verdict == "revise"

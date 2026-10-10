@@ -8,7 +8,6 @@ left standing as fact.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -32,11 +31,10 @@ from unfold.guide.verification_models import (
     Unsupported,
     VerificationResult,
 )
-from unfold.guide.verify import LABEL, PATHLINE, block_index, block_texts, words
+from unfold.guide.verify import LABEL, PATHLINE, block_index, block_texts, sentences, words
 
 _RANK = {Proof.STATIC: 0, Proof.HEURISTIC: 1, Proof.INFERRED: 2}
 _QUERY_CHARS = 240
-_SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _SENTENCE_MATCH = 0.34  # word overlap that identifies the sentence a failing claim was made in
 
 
@@ -127,12 +125,9 @@ def _sentence_level(block: Block, claims: Sequence[str]) -> tuple[list[Block], d
     """Fix only the sentences (or bullet items) the failing claims were made in. A sentence that cites something
     real is kept behind the prefix as its own block (so the reader sees it marked); one that cites nothing is
     removed. None when a claim cannot be placed in a sentence: the caller falls back to the whole block."""
-    if isinstance(block, ParagraphBlock | CalloutBlock):
-        units = [u for u in _SENTENCE.split(block.text.strip()) if u]
-    elif isinstance(block, BulletsBlock):
-        units = list(block.items)
-    else:
+    if not isinstance(block, ParagraphBlock | CalloutBlock | BulletsBlock):
         return None
+    units = list(block.items) if isinstance(block, BulletsBlock) else sentences(block)
     culprit: dict[int, list[str]] = {}
     for claim in claims:
         want = words(claim)
@@ -153,9 +148,7 @@ def _sentence_level(block: Block, claims: Sequence[str]) -> tuple[list[Block], d
         if i not in culprit:
             run.append(u)
             continue
-        if _cites(
-            u
-        ):  # a marked sentence stands alone so the reader sees it marked; a removed one just vanishes
+        if _cites(u):  # a marked sentence stands alone so the reader sees it marked
             if run:
                 out.append(block.model_copy(update={"text": " ".join(run)}))
                 run = []
