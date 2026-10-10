@@ -1,6 +1,6 @@
 # Unfold: Six-Phase Plan (build, test, ship, deploy to AWS)
 
-Source inputs: `PROJECT_AUDIT.md` (repo state) and the AWS scale-to-zero plan (target state, reproduced in Appendix A).
+Source inputs: `PROJECT_AUDIT.md` (repo state) and `docs/infra/strategy.md` (authoritative AWS strategy, supersedes the earlier scale-to-zero plan; Appendix A is only the original candidate).
 
 **Rule of the plan:** phases 1-5 each end merged to `main` and pushed. Phase 6 deploys to AWS only after phase 5 is pushed. If all six exit gates pass, the product is built, tested, shipped and live.
 
@@ -94,30 +94,39 @@ Tests: chat grounding and injection evals above threshold; export golden-file te
 
 Exit gate: all frontend pages work against the real backend locally; eval baseline recorded; `ponytail:ponytail-debt` shows no unused modules.
 
-## Phase 4: AWS-native adapters + Terraform (branch `phase-4-aws`)
+## Phase 4: AWS infrastructure strategy and implementation (branch `phase-4-aws`)
 
-Goal: the same code, scale-to-zero runtime. Nothing is applied to AWS yet; this phase proves it with local emulation, `terraform validate` and `plan`.
+**Authoritative spec: `docs/infra/strategy.md` (supersedes earlier AWS decisions).** Goal: the smallest sensible, secure,
+resilient, cost-efficient AWS infrastructure that runs Unfold end to end, proven locally. Study first, challenge the
+candidate architecture, implement only what is justified, document measured results. **Nothing is applied to AWS**;
+`terraform apply`/`destroy`, billable resources and live-data changes need explicit owner authorization.
 
-Spikes first (each ends in a written decision in `docs/adr/`)
-- **Lambda to Aurora path:** RDS Data API from a non-VPC Lambda (no NAT, simplest, needs a SQLAlchemy Data API dialect) vs Lambda inside the VPC (needs endpoints for SQS/Step Functions/S3, which can add hourly cost). Pick the cheapest that keeps SQLAlchemy transactions working.
-- **Vector search:** Amazon S3 Vectors vs keeping Qdrant. Compare filtering, latency, upsert behavior and retrieval hit rate with the phase 3 evals. Switch only if evals do not regress.
-- **Neo4j:** managed free-tier instance first. Record its limits; do not claim equivalence with any S3-backed graph without running the evals.
-- **Aurora 0 ACU:** confirm auto-pause config, measure resume time, design the client "waking up" retry.
+Stages (each ends in a committed artifact; implementation does not start before stage B is written)
+- **A. Audit.** Evidence-based dependency map (`docs/infra/existing-architecture.md`): every request path, store and
+  its real purpose, sync/async/streaming/long-running operations, filesystem and memory needs, env/secrets, CI/CD.
+- **B. Architecture selection** (`docs/infra/architecture-decision.md` + ADRs 0010+). Per service: why, which feature,
+  scale-to-zero, idle charges, code changes, latency, failure modes, simpler alternative. Compare serverless vs one
+  manually operated EC2. Decide with cited official docs: API Gateway HTTP vs REST and Lambda adapter vs streaming
+  needs; Step Functions vs SQS-triggered dispatcher; DynamoDB-only vs Aurora (0 ACU) vs simplest compatible
+  (options A/B/C); S3 Vectors vs Qdrant (switch only if evals do not regress); Neo4j hosting; secret store;
+  CloudFront/WAF only if justified; NAT/endpoints with calculated cost.
+- **C. Implement** the selected design behind the existing ports: object store (presigned upload, scoped keys,
+  post-upload inspection), job queue + dispatcher with lost-job prevention (outbox or reconciliation), durable
+  quotas/idempotency/rate limits with atomic conditional updates (TTL never trusted for correctness), job and
+  concurrency caps (queued, concurrent, per user), API entrypoint for Lambda, lean API image, pinned worker image.
+- **D. Terraform** (`infra/terraform/`): only modules the decision needs; pinned providers; envs dev/prod; OIDC deploy
+  role; separate IAM roles for API, workers, orchestration, deploy; private encrypted storage; budgets, tags, log
+  retention, image lifecycle, backup and state protection; cost-guard policy tests (no always-on ECS service, NAT,
+  load balancer, provisioned DB or Lambda concurrency unless an ADR grants an exception) with negative tests.
+- **E. Verify.** Terraform fmt/validate/offline plan; adapter contract tests against an emulator; duplicate delivery,
+  retry/recovery, cleanup completeness; load and overload tests locally; benchmarks (p50/p95/p99) and image sizes
+  measured, never invented; list which acceptance tests require a real AWS account.
+- **F. Document** (`docs/infra/`): diagram, flows, resource inventory, module layout, deployment and rollback,
+  env/secrets, limits, performance, reliability and recovery, cost for five scenarios (zero month, occasional use,
+  interview demo, moderate, spike) split by cost type with stated assumptions, scaling, known limitations.
 
-Adapters
-1. `S3BlobStore`, presigned ZIP upload (size limit, content-type, key scoped to project/session), post-upload archive inspection retained.
-2. `SqsJobQueue` plus a small dispatcher: SQS to Step Functions Standard to Fargate `RunTask` (`.sync`), one bounded job per task, task exits on completion, DLQ with bounded retries.
-3. `DynamoRateLimiter` (TTL items) and any temporary coordination; progress stays in Postgres.
-4. API Lambda via Mangum: lean image (no torch, no Tree-sitter, no Chromium), provisioned concurrency 0, per-request DB connection, no persistent connections.
-5. Worker image: pinned, models (embedding, reranker) baked in, Chromium for PDF; benchmark at 2 vCPU / 4 GB then right-size from measured memory and time.
-
-Terraform (`infra/terraform/`, modules mirror the plan)
-`network_iam`, `api_lambda`, `storage_s3`, `queues_sqs`, `workflow_sfn`, `worker_ecs`, `aurora`, `dynamodb`, `vectors_graph`, `observability_budgets`; separate `envs/dev` and `envs/prod`; remote state in S3 with locking; GitHub Actions OIDC deploy role with least privilege.
-Cost guards enforced in code: policy tests (OPA/conftest or `terraform plan` JSON checks) fail on any `aws_ecs_service`, `aws_nat_gateway`, load balancer, provisioned Aurora instance or provisioned Lambda concurrency. Fargate tasks run in public subnets with a public IP and locked-down security groups; only S3/DynamoDB gateway endpoints are allowed (interface endpoints need an explicit exception).
-
-Tests: adapter contract tests against LocalStack or equivalent; one-shot worker run against real SQS/S3 emulation; `terraform fmt`, `validate`, `plan` clean for dev; policy tests; image build in CI; eval baseline unchanged after adapter swap.
-
-Exit gate: full pipeline passes locally through the AWS adapters; `terraform plan` clean and passes cost-guard policies; ADRs recorded; CI builds both images.
+Tests: as stage E. Exit gate: gate green on `main`; `terraform validate` and policy tests pass; ADRs and docs
+recorded; both images build in CI; unmeasured items are labelled "requires AWS"; no resource was deployed.
 
 ## Phase 5: Hardening and full verification (branch `phase-5-hardening`)
 
@@ -128,7 +137,7 @@ Tasks
 2. Security: `claude-security:claude-security` full scan; manual prompt-injection red-team of the chat and guide paths; verify uploaded code is never executed; re-check archive limits; secrets scan; dependency audits clean or triaged.
 3. Performance: first-token chat latency budget; frontend Lighthouse and `agent-skills:webperf`; worker memory and time profile to set final Fargate size; API Lambda cold-start measurement and package size.
 4. Reliability: failure injection (LLM 429/timeouts, worker crash, duplicate SQS delivery, DB paused) and verify checkpoint resume, DLQ and "waking up" UX.
-5. Cost model: expected cost per analysis (tokens + Fargate seconds + Aurora I/O) and monthly idle cost; budget alarm thresholds derived from it. Document in `docs/cost.md`.
+5. Cost model: re-check the phase 4 cost scenarios (zero month, occasional use, interview demo, moderate, spike) against measured tokens, Fargate seconds and database I/O; derive budget alarm thresholds. Document in `docs/infra/cost.md`.
 6. UI polish with `impeccable:impeccable`: mobile layout, keyboard-accessible diagram, reduced motion, empty and error states, OG/icons.
 7. Docs: README quickstart, runbook (deploy, rollback, drain DLQ, rotate keys), `docs/HLD.md` final.
 8. Run `ponytail:ponytail-audit` and `ponytail:ponytail-debt`; delete what is unused.
@@ -140,7 +149,7 @@ Exit gate: CI green including e2e; security scan has no open High/Critical; eval
 Goal: live system, verified, with rollback. Starts only after phases 1-5 are merged and pushed.
 
 Steps (use `engineering:deploy-checklist`; confirm each destructive or billable step with the owner before running)
-1. Preflight: AWS account and region chosen, billing budget and alerts created first, IAM OIDC role, state bucket. Secrets (Gemini/Groq keys, Neo4j creds) in SSM Parameter Store or Secrets Manager, never in Terraform state or the repo.
+1. Preflight (owner authorization required before any `terraform apply`, see `docs/infra/strategy.md` §2): AWS account and region chosen, billing budget and alerts created first, IAM OIDC role, state bucket. Secrets (Gemini/Groq keys, Neo4j creds) in SSM Parameter Store or Secrets Manager, never in Terraform state or the repo.
 2. `terraform apply` dev, run the smoke suite, then prod. Push images to ECR from CI.
 3. Frontend: Vercel project from the repo; env points at the API Gateway URL; keep the first-party session-cookie proxy; verify cookies are `Secure`/`HttpOnly`/`SameSite` and the proxy overwrites XFF.
 4. Production verification (checklist, record results in `docs/deploy-log.md`):
@@ -157,7 +166,7 @@ Exit gate: all production verification items pass; idle cost matches the model; 
 
 ---
 
-## Appendix A: Target architecture (from the AWS plan)
+## Appendix A: Original candidate architecture (superseded by `docs/infra/strategy.md`; kept for reference)
 
 Browser → Next.js (Vercel) → API Gateway HTTP API → Lambda (FastAPI + Mangum) → Aurora PostgreSQL Serverless v2 (0 ACU, auto-pause).
 Upload → presigned S3 → job row → SQS → Step Functions Standard → ECS Fargate RunTask (analysis, graph, index, LLM, guide, PDF) → Postgres / S3 / indexes → frontend via short polling.
