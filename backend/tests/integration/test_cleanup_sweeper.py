@@ -279,8 +279,18 @@ async def test_worker_sweep_task_runs_the_same_function(
 ) -> None:
     seeded = await seed_project()
     await mark_deleting(runtime, [uuid.UUID(seeded.project_id)])
+    # The sweep restarts every unfinished job it finds. Nothing but this project may be left to run, and the
+    # worker must never reach a real model: no provider keys in its environment.
+    async with runtime.db.transaction() as s:
+        await s.execute(
+            update(AnalysisJobRow)
+            .where(AnalysisJobRow.status.in_(["queued", "running"]))
+            .values(status="failed", heartbeat_at=None)
+        )
+    no_keys = {f"{p}_API_KEY_{i}": "" for p in ("GEMINI", "GROQ") for i in range(1, 5)}
     env = {
         **os.environ,
+        **no_keys,
         "APP_ENV": "test",
         "LOG_FORMAT": "console",
         "DATABASE_URL": settings.database_url,
@@ -308,16 +318,21 @@ async def test_a_failing_sweep_step_does_not_starve_the_others(
     recording_queue: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seeded = await seed_project(session_expires_in=timedelta(minutes=-1))  # an expired session with a project
+    seeded = await seed_project(session_expires_in=timedelta(minutes=-1))  # expired session, one project
+    real = runtime.limiter.delete_prefix
 
-    async def broken(prefix: str) -> int:
-        raise RuntimeError("redis is down")
+    async def flaky(prefix: str) -> int:
+        if prefix.startswith(
+            ("chat:", "projects:")
+        ):  # the session-key step; project cleanup uses export:project:
+            raise RuntimeError("redis is down")
+        return await real(prefix)
 
-    monkeypatch.setattr(runtime.limiter, "delete_prefix", broken)
+    monkeypatch.setattr(runtime.limiter, "delete_prefix", flaky)
     report = await sweep(runtime, recording_queue)
     monkeypatch.undo()
-    assert report.steps_failed >= 1  # the rate-limit key removal failed ...
-    assert report.projects_cleaned >= 1  # ... and the cleanup before it, and the steps after it, still ran
+    assert report.steps_failed >= 1  # removing the session's rate-limit keys failed ...
+    assert report.projects_cleaned >= 1  # ... but the cleanup before it still ran
     assert _total(await inventory(runtime, seeded)) == 0
-    again = await sweep(runtime, None)  # the next pass removes the session that had to wait
+    again = await sweep(runtime, None)  # the session that had to wait goes on the next pass
     assert again.sessions_removed >= 1
