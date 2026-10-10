@@ -242,3 +242,26 @@ git status --short                    # confirm still clean
 Other cloud accounts (Render, Cloudflare, GCP, AWS); dependency vulnerability scans; backend integration tests (need docker); real-browser accessibility/responsiveness; `repo_intel`/`llm` internals; the actual `.env` contents (deliberately not read); upstream plugin documentation and versions.
 
 **Stopping here for your approval before any implementation or cleanup.**
+
+---
+
+## 13. Addendum 2026-10-10: guide-quality gap analysis (post phase 2)
+
+Source of truth: `docs/design/investigation-engine.md` (verdict table, decisions, contracts, rubric); ADR 0017.
+Verified at `accfc01`: the repository map exists (IR, graph, hybrid retrieval) but the planner sees ~10 one-line facts and
+each section gets one retrieval and one writer call (`guide/generate.py:292-325`). Verification is an identifier-overlap
+check with no revision (`generate.py:370`, `pipeline.py:527`). Every run deletes all sections (`pipeline.py:418`).
+
+Top five improvements, ranked by value over effort (all phase 3B, in this order):
+
+| Rank | Change | Value | Effort | Task |
+|---|---|---|---|---|
+| 1 | Investigate before writing: per-chapter research brief | highest | M | 3.5 |
+| 2 | Deterministic citation verification (path, line, symbol, excerpt, edge) and bounded revision | high | M | 3.7 |
+| 3 | Adaptive plan from an architecture model (questions, targets, dependencies, depth) | high | M | 3.3, 3.4 |
+| 4 | Rubric and recorded baseline so improvement is measured, not asserted | high | S | 3.1, 3.9 |
+| 5 | Chapter `input_hash`, single-chapter regeneration, commit-pinned compact citations | medium | S | 3.8 |
+
+First milestone (3.1 + 3.2): baseline run on two repos preserved under `evals/baselines/pipeline-v1/`, and `RepoMap`
+symbol lookup with edge `proof` labels. Acceptance: fixture-repo tests assert known definitions, importers and call
+edges; baseline files exist with measured tokens, seconds and cost; nothing is changed in the guide output yet.
