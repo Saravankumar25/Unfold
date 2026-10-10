@@ -143,6 +143,15 @@ async def test_circuit_breaker_state_machine() -> None:
     assert await cb.allow("p", "m") and await cb.allow("p", "m")
 
 
+async def test_concurrent_disables_store_one_deadline_not_their_sum(counters: DynamoCounters) -> None:
+    import time
+
+    a, b = CounterKeyPool(counters, disable_seconds=3600), CounterKeyPool(counters, disable_seconds=3600)
+    await asyncio.gather(a.disable("gemini", 0), b.disable("gemini", 0), a.disable("gemini", 0))
+    until = (await counters.get("K#gemini#0"))["until"]
+    assert time.time() < until <= time.time() + 3600 + 5  # an added pair of epochs would sit centuries out
+
+
 async def test_key_pool_rotates_and_persists_disablement(counters: DynamoCounters) -> None:
     pool = CounterKeyPool(counters, disable_seconds=3600)
     first = await pool.acquire("gemini", 3)

@@ -35,6 +35,8 @@ def test_signed_address_verifies() -> None:
         lambda v: v.rsplit(".", 1)[0],  # no MAC
         lambda v: "",
         lambda v: "x" * 500,
+        lambda v: v[:-1] + "é",  # non-ASCII MAC: compare_digest(str) raises TypeError
+        lambda v: v.replace("v1.", "v1.²", 1),  # "²".isdigit() is True but int() raises
     ],
 )
 def test_tampered_or_malformed_header_is_rejected(mutate: Any) -> None:
@@ -110,7 +112,6 @@ def test_aws_profile_needs_none_of_the_local_store_credentials() -> None:
 @pytest.mark.parametrize(
     ("override", "needle"),
     [
-        ({"proxy_hmac_secret": None}, "PROXY_HMAC_SECRET"),
         ({"dynamodb_table": ""}, "DYNAMODB_TABLE"),
         ({"jobs_queue_url": ""}, "JOBS_QUEUE_URL"),
         ({"aws_endpoint_url": "http://localhost:4566"}, "AWS_ENDPOINT_URL"),
@@ -120,6 +121,18 @@ def test_aws_profile_needs_none_of_the_local_store_credentials() -> None:
 def test_aws_profile_refuses_unsafe_production_config(override: dict[str, Any], needle: str) -> None:
     with pytest.raises(ValueError, match=needle):
         _aws(**override)
+
+
+def test_workers_and_control_handlers_start_without_the_proxy_secret() -> None:
+    """Only the API Lambda reads PROXY_HMAC_SECRET (SSM); a task or dispatcher in production must not need it."""
+    assert _aws(proxy_hmac_secret=None).proxy_hmac_secret is None
+
+
+def test_api_refuses_to_start_in_production_without_the_proxy_secret() -> None:
+    from unfold.api.main import create_app
+
+    with pytest.raises(ValueError, match="PROXY_HMAC_SECRET"):
+        create_app(_aws(proxy_hmac_secret=None))
 
 
 # --- import weight ------------------------------------------------------------------------------------------------

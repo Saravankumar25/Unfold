@@ -159,11 +159,27 @@ def test_markdown_headings_do_not_backtrack() -> None:
 
 
 def test_secret_and_injection_scanners_are_not_quadratic() -> None:
+    import time
+
     from unfold.security.injection import scan
     from unfold.security.secrets import redact
 
-    _under(3.0, lambda: redact("-----BEGIN PRIVATE KEY-----\n" * 8000))
-    _under(3.0, lambda: scan("\n" * 100_000 + "system: hi"))
+    def best(fn: object, repeat: int = 3) -> float:  # min of N: load only ever adds time
+        out = []
+        for _ in range(repeat):
+            start = time.perf_counter()
+            fn()  # type: ignore[operator]
+            out.append(time.perf_counter() - start)
+        return min(out)
+
+    # Scaling, not an absolute budget: 4x the input must cost about 4x (linear), never about 16x (quadratic).
+    # A loaded machine slows both runs alike, so the ratio holds where a fixed threshold does not.
+    small = best(lambda: redact("-----BEGIN PRIVATE KEY-----\n" * 1000))
+    large = best(lambda: redact("-----BEGIN PRIVATE KEY-----\n" * 4000))
+    assert large < 9 * small, (small, large)
+    small = best(lambda: scan("\n" * 25_000 + "system: hi"))
+    large = best(lambda: scan("\n" * 100_000 + "system: hi"))
+    assert large < 9 * max(small, 0.002), (small, large)
 
 
 def test_claim_with_nothing_checkable_is_not_verified_and_names_match_whole_words() -> None:

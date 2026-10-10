@@ -180,9 +180,8 @@ class Settings(BaseSettings):
         if self.graph_backend == "neo4j" and self.neo4j_password.get_secret_value() == _DEV_NEO4J_PASSWORD:
             problems.append("NEO4J_PASSWORD is the development default")
         if self.persistence_backend == "dynamodb":
-            # No address-based proxy trust behind a Function URL: the HMAC header is the identity (ADR 0016).
-            if self.proxy_hmac_secret is None:
-                problems.append("PROXY_HMAC_SECRET is required with PERSISTENCE_BACKEND=dynamodb")
+            # PROXY_HMAC_SECRET is the API's identity key (ADR 0016); the API checks it in `create_app`, because
+            # tasks and control Lambdas run this same production profile without it.
             for name in ("dynamodb_table", "jobs_queue_url", "object_store_bucket"):
                 if not getattr(self, name):
                     problems.append(f"{name.upper()} is required with PERSISTENCE_BACKEND=dynamodb")

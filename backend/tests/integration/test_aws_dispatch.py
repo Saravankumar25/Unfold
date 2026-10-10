@@ -245,6 +245,28 @@ async def test_sweeper_fails_jobs_whose_message_was_dead_lettered(env: Env) -> N
     assert env.sent(env.aws.dlq_url) == []  # drained
 
 
+async def test_sweeper_keeps_a_job_alive_whose_task_is_running_despite_a_dead_letter(env: Env) -> None:
+    now = datetime.now(UTC)
+    job = await env.job(status="running", attempt=1, heartbeat_at=now)
+    env.runner.tasks["arn:t1"] = RunningTask("arn:t1", job.id, now)
+    env.sqs.send_message(
+        QueueUrl=env.aws.dlq_url, MessageBody=json.dumps({"type": "analysis", "ref": job.id})
+    )
+    report = await env.d.sweep()
+    assert report.dead_lettered == 1
+    got = await env.rt.control.get_job(job.id)
+    assert got is not None and got.status == "running"
+
+
+async def test_an_unreadable_dead_letter_does_not_stop_the_rest_of_the_sweep(env: Env) -> None:
+    env.sqs.send_message(QueueUrl=env.aws.dlq_url, MessageBody="not json")
+    env.sqs.send_message(QueueUrl=env.aws.dlq_url, MessageBody=json.dumps({"type": "cleanup"}))
+    await env.job()
+    report = await env.d.sweep()  # must not raise: expiry cleanup and counter healing come after this step
+    assert report.dead_lettered == 2 and report.queued == 1
+    assert env.sent(env.aws.dlq_url) == []
+
+
 async def test_sweeper_heals_the_cap_counters(env: Env) -> None:
     await env.job()
     report = await env.d.sweep()

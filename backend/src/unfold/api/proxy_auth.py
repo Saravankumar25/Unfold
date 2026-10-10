@@ -25,7 +25,9 @@ def sign(secret: bytes, ip: str, *, now: float | None = None) -> str:
 
 def verified_ip(value: str | None, secret: bytes, *, now: float | None = None) -> str | None:
     """The signed address, or None when the header is absent, malformed, stale or does not verify."""
-    if not value or len(value) > 200:
+    if (
+        not value or len(value) > 200 or not value.isascii()
+    ):  # non-ASCII would raise in isdigit/int/compare_digest
         return None
     prefix, _, mac = value.rpartition(".")
     parts = prefix.split(".", 2)

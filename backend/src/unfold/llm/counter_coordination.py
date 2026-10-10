@@ -235,6 +235,8 @@ class CounterKeyPool:
             await self._c.add(
                 self._store_key(provider, index),
                 {"until": int(until) - int(persisted)},
+                # an epoch is stored as a delta: the limit refuses a concurrent second delta from summing to 2x
+                limits={"until": int(until)},
                 ttl_seconds=int(self._disable_s) + _DAY,
             )
 

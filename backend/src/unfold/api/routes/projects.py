@@ -317,11 +317,17 @@ async def complete_zip_upload(
     await rt.control.update_project(project.id, activate)
     job = _new_job(project.id)
     cfg = rt.settings
-    await rt.control.add_job(
-        job,
-        max_active_per_session=cfg.max_active_jobs_per_session,
-        max_queued_global=cfg.max_queued_jobs_global,
-    )
+    try:
+        await rt.control.add_job(
+            job,
+            max_active_per_session=cfg.max_active_jobs_per_session,
+            max_queued_global=cfg.max_queued_jobs_global,
+        )
+    except Conflict:  # a concurrent complete won: one project, one job
+        winner = await rt.control.latest_job(project.id)
+        if winner is None:
+            raise
+        return ProjectCreated(project_id=project.id, job_id=winner.id)
     created = await _enqueue(request, rt, project.id, job.id)
     log.info("project.created", project_id=project.id, input_type="zip", size=size)
     return created

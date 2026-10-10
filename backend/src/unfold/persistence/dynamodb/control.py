@@ -203,7 +203,8 @@ class DynamoControlStore(ControlStore):
         return rec
 
     async def session_by_token(self, token_hash: str) -> SessionRec | None:
-        item = await self._t.get(f"S#{token_hash}", "META", consistent=False)
+        # strongly consistent: the first request after POST /sessions must find the session it just created
+        item = await self._t.get(f"S#{token_hash}", "META")
         return None if item is None else decode(SessionRec, item["d"])
 
     async def update_session(self, token_hash: str, fn: Mutator) -> SessionRec:
@@ -243,7 +244,10 @@ class DynamoControlStore(ControlStore):
         try:
             await self._t.transact(batch)
         except ConditionFailed as exc:
-            if max_active <= 0 and max_queued <= 0:
+            # the existence conditions come first (`ops`, then the job put); the cap updates follow
+            if "ConditionalCheckFailed" in exc.reasons[: len(ops) + 1] or (
+                max_active <= 0 and max_queued <= 0
+            ):
                 raise Conflict("That record already exists.") from exc
             # A counter at its cap may have drifted above the truth: recount from the job records (this also
             # repairs it), reject only when a cap really is reached, otherwise try once more.
@@ -328,7 +332,14 @@ class DynamoControlStore(ControlStore):
         if project is None:
             raise NotFound("Project not found.")
         job.session_id = project.session_id
-        await self._write_new_job(job, [], max_active_per_session, max_queued_global)
+        # the marker makes "the first job of this project" exclusive: a second concurrent add_job is a Conflict
+        first = {
+            "put": {
+                "item": {"PK": f"P#{job.project_id}", "SK": "FIRSTJOB"},
+                "condition": "attribute_not_exists(PK)",
+            }
+        }
+        await self._write_new_job(job, [first], max_active_per_session, max_queued_global)
 
     async def get_project(self, project_id: str) -> ProjectRec | None:
         item = await self._t.get(f"P#{project_id}", "META")

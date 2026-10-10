@@ -265,7 +265,7 @@ class Dispatcher:
                 await self.runner.stop(task.arn, "exceeded job timeout")
                 report.stopped += 1
         # 3. jobs whose message died in the DLQ
-        report.dead_lettered = await self._drain_dead_letters()
+        report.dead_lettered = await self._drain_dead_letters(busy)
         # 4. expiry, by explicit delete (TTL is only a backstop and may lag by days)
         for project in await self.rt.control.expired_projects(now, EXPIRY_BATCH):
             await cleanup_project(self.rt, project.id)
@@ -279,7 +279,7 @@ class Dispatcher:
         log.info("sweep.done", **report.__dict__)
         return report
 
-    async def _drain_dead_letters(self) -> int:
+    async def _drain_dead_letters(self, busy: set[str]) -> int:
         if self._dlq is None:
             return 0
         client, url = self._dlq
@@ -295,15 +295,20 @@ class Dispatcher:
             if not messages:
                 break
             for m in messages:
-                body = json.loads(m["Body"])
-                if body.get("type") == "analysis":
-                    await fail_abandoned_job(
-                        self.rt,
-                        str(body.get("ref", "")),
-                        "The analysis could not be started. Please submit the project again.",
-                    )
-                elif body.get("type") == "cleanup":
-                    await cleanup_project(self.rt, str(body["ref"]))
+                try:
+                    body = json.loads(m["Body"])
+                    ref = str(body.get("ref", ""))
+                    # a task is already running for it (started by a resend): failing the job would kill it
+                    if body.get("type") == "analysis" and ref not in busy:
+                        await fail_abandoned_job(
+                            self.rt,
+                            ref,
+                            "The analysis could not be started. Please submit the project again.",
+                        )
+                    elif body.get("type") == "cleanup":
+                        await cleanup_project(self.rt, ref)
+                except (ValueError, AttributeError):  # unreadable body or id: drop it, never wedge the sweep
+                    log.warning("dlq.unreadable_message", message_id=m.get("MessageId"))
                 await asyncio.to_thread(
                     lambda h=m["ReceiptHandle"]: client.delete_message(QueueUrl=url, ReceiptHandle=h)  # type: ignore[misc]
                 )

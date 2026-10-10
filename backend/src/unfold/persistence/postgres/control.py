@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from unfold.core.errors import NotFound, RateLimited
+from unfold.core.errors import Conflict, NotFound, RateLimited
 from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec, SessionRec, SummaryRec
 from unfold.persistence.postgres.db import Database
 from unfold.persistence.postgres.models import (
@@ -239,9 +239,16 @@ class PostgresControlStore(ControlStore):
         self, job: JobRec, *, max_active_per_session: int = 0, max_queued_global: int = 0
     ) -> None:
         async with self._db.transaction() as s:
-            project = await s.get(ProjectRow, _u(job.project_id))
+            project = await s.get(ProjectRow, _u(job.project_id), with_for_update=True)
             if project is None:
                 raise NotFound("Project not found.")
+            existing = await s.execute(
+                select(func.count())
+                .select_from(AnalysisJobRow)
+                .where(AnalysisJobRow.project_id == project.id)
+            )
+            if existing.scalar_one():
+                raise Conflict("That record already exists.")
             await self._enforce_caps(s, str(project.session_id), max_active_per_session, max_queued_global)
             s.add(AnalysisJobRow(id=_u(job.id), project_id=_u(job.project_id), **_job_values(job)))
 

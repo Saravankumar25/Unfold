@@ -88,7 +88,15 @@ class S3BlobStore(UploadStore):
             ):
                 keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
                 if keys:
-                    self._client.delete_objects(Bucket=self.bucket, Delete={"Objects": keys, "Quiet": True})
+                    resp = self._client.delete_objects(
+                        Bucket=self.bucket, Delete={"Objects": keys, "Quiet": True}
+                    )
+                    if errors := resp.get(
+                        "Errors"
+                    ):  # per-key failures are not exceptions; cleanup must not claim success
+                        raise StoreUnavailable(
+                            f"Object delete failed for {len(errors)} keys: {errors[0].get('Code', '')}"
+                        )
                     n += len(keys)
             # an interrupted upload under the prefix would otherwise keep (and bill) its parts
             uploads = self._client.list_multipart_uploads(Bucket=self.bucket, Prefix=prefix)

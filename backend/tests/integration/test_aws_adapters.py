@@ -50,6 +50,43 @@ async def test_s3_blob_roundtrip_prefix_delete_and_typed_errors(aws: Any, tmp_pa
         await store.get_bytes(f"projects/{pid}/ir/1.json.gz")
 
 
+async def test_session_lookup_is_a_strongly_consistent_read(
+    aws: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unfold.persistence.dynamodb.control import DynamoControlStore
+
+    seen: list[bool] = []
+    real = DynamoTable.get
+
+    async def spy(self: DynamoTable, pk: str, sk: str, *, consistent: bool = True) -> Any:
+        seen.append(consistent)
+        return await real(self, pk, sk, consistent=consistent)
+
+    monkeypatch.setattr(DynamoTable, "get", spy)
+    await DynamoControlStore(DynamoTable(aws.settings)).session_by_token("t" * 64)
+    assert seen == [True]  # an eventually consistent read can miss a session created a moment ago
+
+
+async def test_s3_delete_prefix_reports_per_key_failures(aws: Any) -> None:
+    class _DenyDeletes:  # a real S3 answers 200 with an Errors list when a key cannot be deleted
+        def __init__(self, inner: Any) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._inner, name)
+
+        def delete_objects(self, **kw: Any) -> dict[str, Any]:
+            return {"Errors": [{"Key": o["Key"], "Code": "AccessDenied"} for o in kw["Delete"]["Objects"]]}
+
+    pid = str(uuid.uuid4())
+    store = S3BlobStore(aws.settings)
+    await store.put_bytes(f"projects/{pid}/x", b"1")
+    denied = S3BlobStore(aws.settings, client=_DenyDeletes(boto3.client("s3", region_name="us-east-1")))
+    with pytest.raises(StoreUnavailable, match="AccessDenied"):
+        await denied.delete_prefix(f"projects/{pid}/")
+    assert await store.get_bytes(f"projects/{pid}/x") == b"1"
+
+
 async def test_s3_delete_prefix_leaves_other_projects_alone(aws: Any) -> None:
     store = S3BlobStore(aws.settings)
     a, b = str(uuid.uuid4()), str(uuid.uuid4())

@@ -28,6 +28,15 @@ API_PREFIX = "/api/v1"
 def create_app(settings: Settings | None = None, *, queue: JobQueue | None = None) -> FastAPI:
     """Build the API. `queue` lets a caller supply the job queue (tests, another launcher); default: subprocess."""
     settings = settings or get_settings()
+    if (
+        settings.is_production
+        and settings.persistence_backend == "dynamodb"
+        and settings.proxy_hmac_secret is None
+    ):
+        # no address-based proxy trust behind a Function URL: the signed header is the client identity (ADR 0016)
+        raise ValueError(
+            "Unsafe production configuration: PROXY_HMAC_SECRET is required with PERSISTENCE_BACKEND=dynamodb"
+        )
     configure_logging(settings)
     configure_tracing(settings, "api")
 

@@ -338,6 +338,25 @@ async def test_upload_ticket_rules_ownership_size_and_type(aws: Any, client: htt
         assert (await other.post(f"/api/v1/projects/{pid}/zip/complete")).status_code == 404
 
 
+async def test_concurrent_complete_calls_create_one_job(aws: Any, client: httpx.AsyncClient) -> None:
+    """A retried or double-clicked `complete` must not start the same project twice."""
+    import asyncio
+
+    assert (await client.post("/api/v1/sessions")).status_code == 201
+    ticket = await client.post("/api/v1/projects/zip/upload-url", json={"filename": "a.zip", "size": 100})
+    pid = ticket.json()["project_id"]
+    boto3.client("s3", region_name="us-east-1").put_object(
+        Bucket=aws.bucket, Key=f"projects/{pid}/upload/source.zip", Body=b"PK" + b"0" * 100
+    )
+    first, second = await asyncio.gather(
+        client.post(f"/api/v1/projects/{pid}/zip/complete"),
+        client.post(f"/api/v1/projects/{pid}/zip/complete"),
+    )
+    assert first.status_code == 202 and second.status_code == 202, (first.text, second.text)
+    assert first.json()["job_id"] == second.json()["job_id"]
+    assert len({b["ref"] for _, b in _pop_messages(aws)}) == 1
+
+
 async def test_per_session_active_job_cap_is_enforced_and_typed(aws: Any, client: httpx.AsyncClient) -> None:
     assert (await client.post("/api/v1/sessions")).status_code == 201
     urls = ["https://github.com/octo/one", "https://github.com/octo/two", "https://github.com/octo/three"]

@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from unfold.core.errors import NotFound, RateLimited
+from unfold.core.errors import Conflict, NotFound, RateLimited
 from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec, SessionRec, SummaryRec
 from unfold.ports import ControlStore
 from unfold.runtime import Runtime
@@ -136,6 +136,10 @@ async def test_pending_upload_has_no_job_until_one_is_added(control: ControlStor
     await control.add_job(j)
     latest = await control.latest_job(p.id)
     assert latest is not None and latest.id == j.id
+    with pytest.raises(
+        Conflict
+    ):  # the first job is exclusive: a concurrent or repeated completion is refused
+        await control.add_job(_job(p))
     await control.delete_project_data(p.id)
     await control.delete_session(s.token_hash)
 
