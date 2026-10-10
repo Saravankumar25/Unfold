@@ -16,7 +16,7 @@ import boto3
 import pytest
 
 from unfold.core.errors import UnfoldError
-from unfold.domain.records import JobRec, ProjectRec
+from unfold.domain.records import ArtifactRec, JobRec, ProjectRec
 from unfold.runtime import Runtime
 from unfold.worker.dispatch import Dispatcher, FargateRunner, RunningTask, heartbeat_line
 from unfold.worker.sqs_queue import SqsJobQueue
@@ -41,6 +41,16 @@ class RecordingRunner:
         arn = f"arn:aws:ecs:us-east-1:123456789012:task/unfold-test/{uuid.uuid4().hex}"
         self.tasks[arn] = RunningTask(arn, job_id, datetime.now(UTC))
         self.started.append((job_id, client_token))
+        return arn
+
+    async def start_export(self, export_id: str, client_token: str) -> str:
+        key = f"export-{export_id}"
+        for t in self.tasks.values():
+            if t.job_id == key:
+                return t.arn
+        arn = f"arn:aws:ecs:us-east-1:123456789012:task/unfold-test/{uuid.uuid4().hex}"
+        self.tasks[arn] = RunningTask(arn, key, datetime.now(UTC))
+        self.started.append((key, client_token))
         return arn
 
     async def stop(self, task_arn: str, reason: str) -> None:
@@ -335,3 +345,128 @@ async def test_fargate_runner_surfaces_capacity_failures_as_retryable(aws: Any) 
     with pytest.raises(UnfoldError) as exc:
         await FargateRunner(aws.settings, client=ecs).start(str(uuid.uuid4()), "t")
     assert exc.value.retryable and "RESOURCE:CPU" in exc.value.message
+
+
+# --- exports: their own task, bounded retries, resend and expiry ---------------------------------------------------
+
+
+async def _export(env: Env, *, age: timedelta = timedelta(0), **kw: Any) -> ArtifactRec:
+    job = await env.job()
+    now = datetime.now(UTC)
+    base: dict[str, Any] = {
+        "id": str(uuid.uuid4()),
+        "project_id": job.project_id,
+        "kind": "guide_md",
+        "created_at": now - age,
+        "expires_at": now + timedelta(hours=1),
+        "content_type": "text/markdown",
+    }
+    rec = ArtifactRec(**{**base, **kw})
+    return await env.rt.control.add_artifact(rec, reuse_since=now - age - timedelta(days=1))
+
+
+def export_stopped(export_id: str, exit_code: int) -> dict[str, Any]:
+    return {
+        "lastStatus": "STOPPED",
+        "overrides": {"containerOverrides": [{"name": "worker", "command": ["export", export_id]}]},
+        "containers": [{"name": "worker", "exitCode": exit_code}],
+    }
+
+
+async def test_export_message_starts_one_export_task(env: Env) -> None:
+    art = await _export(env)
+    body = {"type": "export", "ref": art.id}
+    assert await env.d.handle_message("m1", body) == "started"
+    assert await env.d.handle_message("m2", body) == "duplicate"
+    assert env.runner.started == [(f"export-{art.id}", "m1")]
+    ready = await _export(env, status="ready")
+    assert await env.d.handle_message("m3", {"type": "export", "ref": ready.id}) == "skipped"
+    assert await env.d.handle_message("m4", {"type": "export", "ref": str(uuid.uuid4())}) == "skipped"
+
+
+async def test_export_tasks_do_not_take_analysis_slots_and_have_their_own_cap(env: Env) -> None:
+    job = await env.job()
+    first, second = await _export(env), await _export(env)
+    assert await env.d.handle_message("e1", {"type": "export", "ref": first.id}) == "started"
+    # an export running leaves the (single) analysis slot free ...
+    assert await env.d.handle_message("a1", {"type": "analysis", "ref": job.id}) == "started"
+    # ... and a second export waits for the export slot instead of piling onto the cluster
+    assert await env.d.handle_message("e2", {"type": "export", "ref": second.id}) == "deferred"
+
+
+async def test_export_without_an_exporter_task_is_failed_not_retried(env: Env) -> None:
+    art = await _export(env)
+    env.rt.settings.task_definition_export = ""
+    assert await env.d.handle_message("m", {"type": "export", "ref": art.id}) == "failed"
+    got = await env.rt.control.get_artifact(art.id)
+    assert got is not None and got.status == "failed" and "not available" in (got.error or "")
+
+
+async def test_a_crashed_export_is_retried_then_failed_when_the_window_closes(env: Env) -> None:
+    fresh = await _export(env)
+    assert await env.d.handle_task_stopped(export_stopped(fresh.id, 75)) == "retry"
+    assert await env.d.handle_task_stopped(export_stopped(fresh.id, 137)) == "crashed"
+    old = await _export(env, age=timedelta(minutes=30))
+    assert await env.d.handle_task_stopped(export_stopped(old.id, 137)) == "abandoned"
+    got = await env.rt.control.get_artifact(old.id)
+    assert got is not None and got.status == "failed" and got.error
+    # a finished export, or one that recorded itself, is left alone
+    assert await env.d.handle_task_stopped(export_stopped(old.id, 75)) == "ok"
+    assert await env.d.handle_task_stopped(export_stopped(fresh.id, 0)) == "ok"
+
+
+async def test_sweeper_resends_stale_exports_and_expires_old_ones(env: Env) -> None:
+    stale = await _export(env, age=timedelta(minutes=30))
+    young = await _export(env)
+    running = await _export(env, age=timedelta(minutes=30))
+    env.runner.tasks["arn:x"] = RunningTask("arn:x", f"export-{running.id}", datetime.now(UTC))
+    key = f"projects/{stale.project_id}/exports/old.md"
+    await env.rt.objects.put_bytes(key, b"old")
+    gone = await _export(
+        env,
+        age=timedelta(hours=2),
+        status="ready",
+        object_key=key,
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    report = await env.d.sweep()
+    refs = [b["ref"] for b in env.sent() if b["type"] == "export"]
+    assert stale.id in refs and young.id not in refs and running.id not in refs
+    assert report.exports_resent == 1 and report.exports_expired == 1
+    assert await env.rt.control.get_artifact(gone.id) is None
+    assert await env.rt.objects.delete_prefix(key) == 0
+
+
+async def test_dead_lettered_export_is_failed_with_a_message(env: Env) -> None:
+    art = await _export(env)
+    env.sqs.send_message(QueueUrl=env.aws.dlq_url, MessageBody=json.dumps({"type": "export", "ref": art.id}))
+    report = await env.d.sweep()
+    assert report.dead_lettered == 1
+    got = await env.rt.control.get_artifact(art.id)
+    assert got is not None and got.status == "failed"
+
+
+async def test_a_deleting_project_is_cleaned_by_the_sweeper_and_its_jobs_are_not_restarted(env: Env) -> None:
+    from unfold.cleanup.service import mark_deleting
+
+    job = await env.job(age=timedelta(minutes=30))
+    await env.rt.objects.put_bytes(f"projects/{job.project_id}/ir/1.json.gz", b"x")
+    assert await mark_deleting(env.rt, [job.project_id]) == 1
+    assert await mark_deleting(env.rt, [job.project_id]) == 0  # first mark wins
+    report = await env.d.sweep()
+    assert report.resent == 0 and report.cleaned_projects == 1
+    assert await env.rt.control.get_project(job.project_id) is None
+    assert await env.rt.control.get_job(job.id) is None
+    assert env.sent() == []  # nothing was queued for the deleted project's job
+
+
+async def test_fargate_runner_starts_an_export_with_its_own_task_definition(aws: Any) -> None:
+    ecs = FakeEcs()
+    runner = FargateRunner(aws.settings, client=ecs)
+    export_id = str(uuid.uuid4())
+    arn = await runner.start_export(export_id, "msg-9")
+    (_, req) = ecs.calls[0]
+    assert req["taskDefinition"] == "unfold-test-export"
+    assert req["startedBy"] == f"export-{export_id}" and req["clientToken"] == "msg-9"
+    assert req["overrides"]["containerOverrides"] == [{"name": "worker", "command": ["export", export_id]}]
+    assert [(t.arn, t.job_id) for t in await runner.running()] == [(arn, f"export-{export_id}")]

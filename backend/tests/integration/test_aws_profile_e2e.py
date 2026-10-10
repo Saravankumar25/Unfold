@@ -13,7 +13,6 @@ import io
 import json
 import math
 import os
-import re
 import zipfile
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -23,19 +22,11 @@ import boto3
 import httpx
 import pytest
 from fastapi import FastAPI
-from pydantic import BaseModel, SecretStr
+from pydantic import SecretStr
 
 from unfold.api.main import create_app
-from unfold.core.errors import ProviderCapacityError
-from unfold.guide.models import (
-    DraftClaim,
-    GuidePlan,
-    GuideSectionPlan,
-    ParagraphBlock,
-    SectionContent,
-    SectionDraft,
-)
-from unfold.llm.schemas import LLMRequest
+from unfold.evaluation.scripted import ScriptedLLM
+from unfold.exports.service import run_export
 from unfold.orchestration.constants import RETRY_EXIT_CODE
 from unfold.orchestration.pipeline import run_analysis
 from unfold.runtime import Runtime
@@ -45,58 +36,6 @@ from unfold.worker.sqs_queue import SqsJobQueue
 pytestmark = pytest.mark.integration
 
 FIXTURE = Path(__file__).resolve().parents[3] / "evals" / "fixtures" / "repos" / "fastapi_rag"
-_LABEL = re.compile(r"\[(E\d+)\] (\S+?):(\d+)-(\d+)")
-
-
-class ScriptedLLM:
-    def __init__(self, *, fail_on_section: int | None = None) -> None:
-        self.calls: list[str] = []
-        self.written = 0
-        self.fail_on_section = fail_on_section
-
-    async def generate(self, req: LLMRequest) -> Any:
-        raise AssertionError("structured only")
-
-    def stream(self, req: LLMRequest) -> Any:
-        raise AssertionError("no streaming in the pipeline")
-
-    async def generate_structured(self, req: LLMRequest, schema: type[BaseModel]) -> Any:
-        self.calls.append(req.purpose)
-        if schema is GuidePlan:
-            keys = [
-                ("overview", "Overview"),
-                ("architecture", "Architecture"),
-                ("data-flow", "Data flow"),
-                ("running", "Running it"),
-            ]
-            return GuidePlan(
-                estimated_read_minutes=12,
-                sections=[
-                    GuideSectionPlan(
-                        key=k,
-                        title=t,
-                        kind="backbone" if i < 2 else "core",
-                        purpose=f"Explain {t.lower()} of this project",
-                        target_minutes=3,
-                        evidence_objectives=["app", "api", "routes", "retrieval"],
-                        visual_needs=["architecture"] if i == 1 else [],
-                    )
-                    for i, (k, t) in enumerate(keys)
-                ],
-            )
-        if self.fail_on_section is not None and self.written >= self.fail_on_section:
-            raise ProviderCapacityError("scripted capacity failure", retryable=True)
-        self.written += 1
-        label, path, *_ = _LABEL.findall(req.messages[0].content)[0]
-        return SectionDraft(
-            content=SectionContent(
-                summary=f"How {Path(path).stem} fits in.",
-                blocks=[ParagraphBlock(text=f"`{path}` is part of the project [{label}].")],
-            ),
-            claims=[
-                DraftClaim(text=f"`{path}` is part of the project", kind="project_fact", evidence=[label])
-            ],
-        )
 
 
 class CountingDynamo:
@@ -151,6 +90,7 @@ class InProcessRunner:
     def __init__(self, rt: Runtime, llm: ScriptedLLM) -> None:
         self.rt, self.llm = rt, llm
         self.runs: list[tuple[str, bool]] = []
+        self.exports: list[str] = []
 
     async def running(self) -> list[RunningTask]:
         return []
@@ -159,6 +99,11 @@ class InProcessRunner:
         outcome = await run_analysis(self.rt, self.llm, job_id)
         self.runs.append((job_id, outcome.succeeded))
         return f"arn:inproc/{job_id}"
+
+    async def start_export(self, export_id: str, client_token: str) -> str:
+        await run_export(self.rt, export_id, None)  # type: ignore[arg-type]  # Markdown needs no Chromium
+        self.exports.append(export_id)
+        return f"arn:inproc/export-{export_id}"
 
     async def stop(self, task_arn: str, reason: str) -> None:
         return None
@@ -268,8 +213,8 @@ async def test_zip_to_guide_duplicate_delivery_resume_and_cleanup(
     assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
     guide = (await client.get(f"/api/v1/projects/{project_id}/guide")).json()
     keys = [s["key"] for s in guide["sections"]]
-    assert keys == ["overview", "architecture", "data-flow", "running"]
-    section = (await client.get(f"/api/v1/projects/{project_id}/guide/sections/architecture")).json()
+    assert keys[0] == "overview" and len(keys) >= 4  # the adaptive plan, not a fixed outline
+    section = (await client.get(f"/api/v1/projects/{project_id}/guide/sections/{keys[1]}")).json()
     assert section["status"] in ("ready", "degraded") and section["evidence"]
     chunk_id = next(iter(section["evidence"].values()))["chunk_id"]
     evidence = await client.get(f"/api/v1/projects/{project_id}/evidence/{chunk_id}")
@@ -400,3 +345,122 @@ async def test_a_project_over_the_chunk_cap_fails_typed_before_any_embedding(aws
         assert not outcome.succeeded and not outcome.retry and llm.calls == []
         job = (await c.get(f"/api/v1/projects/{project_id}")).json()["job"]
         assert job["status"] == "failed" and job["error_code"] == "INPUT_TOO_LARGE"
+
+
+async def test_chat_export_and_regeneration_run_on_the_aws_profile(aws: Any) -> None:
+    """Phase 3 on DynamoDB + S3 + SQS: a chat turn in the API process, a Markdown export as its own task, and a
+    single-chapter regeneration as a worker job (the investigator, verifier and reviser never run in the API)."""
+    llm = ScriptedLLM()
+    application = create_app(aws.settings, queue=SqsJobQueue(aws.settings), llm=llm)
+    async with (
+        application.router.lifespan_context(application),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url="http://t") as client,
+    ):
+        rt: Runtime = application.state.runtime
+        runner = InProcessRunner(rt, llm)
+        disp = Dispatcher(rt, application.state.queue, runner)
+        assert (await client.post("/api/v1/sessions")).status_code == 201
+        project_id, job_id = await _upload(client, aws, _zip_of(FIXTURE))
+        (msg_id, body), *_ = _pop_messages(aws)
+        assert await disp.handle_message(msg_id, body) == "started"
+        assert runner.runs == [(job_id, True)]
+        base = f"/api/v1/projects/{project_id}"
+        calls_after_analysis = len(llm.calls)
+
+        # --- chat: created, answered (JSON and NDJSON), persisted in the control store -------------------------
+        chat = (await client.post(f"{base}/chats")).json()
+        reply = await client.post(
+            f"/api/v1/chats/{chat['id']}/messages", json={"text": "Where is split_text?"}
+        )
+        assert reply.status_code == 200, reply.text
+        turn = reply.json()
+        assert turn["message"]["role"] == "assistant" and turn["message"]["evidence"]
+        assert turn["user_message"]["seq"] == 1 and turn["message"]["seq"] == 2
+        streamed = await client.post(
+            f"/api/v1/chats/{chat['id']}/messages?stream=true", json={"text": "And the routes?"}
+        )
+        kinds = [json.loads(line)["type"] for line in streamed.text.splitlines() if line]
+        assert kinds[0] == "chat.started" and kinds[-1] == "response.completed"
+        detail = (await client.get(f"/api/v1/chats/{chat['id']}")).json()
+        assert [m["seq"] for m in detail["messages"]] == [1, 2, 3, 4] and detail["chat"]["message_count"] == 4
+        listed = (await client.get(f"{base}/chats")).json()
+        assert [c["id"] for c in listed] == [chat["id"]]
+        # another session cannot read it: ownership is enforced through the port
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application), base_url="http://t"
+        ) as other:
+            assert (await other.post("/api/v1/sessions")).status_code == 201
+            assert (await other.get(f"/api/v1/chats/{chat['id']}")).status_code == 404
+            assert (
+                await other.post(f"/api/v1/chats/{chat['id']}/messages", json={"text": "x"})
+            ).status_code == 404
+
+        # --- export: API records it and queues it; the dispatcher starts an export task; download redirects ----
+        created = await client.post(f"{base}/exports/guide?format=md")
+        assert created.status_code == 202, created.text
+        export_id = created.json()["artifact_id"]
+        assert (await client.post(f"{base}/exports/guide?format=md")).json()["artifact_id"] == export_id
+        sent = [m for m in _pop_messages(aws) if m[1]["type"] == "export"]
+        assert [b for _, b in sent] == [{"type": "export", "ref": export_id}]
+        assert await disp.handle_message(sent[0][0], sent[0][1]) == "started"
+        assert runner.exports == [export_id]
+        art = (await client.get(f"/api/v1/exports/{export_id}")).json()
+        assert art["status"] == "ready" and art["download_url"]
+        dl = await client.get(art["download_url"], follow_redirects=False)
+        assert dl.status_code == 302 and "X-Amz-Signature" in dl.headers["location"]  # presigned on AWS
+        stored = await rt.objects.get_bytes(f"projects/{project_id}/exports/{export_id}.md")
+        assert stored.startswith(b"# fastapi_rag")
+        chat_export = await client.post(f"/api/v1/chats/{chat['id']}/exports?format=md")
+        assert chat_export.status_code == 202
+        assert (
+            await disp.handle_message("x", {"type": "export", "ref": chat_export.json()["artifact_id"]})
+            == "started"
+        )
+        assert len((await client.get(f"{base}/artifacts")).json()) == 2
+
+        # --- regeneration: a typed job, queued like an analysis, run by the worker ---------------------------
+        section = (await client.get(f"{base}/guide")).json()["sections"][1]["key"]
+        before = (await client.get(f"{base}/guide/sections/{section}")).json()
+        assert len(llm.calls) > calls_after_analysis  # chat spent model calls in the API process
+        regen = await client.post(f"{base}/sections/{section}/regenerate")
+        assert regen.status_code == 202, regen.text
+        regen_job = regen.json()["job_id"]
+        same = await client.post(f"{base}/sections/{section}/regenerate")
+        assert same.json()["job_id"] == regen_job  # idempotent while it is queued
+        queued = [m for m in _pop_messages(aws) if m[1]["type"] == "analysis"]
+        assert [b["ref"] for _, b in queued] == [regen_job]
+        progress = (await client.get(f"{base}/progress")).json()
+        assert progress["job"]["status"] == "succeeded" and progress["job"]["kind"] == "analysis"
+        assert (
+            progress["regeneration"]["status"] == "queued"
+            and progress["regeneration"]["section_key"] == section
+        )
+
+        assert await disp.handle_message(queued[0][0], queued[0][1]) == "started"
+        assert runner.runs[-1] == (regen_job, True)
+        progress = (await client.get(f"{base}/progress")).json()
+        assert progress["regeneration"]["status"] == "succeeded"
+        assert progress["job"]["kind"] == "analysis" and progress["job"]["status"] == "succeeded"
+        after = (await client.get(f"{base}/guide/sections/{section}")).json()
+        assert after["status"] in ("ready", "degraded") and after["content"] is not None
+        row = await rt.control.get_section(project_id, section)
+        assert row is not None and row.research is not None and row.verification is not None
+        assert row.version == 3  # written, verified, regenerated
+        assert before["key"] == after["key"]
+
+        # --- cleanup removes chats, messages and exports together with the project ---------------------------
+        assert rt.counters is not None
+        await rt.counters.add(
+            f"U#{job_id}", {"calls": 1}
+        )  # what the gateway leaves per job (7 days otherwise)
+        await rt.counters.add(f"U#chat:{chat['id']}", {"calls": 1})
+        assert (await client.delete(base)).status_code == 202
+        for url in (f"{base}/chats", f"/api/v1/chats/{chat['id']}", f"/api/v1/exports/{export_id}"):
+            assert (await client.get(url)).status_code == 404, url
+        assert await disp.handle_message("c", {"type": "cleanup", "ref": project_id}) == "cleaned"
+        assert await rt.control.get_chat(chat["id"]) is None
+        assert await rt.control.get_artifact(export_id) is None
+        assert await rt.control.chat_messages(chat["id"]) == []
+        assert await rt.objects.delete_prefix(f"projects/{project_id}/") == 0
+        assert await rt.counters.get(f"U#{job_id}") == {}  # usage counters go with the project
+        assert await rt.counters.get(f"U#chat:{chat['id']}") == {}

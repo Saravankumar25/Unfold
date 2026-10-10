@@ -111,6 +111,7 @@ def aws(monkeypatch: pytest.MonkeyPatch) -> Iterator[AwsEnv]:
             jobs_queue_url=queue,
             ecs_cluster_arn=cluster,
             task_definition_analysis="unfold-test-analysis",
+            task_definition_export="unfold-test-export",
             subnet_ids="subnet-1,subnet-2",
             security_group_ids="sg-1",
             max_concurrent_jobs=1,

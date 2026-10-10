@@ -14,7 +14,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from unfold.core.errors import Conflict, NotFound, RateLimited
-from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec, SessionRec, SummaryRec
+from unfold.domain.records import (
+    ArtifactRec,
+    ChatMessageRec,
+    ChatRec,
+    DiagramRec,
+    JobRec,
+    ProjectRec,
+    SectionRec,
+    SessionRec,
+    SummaryRec,
+)
 from unfold.ports import ControlStore
 from unfold.runtime import Runtime
 
@@ -332,5 +342,332 @@ async def test_expired_projects_are_listed_for_the_sweeper(control: ControlStore
     ids = {p.id for p in await control.expired_projects(datetime.now(UTC), 200)}
     assert gone.id in ids and live.id not in ids
     for p in (gone, live):
+        await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+# --- phase 3 records: delete marker, typed jobs, chats, exports ---------------------------------------------------
+
+
+def _mark_deleting(rec: ProjectRec) -> bool:
+    rec.deleting_at = datetime.now(UTC)
+    return True
+
+
+def _finish(job: JobRec) -> bool:
+    job.status = "succeeded"
+    job.completed_at = datetime.now(UTC)
+    return True
+
+
+async def test_delete_marker_moves_a_project_between_the_sweeper_lists(control: ControlStore) -> None:
+    s = await _session(control)
+    gone = _project(s, expires_at=datetime.now(UTC) - timedelta(minutes=1))
+    await control.create_project(gone, None)
+    assert gone.id in {p.id for p in await control.expired_projects(datetime.now(UTC), 500)}
+    assert gone.id not in {p.id for p in await control.deleting_projects(500)}
+
+    marked = await control.update_project(gone.id, _mark_deleting)
+    assert marked.deleting_at is not None
+    assert gone.id not in {p.id for p in await control.expired_projects(datetime.now(UTC), 500)}
+    deleting = {p.id: p for p in await control.deleting_projects(500)}
+    assert gone.id in deleting and deleting[gone.id].deleting_at is not None
+    stored = await control.get_project(gone.id)
+    assert stored is not None and stored.deleting_at is not None
+
+    await control.delete_project_data(gone.id)
+    assert gone.id not in {p.id for p in await control.deleting_projects(500)}
+    await control.delete_session(s.token_hash)
+
+
+async def test_recoverable_jobs_skips_a_deleting_project(control: ControlStore) -> None:
+    s = await _session(control)
+    live_p, live = await _project_with_job(control, s)
+    dead_p, dead = await _project_with_job(control, s)
+    await control.update_project(dead_p.id, _mark_deleting)
+    found = {
+        j.id
+        for j in await control.recoverable_jobs(
+            queued_before=datetime.now(UTC) + timedelta(minutes=1),
+            heartbeat_before=datetime.now(UTC),
+            limit=100_000,
+        )
+    }
+    assert live.id in found and dead.id not in found
+    for p in (live_p, dead_p):
+        await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+async def test_typed_jobs_and_a_single_regeneration_per_project(control: ControlStore) -> None:
+    s = await _session(control)
+    p, analysis = await _project_with_job(control, s)
+    await control.update_job(analysis.id, _finish)
+    assert await control.latest_job(p.id, "regenerate") is None
+
+    first, created = await control.add_regeneration(
+        _job(
+            p, kind="regenerate", section_key="overview", created_at=datetime.now(UTC) + timedelta(seconds=1)
+        )
+    )
+    assert created and first.kind == "regenerate" and first.section_key == "overview"
+    again, created_again = await control.add_regeneration(_job(p, kind="regenerate", section_key="flow"))
+    assert not created_again and again.id == first.id  # one at a time, whichever chapter was asked for
+
+    latest_analysis = await control.latest_job(p.id, "analysis")
+    latest_regen = await control.latest_job(p.id, "regenerate")
+    latest_any = await control.latest_job(p.id)
+    assert latest_analysis is not None and latest_analysis.id == analysis.id
+    assert latest_regen is not None and latest_regen.id == first.id and latest_regen.section_key == "overview"
+    assert latest_any is not None and latest_any.id == first.id
+    assert [j.kind for j in await control.jobs_of_project(p.id)] == ["analysis", "regenerate"]
+    # the session's project listing shows the analysis, never the regeneration
+    listed = await control.projects_of_session(s.id)
+    assert [(x.id, j.id if j else None) for x, j in listed] == [(p.id, analysis.id)]
+
+    await control.update_job(first.id, _finish)
+    nxt, created_next = await control.add_regeneration(_job(p, kind="regenerate", section_key="flow"))
+    assert created_next and nxt.id != first.id and nxt.section_key == "flow"
+    await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+async def test_regeneration_is_exclusive_under_concurrency(control: ControlStore) -> None:
+    s = await _session(control)
+    p, analysis = await _project_with_job(control, s)
+    await control.update_job(analysis.id, _finish)
+    results = await asyncio.gather(
+        *(control.add_regeneration(_job(p, kind="regenerate", section_key="overview")) for _ in range(4))
+    )
+    assert sum(1 for _, created in results if created) == 1
+    assert len({job.id for job, _ in results}) == 1
+    await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+async def test_regeneration_counts_against_the_caps_and_a_deleting_project_is_refused(
+    control: ControlStore,
+) -> None:
+    s = await _session(control)
+    p, analysis = await _project_with_job(control, s)
+    await control.update_job(analysis.id, _finish)
+    regen, _ = await control.add_regeneration(
+        _job(p, kind="regenerate", section_key="a"), max_active_per_session=1
+    )
+    with pytest.raises(RateLimited):  # the session already has its one active job
+        await _project_with_job(control, s, max_active_per_session=1)
+    await control.update_job(regen.id, _finish)
+    q, _ = await _project_with_job(control, s, max_active_per_session=1)
+
+    await control.update_project(p.id, _mark_deleting)
+    with pytest.raises(NotFound):
+        await control.add_regeneration(_job(p, kind="regenerate", section_key="b"))
+    for x in (p, q):
+        await control.delete_project_data(x.id)
+    await control.delete_session(s.token_hash)
+
+
+async def test_section_research_and_verification_round_trip(control: ControlStore) -> None:
+    s = await _session(control)
+    p, _ = await _project_with_job(control, s)
+    await control.replace_plan(p.id, {}, "v2", [SectionRec(p.id, "a", "A", 0)])
+
+    def store(rec: SectionRec) -> bool:
+        rec.research = {"coverage": 0.5, "findings": [{"statement": "x"}]}
+        rec.verification = {"rounds": 1, "gaps": []}
+        return True
+
+    await control.update_section(p.id, "a", store)
+    got = await control.get_section(p.id, "a")
+    assert got is not None
+    assert got.research == {"coverage": 0.5, "findings": [{"statement": "x"}]}
+    assert got.verification == {"rounds": 1, "gaps": []}
+    await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+def _chat(p: ProjectRec, **kw: object) -> ChatRec:
+    now = datetime.now(UTC)
+    base: dict[str, object] = {"id": _uid(), "project_id": p.id, "created_at": now, "updated_at": now}
+    return ChatRec(**{**base, **kw})  # type: ignore[arg-type]
+
+
+def _turn(chat: ChatRec, question: str) -> tuple[ChatMessageRec, ChatMessageRec]:
+    now = datetime.now(UTC)
+    common: dict[str, object] = {"chat_id": chat.id, "created_at": now}
+    return (
+        ChatMessageRec(id=_uid(), role="user", content={"text": question}, **common),  # type: ignore[arg-type]
+        ChatMessageRec(
+            id=_uid(),
+            role="assistant",
+            content={"text": f"answer to {question}"},
+            evidence=[{"path": "a.py", "start_line": 1, "end_line": 2}],
+            model_metadata={"grounding": {"claims": 1}},
+            **common,  # type: ignore[arg-type]
+        ),
+    )
+
+
+async def test_chats_cap_ordering_and_messages(control: ControlStore) -> None:
+    s = await _session(control)
+    p, _ = await _project_with_job(control, s)
+    first, second = _chat(p), _chat(p)
+    await control.create_chat(first, max_per_project=2)
+    await asyncio.sleep(0.01)
+    await control.create_chat(second, max_per_project=2)
+    with pytest.raises(Conflict):
+        await control.create_chat(_chat(p), max_per_project=2)
+
+    got = await control.get_chat(first.id)
+    assert got is not None and got.project_id == p.id and got.message_count == 0 and got.title is None
+    assert await control.get_chat(_uid()) is None
+    assert await control.chat_messages(first.id) == []
+
+    user, assistant = _turn(first, "  Where is   split_text?  ")
+    seq = await control.append_turn(first.id, user, assistant, title_chars=12)
+    assert seq == 2
+    user2, assistant2 = _turn(first, "And the second?")
+    assert await control.append_turn(first.id, user2, assistant2, title_chars=12) == 4
+
+    msgs = await control.chat_messages(first.id)
+    assert [m.seq for m in msgs] == [1, 2, 3, 4]
+    assert [m.role for m in msgs] == ["user", "assistant", "user", "assistant"]
+    assert msgs[1].evidence == [{"path": "a.py", "start_line": 1, "end_line": 2}]
+    assert msgs[1].model_metadata == {"grounding": {"claims": 1}}
+    assert msgs[0].content == {"text": "  Where is   split_text?  "}
+    assert [m.seq for m in await control.chat_messages(first.id, after_seq=2)] == [3, 4]
+    assert [m.seq for m in await control.chat_messages(first.id, last=3)] == [2, 3, 4]
+    assert [m.seq for m in await control.chat_messages(first.id, after_seq=1, last=2)] == [3, 4]
+    assert await control.chat_messages(first.id, last=0) == []
+
+    refreshed = await control.get_chat(first.id)
+    assert refreshed is not None and refreshed.message_count == 4 and refreshed.title == "Where is spl"
+    chats = await control.chats_of_project(p.id)
+    assert [c.id for c in chats] == [first.id, second.id]  # most recently active first
+    assert [c.message_count for c in chats] == [4, 0]
+
+    await control.delete_project_data(p.id)
+    assert await control.get_chat(first.id) is None
+    assert await control.chat_messages(first.id) == []
+    await control.delete_session(s.token_hash)
+
+
+async def test_chat_turns_get_distinct_contiguous_seq_under_concurrency(control: ControlStore) -> None:
+    s = await _session(control)
+    p, _ = await _project_with_job(control, s)
+    chat = _chat(p)
+    await control.create_chat(chat, max_per_project=5)
+    await asyncio.gather(
+        *(control.append_turn(chat.id, *_turn(chat, f"q{i}"), title_chars=20) for i in range(4))
+    )
+    assert [m.seq for m in await control.chat_messages(chat.id)] == list(range(1, 9))
+    got = await control.get_chat(chat.id)
+    assert got is not None and got.message_count == 8
+    await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+async def test_a_deleting_project_takes_no_new_chat_or_export(control: ControlStore) -> None:
+    s = await _session(control)
+    p, _ = await _project_with_job(control, s)
+    await control.update_project(p.id, _mark_deleting)
+    with pytest.raises(NotFound):
+        await control.create_chat(_chat(p), max_per_project=5)
+    now = datetime.now(UTC)
+    rec = ArtifactRec(_uid(), p.id, "guide_md", now, now + timedelta(hours=1), content_type="text/markdown")
+    with pytest.raises(NotFound):
+        await control.add_artifact(rec, reuse_since=now - timedelta(minutes=10))
+    await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+def _artifact(p: ProjectRec, kind: str = "guide_md", **kw: object) -> ArtifactRec:
+    now = datetime.now(UTC)
+    base: dict[str, object] = {
+        "id": _uid(),
+        "project_id": p.id,
+        "kind": kind,
+        "created_at": now,
+        "expires_at": now + timedelta(hours=1),
+        "content_type": "text/markdown",
+    }
+    return ArtifactRec(**{**base, **kw})  # type: ignore[arg-type]
+
+
+async def test_exports_reuse_pending_and_follow_their_lifecycle(control: ControlStore) -> None:
+    s = await _session(control)
+    p, _ = await _project_with_job(control, s)
+    chat = _chat(p)
+    await control.create_chat(chat, max_per_project=5)
+    window = datetime.now(UTC) - timedelta(minutes=10)
+
+    assert await control.pending_artifact(p.id, "guide_md", None, window) is None
+    a = await control.add_artifact(_artifact(p), reuse_since=window)
+    same = await control.add_artifact(_artifact(p), reuse_since=window)
+    assert same.id == a.id  # an identical pending export is reused, not duplicated
+    pending = await control.pending_artifact(p.id, "guide_md", None, window)
+    assert pending is not None and pending.id == a.id
+    other_kind = await control.add_artifact(_artifact(p, "guide_pdf"), reuse_since=window)
+    for_chat = await control.add_artifact(_artifact(p, "chat_md", chat_id=chat.id), reuse_since=window)
+    assert len({a.id, other_kind.id, for_chat.id}) == 3
+    assert for_chat.chat_id == chat.id
+    assert await control.pending_artifact(p.id, "chat_md", None, window) is None  # chat-bound only
+
+    def ready(rec: ArtifactRec) -> bool:
+        rec.status = "ready"
+        rec.object_key = f"projects/{p.id}/exports/{rec.id}.md"
+        rec.size_bytes = 42
+        return True
+
+    done = await control.update_artifact(a.id, ready)
+    assert done.status == "ready" and done.size_bytes == 42
+    fresh = await control.get_artifact(a.id)
+    assert fresh is not None and fresh.status == "ready" and fresh.object_key == done.object_key
+    assert await control.pending_artifact(p.id, "guide_md", None, window) is None
+    new_one = await control.add_artifact(_artifact(p), reuse_since=window)
+    assert new_one.id != a.id  # a finished export is not reused
+
+    listed = await control.artifacts_of_project(p.id)
+    assert {r.id for r in listed} == {a.id, other_kind.id, for_chat.id, new_one.id}
+    assert [r.created_at for r in listed] == sorted((r.created_at for r in listed), reverse=True)
+    with pytest.raises(NotFound):
+        await control.update_artifact(_uid(), ready)
+
+    await control.delete_artifact(a.id)
+    assert await control.get_artifact(a.id) is None
+    await control.delete_project_data(p.id)
+    assert await control.get_artifact(other_kind.id) is None  # exports leave with their project
+    await control.delete_session(s.token_hash)
+
+
+async def test_expired_and_stale_pending_exports_are_found_by_the_sweeper(control: ControlStore) -> None:
+    s = await _session(control)
+    kept, _ = await _project_with_job(control, s)
+    dying, _ = await _project_with_job(control, s)
+    now = datetime.now(UTC)
+    old = now - timedelta(minutes=30)
+    window = old - timedelta(days=1)
+    expired = await control.add_artifact(
+        _artifact(kept, "guide_md", created_at=old, expires_at=now - timedelta(minutes=1), status="ready"),
+        reuse_since=window,
+    )
+    stale = await control.add_artifact(_artifact(kept, "guide_pdf", created_at=old), reuse_since=window)
+    fresh = await control.add_artifact(_artifact(kept, "chat_md"), reuse_since=window)
+    orphan = await control.add_artifact(_artifact(dying, "guide_pdf", created_at=old), reuse_since=window)
+    await control.update_project(dying.id, _mark_deleting)
+
+    gone = {a.id for a in await control.expired_artifacts(now, 500)}
+    assert expired.id in gone and stale.id not in gone
+    restart = {
+        a.id
+        for a in await control.stale_pending_artifacts(
+            created_before=now - timedelta(minutes=5), now=now, limit=500
+        )
+    }
+    assert stale.id in restart
+    assert fresh.id not in restart  # too young
+    assert expired.id not in restart  # not pending
+    assert orphan.id not in restart  # its project is being deleted
+    for p in (kept, dying):
         await control.delete_project_data(p.id)
     await control.delete_session(s.token_hash)
