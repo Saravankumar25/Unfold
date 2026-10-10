@@ -41,7 +41,7 @@ log = get_logger(__name__)
 
 SECTION_CONTEXT_TOKENS = 9_000  # brief + excerpts + facts
 MIN_EXCERPT_TOKENS = 2_000
-WRITER_PROMPT_VERSION = "3"
+WRITER_PROMPT_VERSION = "4"
 _RELATION = re.compile(
     r"\b(calls?|invokes?|imports?|reads?|writes?|queries|uses?|depends on|delegates? to|hands|forwards?|"
     r"enqueues?|publishes?|consumes?|passes)\b",
@@ -64,7 +64,9 @@ _WRITER_SYSTEM = (
     "Q&A block with kind 'failure' (what can go wrong) only when a finding in the brief shows error or failure "
     "behaviour, and a Q&A block with kind 'extension' (how to change it) only when a finding shows where and how "
     "the code is changed or extended; otherwise omit both. Stay inside this chapter's objective. Chapters this "
-    "one builds on are summarised in one line each: refer to them, do not repeat them. Write for the stated "
+    "one builds on are summarised in one line each: refer to one by its title in your own words, never copy or "
+    "paraphrase its summary. Other chapters of the guide cover the topics listed under 'Covered in other "
+    "chapters': do not explain those again; at most name the chapter. Write for the stated "
     "reader level. Use headings (level 2/3), paragraphs, bullets, callouts, code blocks quoting evidence "
     "verbatim with its path, tables and Q&A. Do not emit diagram blocks. summary is one sentence.\n\n"
     + UNTRUSTED_POLICY
@@ -110,7 +112,7 @@ def _locate(code: str, chunks: Sequence[Chunk], prefer: str | None) -> tuple[str
     return None
 
 
-def _anchor_code(content: SectionContent, shown: Sequence[Chunk]) -> SectionContent:
+def anchor_code(content: SectionContent, shown: Sequence[Chunk]) -> SectionContent:
     """Every code block gets the `path` and `start_line` of the excerpt it quotes. A block that quotes nothing
     in the evidence shown (and names no location itself) is dropped: it would be unverifiable code."""
     blocks: list[Block] = []
@@ -172,13 +174,15 @@ async def write_chapter(
     brief: ResearchBrief,
     facts: Sequence[str],
     dependencies: Sequence[tuple[str, str]] = (),
+    others: Sequence[tuple[str, str]] = (),
     *,
     technical_level: str,
     instruction: str | None,
     job_id: str,
     project_id: str,
 ) -> WrittenSection:
-    """`dependencies` are (title, one-line summary) of the chapters in `plan.depends_on`, nothing else."""
+    """`dependencies` are (title, one-line summary) of the chapters in `plan.depends_on`; `others` are (title,
+    objective) of every other chapter in the plan, so this one does not explain what another chapter owns."""
     rank = {Proof.STATIC: 0, Proof.HEURISTIC: 1, Proof.INFERRED: 2}
     by_trust = sorted(brief.findings, key=lambda f: (rank[f.proof], f.question_id))
     ids = list(dict.fromkeys(i for f in by_trust for i in f.evidence))
@@ -221,6 +225,11 @@ async def write_chapter(
         prompt += "\n\n## Earlier chapters this one builds on\n" + untrusted(
             redact_text(lines), source="prior_chapters", trust="derived_summary"
         )
+    if others:
+        lines = "\n".join(f"- {t}: {o}" for t, o in others)
+        prompt += "\n\n## Covered in other chapters\n" + untrusted(
+            redact_text(lines), source="other_chapters", trust="derived_summary"
+        )
     req = LLMRequest(
         purpose="guide.section",
         capability=ModelCapability.BALANCED,
@@ -254,5 +263,5 @@ async def write_chapter(
         }
         for e in ctx.evidence
     }
-    content = _anchor_code(_strip_diagrams(draft.content), [c for c in found if c.id in shown_ids])
+    content = anchor_code(_strip_diagrams(draft.content), [c for c in found if c.id in shown_ids])
     return WrittenSection(content, claims, evidence, ctx.token_count_estimate + brief_tokens)

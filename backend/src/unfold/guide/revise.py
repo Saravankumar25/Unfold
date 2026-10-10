@@ -8,8 +8,9 @@ left standing as fact.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
@@ -31,10 +32,12 @@ from unfold.guide.verification_models import (
     Unsupported,
     VerificationResult,
 )
-from unfold.guide.verify import block_index, block_texts, words
+from unfold.guide.verify import LABEL, PATHLINE, block_index, block_texts, words
 
 _RANK = {Proof.STATIC: 0, Proof.HEURISTIC: 1, Proof.INFERRED: 2}
 _QUERY_CHARS = 240
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_SENTENCE_MATCH = 0.34  # word overlap that identifies the sentence a failing claim was made in
 
 
 class RevisionItem(BaseModel):
@@ -48,11 +51,13 @@ class RevisionItem(BaseModel):
 
 @dataclass(frozen=True)
 class RevisionOutcome:
-    content: SectionContent
-    verification: VerificationResult  # of `content` before qualification; verdict is final
+    content: SectionContent  # after qualification or removal of what still failed
+    verified: SectionContent  # the content `verification` describes (before that step)
+    verification: VerificationResult  # of `verified`; verdict is final
     rounds: int
     stopped_by: str  # accept | cap | no_improvement
     gaps: tuple[str, ...]  # block ids qualified or removed
+    dispositions: Mapping[str, str] = field(default_factory=dict)  # failing claim text -> qualified | removed
 
 
 Verify = Callable[[SectionContent, int], Awaitable[VerificationResult]]  # (content, round) -> result
@@ -99,34 +104,102 @@ def unsupported_blocks(verification: VerificationResult) -> list[Unsupported]:
     """Blocks with a failed deterministic check. A block is `has_evidence` when it also cites a real location."""
     failed = {r.block for r in verification.deterministic if not r.ok and r.block}
     cited = {r.block for r in verification.deterministic if r.ok and r.check == "path_exists"}
-    return [Unsupported(block=b, has_evidence=b in cited) for b in sorted(failed, key=lambda b: int(b[1:]))]
+    full = {c.text[:120]: c.text for c in verification.claims}
+    out: list[Unsupported] = []
+    for b in sorted(failed, key=lambda b: int(b[1:])):
+        mine = [r for r in verification.deterministic if r.block == b and not r.ok]
+        claims = [full.get(r.subject, r.subject) for r in mine if r.check == "claim_supported"]
+        out.append(
+            Unsupported(block=b, has_evidence=b in cited, claims=claims, claim_only=len(claims) == len(mine))
+        )
+    return out
 
 
 def _prefixed(text: str) -> str:
     return text if text.startswith(NOT_CONFIRMED) else f"{NOT_CONFIRMED} {text}"
 
 
-def qualify_or_remove(content: SectionContent, unsupported: Sequence[Unsupported]) -> SectionContent:
-    """Blocks with no evidence at all, quoted code and tables/glossaries (cannot be half-trusted) are removed;
-    prose that still cites something real keeps its text behind "Not confirmed in the code:"."""
+def _cites(text: str) -> bool:
+    return LABEL.search(text) is not None or PATHLINE.search(text) is not None
+
+
+def _sentence_level(block: Block, claims: Sequence[str]) -> tuple[list[Block], dict[str, str]] | None:
+    """Fix only the sentences (or bullet items) the failing claims were made in. A sentence that cites something
+    real is kept behind the prefix as its own block (so the reader sees it marked); one that cites nothing is
+    removed. None when a claim cannot be placed in a sentence: the caller falls back to the whole block."""
+    if isinstance(block, ParagraphBlock | CalloutBlock):
+        units = [u for u in _SENTENCE.split(block.text.strip()) if u]
+    elif isinstance(block, BulletsBlock):
+        units = list(block.items)
+    else:
+        return None
+    culprit: dict[int, list[str]] = {}
+    for claim in claims:
+        want = words(claim)
+        scores = [len(want & words(u)) / len(want) if want else 0.0 for u in units]
+        best = max(range(len(units)), key=lambda i: scores[i], default=-1)
+        if best < 0 or scores[best] < _SENTENCE_MATCH:
+            return None
+        culprit.setdefault(best, []).append(claim)
+    disposed = {c: "qualified" if _cites(units[i]) else "removed" for i, cs in culprit.items() for c in cs}
+    if isinstance(block, BulletsBlock):
+        items = [
+            _prefixed(u) if i in culprit else u for i, u in enumerate(units) if i not in culprit or _cites(u)
+        ]
+        return ([block.model_copy(update={"items": items})] if items else []), disposed
+    out: list[Block] = []
+    run: list[str] = []
+    for i, u in enumerate(units):
+        if i not in culprit:
+            run.append(u)
+            continue
+        if _cites(
+            u
+        ):  # a marked sentence stands alone so the reader sees it marked; a removed one just vanishes
+            if run:
+                out.append(block.model_copy(update={"text": " ".join(run)}))
+                run = []
+            out.append(block.model_copy(update={"text": _prefixed(u)}))
+    if run:
+        out.append(block.model_copy(update={"text": " ".join(run)}))
+    return out, disposed
+
+
+def resolve_gaps(
+    content: SectionContent, unsupported: Sequence[Unsupported]
+) -> tuple[SectionContent, dict[str, str]]:
+    """Qualify or remove what still fails. Returns the content and, per failing claim text, what happened to
+    the statement that made it (`qualified` | `removed`), so the claim records can follow the prose."""
     n = len(content.blocks)
-    drop: set[int] = set()
-    qualify: dict[int, Block] = {}
+    replace: dict[int, list[Block]] = {}
+    disposed: dict[str, str] = {}
     for u in unsupported:
         i = block_index(u.block, n)
         b = content.blocks[i]
+        if u.claim_only and u.claims and (fine := _sentence_level(b, u.claims)) is not None:
+            replace[i], part = fine
+            disposed.update(part)
+            continue
         if not u.has_evidence:
-            drop.add(i)
+            replace[i] = []
         elif isinstance(b, ParagraphBlock | CalloutBlock):
-            qualify[i] = b.model_copy(update={"text": _prefixed(b.text)})
+            replace[i] = [b.model_copy(update={"text": _prefixed(b.text)})]
         elif isinstance(b, BulletsBlock):
-            qualify[i] = b.model_copy(update={"items": [_prefixed(x) for x in b.items]})
+            replace[i] = [b.model_copy(update={"items": [_prefixed(x) for x in b.items]})]
         elif isinstance(b, QABlock):
-            qualify[i] = b.model_copy(update={"answer": _prefixed(b.answer)})
+            replace[i] = [b.model_copy(update={"answer": _prefixed(b.answer)})]
         else:
-            drop.add(i)
-    blocks = [qualify.get(i, b) for i, b in enumerate(content.blocks) if i not in drop]
-    return SectionContent(summary=content.summary, blocks=blocks)
+            replace[i] = []  # code, tables, glossaries cannot be half-trusted
+        disposed.update({c: "qualified" if replace[i] else "removed" for c in u.claims})
+    blocks = [x for i, b in enumerate(content.blocks) for x in replace.get(i, [b])]
+    return SectionContent(summary=content.summary, blocks=blocks), disposed
+
+
+def qualify_or_remove(content: SectionContent, unsupported: Sequence[Unsupported]) -> SectionContent:
+    """Blocks with no evidence at all, quoted code and tables/glossaries (cannot be half-trusted) are removed;
+    prose that still cites something real keeps its text behind "Not confirmed in the code:". A block that fails
+    only because of unsupported claims is fixed at the sentences that made them."""
+    return resolve_gaps(content, unsupported)[0]
 
 
 def _worse_or_equal(new: VerificationResult, old: VerificationResult) -> bool:
@@ -174,9 +247,11 @@ async def run_revision_loop(
     if result.verdict != "accept" and stopped == "accept":
         stopped = "cap"  # the last verification itself reported the cap
     gaps = unsupported_blocks(result) if result.verdict == "accept_with_gaps" else []
+    verified = content
+    disposed: dict[str, str] = {}
     if gaps:
-        content = qualify_or_remove(content, gaps)
-    return RevisionOutcome(content, result, rounds, stopped, tuple(g.block for g in gaps))
+        content, disposed = resolve_gaps(content, gaps)
+    return RevisionOutcome(content, verified, result, rounds, stopped, tuple(g.block for g in gaps), disposed)
 
 
 def _queries_only(v: VerificationResult, c: SectionContent) -> list[RevisionItem]:
@@ -189,6 +264,7 @@ __all__ = [
     "apply_revision",
     "plan_revision",
     "qualify_or_remove",
+    "resolve_gaps",
     "run_revision_loop",
     "unsupported_blocks",
 ]

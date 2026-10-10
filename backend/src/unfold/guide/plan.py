@@ -375,11 +375,17 @@ def build_skeleton(ir: ProjectIR, rm: RepoMap, arch: ArchitectureModel) -> list[
     v = _View(ir, rm, arch)
     want = chapter_budget(ir)
     chapters: list[ChapterPlan] = []
+    owned: set[str] = set()
     for key in _BACKBONE[arch.project_kind]:
         t = _T[key]
-        targets = _SELECT[t.select](v)
+        # a target an earlier chapter owns is explained there; handing the same ones to two chapters is how a
+        # guide repeats itself, so a chapter keeps only what is new (all of it when nothing is: its questions
+        # are what set it apart, as with a CLI's usage and commands)
+        wanted = _SELECT[t.select](v)
+        targets = [x for x in wanted if x not in owned] or wanted
         if targets:
             chapters.append(_chapter(v, t, targets, kind="backbone"))
+            owned.update(targets)
     chapters = chapters[:want]
     used = {x for c in chapters for x in c.targets}
     taken = {c.key for c in chapters}

@@ -321,3 +321,81 @@ async def test_loop_never_calls_the_model_for_a_clean_chapter(
     out = await run_revision_loop(verify, rewrite, _content(_para("Fine [E1].")))
     assert calls == [] and out.rounds == 0 and out.stopped_by == "accept"
     assert unsupported_blocks(out.verification) == []
+
+
+# ---- unsupported statements never stay standing as fact ------------------------------------------------------------
+
+
+async def _no_fix(content: SectionContent, items: Sequence[RevisionItem]) -> Mapping[str, Block]:
+    return {}
+
+
+def _claims_verifier(world: tuple[ProjectIR, dict[str, str]], claims: list[ClaimRecord]):  # type: ignore[no-untyped-def]
+    async def verify(content: SectionContent, rnd: int) -> VerificationResult:
+        return _verify(world, content, claims, round_no=rnd)
+
+    return verify
+
+
+async def test_an_unsupported_uncited_sentence_is_removed_and_its_claim_goes_with_it(
+    world: tuple[ProjectIR, dict[str, str]],
+) -> None:
+    good = ClaimRecord(text="`a` calls `b`", status=ClaimStatus.VERIFIED, evidence_ids=["c1"])
+    bad = ClaimRecord(text="Retries use exponential backoff", status=ClaimStatus.UNSUPPORTED)
+    content = _content(
+        _para("`a` calls `b` [E1]. Retries use exponential backoff in the client. `b` returns one [E1].")
+    )
+    out = await run_revision_loop(_claims_verifier(world, [good, bad]), _no_fix, content, max_rounds=2)
+
+    assert out.verification.verdict == "accept_with_gaps" and out.stopped_by == "no_improvement"
+    assert [b.text for b in out.content.blocks] == ["`a` calls `b` [E1]. `b` returns one [E1]."]  # type: ignore[union-attr]
+    assert out.dispositions == {bad.text: "removed"}
+    # what is left verifies clean once the removed statement's claim is dropped with it
+    after = _verify(world, out.content, [good])
+    assert after.verdict == "accept" and not [c for c in after.deterministic if not c.ok]
+
+
+async def test_a_cited_but_unsupported_sentence_is_marked_in_place_not_dropped(
+    world: tuple[ProjectIR, dict[str, str]],
+) -> None:
+    bad = ClaimRecord(text="`a` retries failed calls", status=ClaimStatus.INFERRED, evidence_ids=["c1"])
+    content = _content(_para("Intro to the module. `a` retries failed calls [E1]. Closing remark."))
+    out = await run_revision_loop(_claims_verifier(world, [bad]), _no_fix, content, max_rounds=1)
+
+    assert [b.text for b in out.content.blocks] == [  # type: ignore[union-attr]
+        "Intro to the module.",
+        f"{NOT_CONFIRMED} `a` retries failed calls [E1].",
+        "Closing remark.",
+    ]
+    assert out.dispositions == {bad.text: "qualified"}
+    # the qualified paragraph is what the frontend marks: it starts with the exact prefix
+    assert out.content.blocks[1].text.startswith(NOT_CONFIRMED)  # type: ignore[union-attr]
+
+
+async def test_bullets_are_fixed_item_by_item(world: tuple[ProjectIR, dict[str, str]]) -> None:
+    from unfold.guide.models import BulletsBlock
+
+    bad = ClaimRecord(text="Uses a global lock", status=ClaimStatus.UNSUPPORTED)
+    cited = ClaimRecord(text="`a` returns what `b` returns", status=ClaimStatus.INFERRED, evidence_ids=["c1"])
+    content = _content(
+        BulletsBlock(
+            items=["`a` is the entry [E1].", "Uses a global lock", "`a` returns what `b` returns [E1]."]
+        )
+    )
+    out = await run_revision_loop(_claims_verifier(world, [bad, cited]), _no_fix, content, max_rounds=1)
+    (block,) = out.content.blocks
+    assert block.items == [  # type: ignore[union-attr]
+        "`a` is the entry [E1].",
+        f"{NOT_CONFIRMED} `a` returns what `b` returns [E1].",
+    ]
+    assert out.dispositions == {bad.text: "removed", cited.text: "qualified"}
+
+
+async def test_a_failure_that_is_not_a_claim_falls_back_to_the_whole_block(
+    world: tuple[ProjectIR, dict[str, str]],
+) -> None:
+    bad = ClaimRecord(text="The loader reads pkg/loader.py", status=ClaimStatus.UNSUPPORTED)
+    content = _content(_para("The loader reads pkg/loader.py at start. See pkg/nope.py:1-2."))
+    out = await run_revision_loop(_claims_verifier(world, [bad]), _no_fix, content, max_rounds=1)
+    assert out.content.blocks == []  # no real citation at all: removed whole
+    assert out.dispositions == {bad.text: "removed"}

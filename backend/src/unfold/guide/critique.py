@@ -60,7 +60,7 @@ def build_critique_request(
     return LLMRequest(
         purpose="guide.critique",
         capability=ModelCapability.FAST,
-        priority=Priority.P1,
+        priority=Priority.P2,  # an enrichment: refused first when the per-job budget runs low
         system=_SYSTEM,
         messages=[
             Message(

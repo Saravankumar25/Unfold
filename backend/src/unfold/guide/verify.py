@@ -46,6 +46,7 @@ from unfold.guide.verification_models import (
 
 if TYPE_CHECKING:
     from unfold.domain.models import ClaimRecord
+    from unfold.indexing.models import Chunk
     from unfold.understand.repomap import RepoMap
 
 LABEL = re.compile(r"\[(E\d+)\]")
@@ -101,6 +102,19 @@ def block_texts(block: Block) -> list[str]:
     if isinstance(block, GlossaryBlock):
         return [f"{g.term}: {g.definition}" for g in block.items]
     return []
+
+
+def text_from_chunks(chunks: Sequence[Chunk], lines: int) -> str:
+    """A file's text as its chunks hold it: one entry per file line, blank where no chunk covers. Chunk text is
+    a header line then the body, which starts at `start_line`, so line counts and quoted excerpts can be checked
+    against the snapshot a guide was written from (the original files are never kept)."""
+    out = [""] * max(lines, 1)
+    for c in chunks:
+        body = c.text.split("\n", 1)[1] if "\n" in c.text else ""
+        for off, line in enumerate(body.splitlines()):
+            if 0 <= c.start_line - 1 + off < len(out):
+                out[c.start_line - 1 + off] = line
+    return "\n".join(out) + "\n"
 
 
 def block_id(index: int) -> str:

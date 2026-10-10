@@ -49,9 +49,23 @@ class VerificationResult(BaseModel):
 
 
 class Unsupported(BaseModel):
-    """A block that still fails after the revision cap. `has_evidence`: it cites at least one real location."""
+    """A block that still fails after the revision cap. `has_evidence`: it cites at least one real location.
+    `claims`: the full text of the failing claims placed in it; `claim_only`: every failure here is such a claim,
+    so the offending sentence can be handled alone instead of the whole block."""
 
     model_config = ConfigDict(frozen=True)
 
     block: str
     has_evidence: bool
+    claims: list[str] = Field(default_factory=list)
+    claim_only: bool = False
+
+
+class StoredVerification(BaseModel):
+    """What `guide_sections.verification` holds: the final deterministic result plus how the revision went."""
+
+    result: VerificationResult
+    rounds: int = 0
+    stopped_by: str = "accept"  # accept | cap | no_improvement | budget
+    gaps: list[str] = Field(default_factory=list)  # statements that were qualified or removed (clipped text)
+    critique: bool = False  # the semantic critique ran

@@ -24,10 +24,12 @@ from unfold.cleanup.service import cleanup_project
 from unfold.core.config import Settings
 from unfold.core.errors import ErrorCode, ProviderCapacityError
 from unfold.core.ids import new_session_token, token_hash
-from unfold.evaluation.scripted import scripted_refinement
+from unfold.evaluation.scripted import scripted_critique, scripted_refinement, scripted_rewrite
 from unfold.guide.models import DraftClaim, ParagraphBlock, SectionContent, SectionDraft
 from unfold.guide.plan import PlanRefinement
 from unfold.guide.research import QuestionSet
+from unfold.guide.rewrite import RewriteDraft
+from unfold.guide.verification_models import SemanticCritique
 from unfold.llm.schemas import LLMRequest
 from unfold.orchestration.pipeline import run_analysis
 from unfold.persistence.postgres.models import (
@@ -70,6 +72,10 @@ class ScriptedLLM:
             return scripted_refinement(req.messages[0].content)
         if schema is QuestionSet:
             return QuestionSet(questions=["What does this part do?", "How is it used?"])
+        if schema is SemanticCritique:
+            return scripted_critique()
+        if schema is RewriteDraft:
+            return scripted_rewrite(req.messages[0].content)
         assert schema is SectionDraft
         if self.fail_on_section is not None and self.sections_written >= self.fail_on_section:
             raise ProviderCapacityError("scripted capacity failure", retryable=True)
@@ -231,7 +237,14 @@ async def test_fixture_repo_yields_guide_diagrams_and_cleans_up(runtime: Runtime
         # every chapter but the first is told one line about the chapter it depends on, and nothing else
         with_deps = [p for p in llm.prompts if "## Earlier chapters this one builds on" in p]
         assert len(llm.prompts) == len(keys) and len(with_deps) == len(keys) - 1
-        assert all(p.split("## Earlier chapters this one builds on")[1].count("\n- ") == 1 for p in with_deps)
+
+        def dependency_lines(prompt: str) -> int:
+            part = prompt.split("## Earlier chapters this one builds on")[1]
+            return part.split("## Covered in other")[0].count("\n- ")
+
+        assert all(dependency_lines(p) == 1 for p in with_deps)
+        # and told, by title and objective only, what every other chapter owns so it does not repeat it
+        assert all("## Covered in other chapters" in p for p in llm.prompts)
 
         # a finished job is a no-op, not a rerun
         calls = len(llm.calls)

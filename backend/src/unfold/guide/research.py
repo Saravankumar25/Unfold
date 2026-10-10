@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
@@ -135,13 +135,16 @@ class Investigator:
 
     # --- targets ------------------------------------------------------------------------------------------
 
-    def _target_refs(self, targets: Sequence[str]) -> list[SymbolRef]:
+    def _target_refs(self, targets: Sequence[str], avoid: Collection[str] = ()) -> list[SymbolRef]:
+        """`avoid`: files other chapters name as targets; a component's files are picked from the rest first, so
+        two chapters that both cover a component do not read the same four files."""
         out: dict[str, SymbolRef] = {}
         for t in targets:
             comp = self._comp.get(t)
             if comp is not None:
+                known = [p for p in comp.member_paths if p in self._by_path]
                 paths = sorted(
-                    (p for p in comp.member_paths if p in self._by_path),
+                    [p for p in known if p not in avoid] or known,
                     key=lambda p: (-self._by_path[p].end_line, p),
                 )
                 for p in paths[:4]:
@@ -328,11 +331,11 @@ class Investigator:
 
     # --- the loop -----------------------------------------------------------------------------------------
 
-    async def research(self, plan: ChapterPlan) -> ResearchBrief:
+    async def research(self, plan: ChapterPlan, avoid: Collection[str] = ()) -> ResearchBrief:
         caps = self.caps
         spent = ResearchSpent()
         stopped: str | None = None
-        refs = self._target_refs(plan.targets)
+        refs = self._target_refs(plan.targets, avoid)
         questions = list(plan.questions)
         if len(questions) < 2:
             if spent.llm_calls < caps.llm_calls:

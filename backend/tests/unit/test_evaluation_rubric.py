@@ -186,8 +186,37 @@ def test_gaps_stated_offset_unverified_facts() -> None:
     sections = good()
     sections[0].claims.append(claim("`RRF_K` is 60", ClaimStatus.UNSUPPORTED, cited=False))
     r = rubric.uncertainty_honesty(sections)
-    assert r.raw == {"unverified_facts_left": 1, "gaps_stated": 1}
+    assert r.raw == {"unverified_facts_left": 1, "gaps_stated": 1, "statements_qualified_or_removed": 0}
     assert r.score == 2.0
+
+
+def test_a_statement_qualified_by_the_verifier_is_a_gap_not_a_fact_left_standing() -> None:
+    """The reviser's own marker counts as a stated gap, so honesty is not penalised for using it; a claim it
+    converted to an inference is no longer an unverified project fact."""
+    sections = good()
+    sections[0].content.blocks.append(  # type: ignore[union-attr]
+        ParagraphBlock(text="Not confirmed in the code: it retries on failure [E1].")
+    )
+    sections[0].claims.append(
+        claim("it retries", ClaimStatus.INFERRED, kind=ClaimKind.INFERENCE)  # converted by the reviser
+    )
+    sections[0].quality = {"gaps": 2}
+    r = rubric.uncertainty_honesty(sections)
+    assert r.raw["unverified_facts_left"] == 0 and r.raw["gaps_stated"] == 2  # one from `good()`
+    assert r.raw["statements_qualified_or_removed"] == 2
+    assert r.score == 4.0
+
+
+def test_a_guide_that_says_what_it_does_not_show_is_not_marked_down_for_the_wording() -> None:
+    sections = good()
+    unsupported = claim("`RRF_K` is 60", ClaimStatus.UNSUPPORTED, cited=False)
+    sections[0].claims.append(unsupported)
+    sections[0].content.blocks.append(  # type: ignore[union-attr]
+        ParagraphBlock(
+            text="The code does not show how ties are broken, and the retry policy is not established."
+        )
+    )
+    assert rubric.uncertainty_honesty(sections).raw["gaps_stated"] == 3
 
 
 def test_empty_guide_scores_zero_without_dividing() -> None:

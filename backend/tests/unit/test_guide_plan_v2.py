@@ -274,3 +274,24 @@ def test_v1_plan_rows_still_load() -> None:
         sec.objective == "What it is" and sec.questions == [] and sec.targets == [] and sec.depends_on == []
     )
     assert PLANNER_VERSION == "2"
+
+
+def test_a_later_chapter_keeps_only_targets_no_earlier_chapter_owns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two chapters handed the same targets read the same code and write the same text (the `requests` guide's
+    overview and internals did): the later chapter gets what is new, or everything when nothing is."""
+    from unfold.guide import plan as plan_mod
+
+    ir = _ir(tmp_path / "cli", CLI)
+    rm, arch = _parts(ir)
+    files = [r.id for r in rm.files()]
+    assert len(files) >= 3
+    monkeypatch.setitem(plan_mod._SELECT, "overview", lambda v: files[:1])
+    monkeypatch.setitem(plan_mod._SELECT, "components", lambda v: files)
+    internals = {c.key: c for c in build_skeleton(ir, rm, arch)}["internals"]
+    assert internals.targets == files[1:] and files[0] not in internals.targets
+
+    monkeypatch.setitem(plan_mod._SELECT, "overview", lambda v: files)
+    internals = {c.key: c for c in build_skeleton(ir, rm, arch)}["internals"]
+    assert internals.targets == files  # nothing new: its own questions are what set it apart

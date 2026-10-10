@@ -169,7 +169,6 @@ def grade_claims(
 ) -> tuple[list[ClaimRecord], dict[str, object]]:
     """Grade every claim against the stored text of the chunks it cites. Deterministic; no model call."""
     records: list[ClaimRecord] = []
-    counts = {s: 0 for s in ClaimStatus}
     for claim in claims:
         chunk_ids = [c for c in claim.evidence_ids if c in chunk_texts]
         note: str | None = None
@@ -199,15 +198,20 @@ def grade_claims(
                 note = "Names in the claim were not found in the cited evidence: " + ", ".join(
                     sorted(names - grounded)[:4]
                 )
-        counts[status] += 1
         records.append(
             claim.model_copy(
                 update={"status": status, "evidence_ids": chunk_ids, "confidence": confidence, "note": note}
             )
         )
+    return records, claim_quality(records)
+
+
+def claim_quality(records: Sequence[ClaimRecord]) -> dict[str, object]:
+    """Counts by status of already graded claims (what `GuideSectionRow.quality_scores` stores)."""
+    counts = {s: sum(1 for r in records if r.status is s) for s in ClaimStatus}
     total = len(records)
     checked = total - counts[ClaimStatus.PROPOSED]
-    quality: dict[str, object] = {
+    return {
         "claims": total,
         "verified": counts[ClaimStatus.VERIFIED],
         "strongly_inferred": counts[ClaimStatus.STRONGLY_INFERRED],
@@ -216,4 +220,3 @@ def grade_claims(
         "proposed": counts[ClaimStatus.PROPOSED],
         "grounded_ratio": round(counts[ClaimStatus.VERIFIED] / checked, 2) if checked else None,
     }
-    return records, quality

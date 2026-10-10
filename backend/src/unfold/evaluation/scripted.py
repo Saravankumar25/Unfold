@@ -19,6 +19,8 @@ from unfold.core.errors import ProviderCapacityError, UnfoldError
 from unfold.guide.models import DraftClaim, ParagraphBlock, SectionContent, SectionDraft
 from unfold.guide.plan import ChapterRefinement, PlanRefinement
 from unfold.guide.research import QuestionSet
+from unfold.guide.rewrite import RewriteDraft, RewrittenBlock
+from unfold.guide.verification_models import SemanticCritique
 from unfold.llm.schemas import LLMRequest, LLMResponse, T, Usage
 
 _EVIDENCE = re.compile(
@@ -28,6 +30,7 @@ _IDENT = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]{3,}(?:\.[A-Za-z_][A-Za-z0-9_]*)*)
 _SKIP = frozenset({"self", "return", "import", "from", "class", "async", "await", "None", "True", "False"})
 _OUTLINE = re.compile(r"^- key=(\S+) \| title=(.*?) \| objective=(.*?) \| depends_on=", re.MULTILINE)
 _QUESTION = re.compile(r"^    \? (.+)$", re.MULTILINE)
+_REPAIR = re.compile(r"^\[(b\d+)\] why it failed", re.MULTILINE)
 
 
 def evidence_blocks(prompt: str) -> list[tuple[str, str, str]]:
@@ -46,6 +49,21 @@ def scripted_refinement(prompt: str) -> PlanRefinement:
             ChapterRefinement(key=m.group(1), title=m.group(2), objective=m.group(3), questions=qs)
         )
     return PlanRefinement(chapters=chapters)
+
+
+def scripted_critique() -> SemanticCritique:
+    """A content-free critique that flags nothing: the deterministic checks decide in scripted runs."""
+    return SemanticCritique(coverage=0.8, depth=0.7, coherence=0.8, specificity=0.7, redundancy=1.0)
+
+
+def scripted_rewrite(prompt: str) -> RewriteDraft:
+    """Replace every block named in a repair prompt by one that states the gap and cites nothing."""
+    return RewriteDraft(
+        blocks=[
+            RewrittenBlock(block=b, new=ParagraphBlock(text="The evidence does not show this."))
+            for b in dict.fromkeys(_REPAIR.findall(prompt))
+        ]
+    )
 
 
 def extractive_answer(req: LLMRequest, *, max_blocks: int = 3) -> str:
@@ -97,6 +115,10 @@ class ScriptedLLM:
             out = self._section(req)
         elif schema is QuestionSet:
             out = QuestionSet(questions=["What does this part do?", "How is it used?"])
+        elif schema is SemanticCritique:
+            out = scripted_critique()
+        elif schema is RewriteDraft:
+            out = scripted_rewrite(req.messages[0].content)
         else:
             raise NotImplementedError(f"ScriptedLLM has no script for {schema.__name__}")
         return schema.model_validate(out.model_dump())
