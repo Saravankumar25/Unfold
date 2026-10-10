@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import gc
 import json
+from collections.abc import Iterator
 
 import pytest
 
@@ -10,6 +12,13 @@ from unfold.evaluation import suites
 from unfold.evaluation.corpus import BASELINE
 from unfold.evaluation.offline import baseline_from, check
 from unfold.evaluation.suites import SUITES, SuiteResult
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _release_fixture_projects() -> Iterator[None]:
+    yield
+    suites._fixture.cache_clear()
+    gc.collect()  # keep this module's large object graphs out of later timing-sensitive tests
 
 
 @pytest.fixture(scope="module")

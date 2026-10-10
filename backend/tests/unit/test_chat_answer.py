@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import gc
+from collections.abc import Iterator
+
 import pytest
 
 from unfold.chat.answer import (
@@ -20,8 +23,9 @@ from unfold.security.fence import UNTRUSTED_POLICY
 
 
 @pytest.fixture(scope="module")
-def fx() -> FixtureProject:
-    return load_fixture("fastapi_rag")
+def fx() -> Iterator[FixtureProject]:
+    yield load_fixture("fastapi_rag")
+    gc.collect()  # a large cyclic heap left behind would be collected inside a later timing-sensitive test
 
 
 async def _events(fx: FixtureProject, llm: ScriptedLLM, **kw: object) -> list[ChatEvent]:
