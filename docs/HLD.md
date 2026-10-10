@@ -89,14 +89,40 @@ sequenceDiagram
   A-->>W: 202 {project_id, job_id}
   A->>K: JobQueue.enqueue_analysis
   W->>A: GET /projects/{id}/progress?after=seq (polled, backoff)
-  K->>K: acquire, inventory, analyse, IR, graph, BM25, vectors, subsystems, plan, sections, grade, diagrams
+  K->>K: acquire, inventory, analyse, IR, graph, BM25, vectors, subsystems, plan, research, write, verify+revise, diagrams
   K->>P: stage checkpoint after each group; progress events
   A-->>W: events ... ready
 ```
 
-A rerun skips finished groups, so no stage duplicates rows. Limits: wall clock, per-job model-call and token budget,
-stage retry cap with a failed (dead-letter) state. The hierarchy summaries, workflow investigation and LangGraph
-checkpoints of the original design do not exist.
+A rerun skips finished groups, so no stage duplicates rows; inside a group a chapter that already has its result is
+skipped (a verified chapter is never redone). Limits: wall clock, per-job model-call and token budget, stage retry cap
+with a failed (dead-letter) state. The hierarchy summaries, workflow investigation and LangGraph checkpoints of the
+original design do not exist.
+
+**Guide pipeline (ADR 0017, `docs/design/investigation-engine.md`).** Deterministic work first, model work only where
+judgment is needed:
+
+1. **Plan**: architecture model and flows from the IR and graph (no model); a skeleton per project kind; one model call
+   refines titles, objectives and questions; invalid output falls back to the skeleton (`degraded`).
+2. **Research** (per chapter, no model unless the plan has fewer than two questions): target lookup, hybrid retrieval,
+   flow trace, test lookup; findings carry a proof label and chunk ids; one targeted extra round; capped.
+3. **Write**: from the brief and its excerpts, told in one line what each other chapter owns so it does not repeat it.
+4. **Verify**: path, line range, symbol, quoted-excerpt and edge checks against the snapshot and `RepoMap`, then claim
+   grading, then one semantic critique that can only name weak blocks.
+5. **Revise** (stage `REVISING_GUIDE`, at most `REVISION_MAX_ROUNDS` = 2): only failing blocks are rewritten, each with
+   fresh evidence. What still fails is qualified ("Not confirmed in the code:") or removed, together with the claim
+   that made it; no unsupported statement is left standing as fact (`degraded` section status records that gaps were
+   stated).
+
+Each chapter stores an `input_hash` over its plan entry, the content hashes of its evidence, the prompt versions and
+the reader level; equal hash means the stored chapter is what a rerun would produce.
+
+### Regenerate one chapter (ADR 0017)
+`POST /projects/{id}/sections/{key}/regenerate` -> an `analysis_jobs` row of kind `regenerate` + `enqueue_analysis` ->
+the same one-shot worker redoes research, writing, verification and revision for that chapter only and swaps it in
+whole -> the other chapters are untouched. Idempotent while one runs (same job returned; another chapter is a 409),
+rate-limited per project, progress through `GET /projects/{id}/progress` (`regeneration`). A failed regeneration
+leaves the chapter and the project as they were.
 
 ### Chat (ADR 0004)
 `POST /projects/{id}/chats` -> `POST /chats/{id}/messages` (`stream=false` JSON, or `stream=true` NDJSON): history and
@@ -127,6 +153,9 @@ every marked project, expires sessions, projects and exports, restarts stale job
 | D10 | **Progress by short polling** over `job_events` with a cursor; the response also carries the durable job. | Replayable, no persistent connection (ADR 0003). |
 | D11 | **Chat transport is a thin wrapper** over one generator; JSON is the default (ADR 0004). | Runtime may not support streaming. |
 | D12 | **Deletion is a durable marker + idempotent sweeper**, never TTL alone (ADR 0006). | Restart-safe cleanup. |
+| D13 | **Investigate before writing** (ADR 0017): deterministic architecture model and flow traces, an adaptive chapter plan, a bounded per-chapter research loop that produces a brief with proof labels; the writer sees the brief, not a chunk dump. No agent framework, no new store. | One retrieval per section bounded quality; the map already existed in the IR and graph. |
+| D14 | **Deterministic verification first, one critique, bounded repair**: location, excerpt and edge checks cost nothing; the critique may only name blocks; at most two rewrites of failing blocks; leftovers are qualified or removed with their claims. | A model never grades or silently fixes itself; unsupported statements are never left as fact. |
+| D15 | **Per-chapter `input_hash` and single-chapter regeneration** as a typed job on the existing queue port. | Equal inputs are reused; a reader can redo one chapter without paying for the guide. |
 
 ## 6. Quality attributes -> mechanisms
 
@@ -144,3 +173,18 @@ every marked project, expires sessions, projects and exports, restarts stale job
 Deep Agents / LangGraph / workflow investigation and sequence diagrams from investigations; section "simpler/deeper"
 variants; chat summary compaction and learning state; online (LLM-judged) evals; private repositories, accounts,
 cross-session memory; any AWS resource (phase 4: ports have local adapters only); CSP nonce for the web app.
+
+Known limitations of the guide engine (stated, not hidden):
+
+- **No cross-revision reuse.** A new analysis of a changed repository re-parses, re-chunks and re-indexes everything;
+  only finished chapters whose plan entry and evidence hashes are unchanged are kept. Reuse of parsed files by content
+  hash and partial graph rebuilds were deferred until benchmarks show re-analysis dominating cost.
+- **Call-graph proof levels.** Edges are `static` (the parser saw it), `heuristic` (name resolution, framework
+  convention) or `inferred` (retrieval proximity). Dynamic dispatch, reflection and callbacks stored in data are not
+  resolved; an `inferred` edge is never drawn as a diagram edge nor accepted as an edge claim.
+- **The critique is one cheap model call.** It scores five dimensions and names blocks; after a rewrite the revised
+  blocks are judged by the deterministic checks only, so a block can be accepted that a second critique would flag.
+- **Block-level repair.** A sentence that is wrong but cited is kept behind "Not confirmed in the code:", not
+  corrected; correcting it needs the rewrite to find the evidence.
+- **Quality is measured by deterministic proxies plus a human review sheet that is not yet filled** (see
+  `docs/design/quality-report.md`); depth and specificity are proxies, readability is unmeasured.

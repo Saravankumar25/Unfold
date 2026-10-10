@@ -35,6 +35,7 @@ All settings come from environment (`.env` locally, never committed).
 | Local models | `EMBEDDING_MODEL` (BAAI/bge-small-en-v1.5), `RERANKER_MODEL` (Xenova/ms-marco-MiniLM-L-6-v2), `MODEL_CACHE_DIR` |
 | Limits | `SESSION_TTL_SECONDS` (86400), `SESSION_MAX_LIFETIME_SECONDS` (259200), `MAX_ZIP_BYTES` (50 MiB), `MAX_EXTRACTED_BYTES` (300 MiB), `MAX_FILE_COUNT` (20000), `MAX_SINGLE_FILE_BYTES` (1 MiB), `MAX_PATH_DEPTH` (32), `MAX_COMPRESSION_RATIO` (100), `MAX_REPO_ARCHIVE_BYTES` (100 MiB) |
 | GitHub | `GITHUB_TOKEN` (optional; only raises API rate limit, never used for private repos) |
+| Guide | `SECTION_CONCURRENCY` (2), `RESEARCH_MAX_ROUNDS` (2), `RESEARCH_MAX_RETRIEVALS` (12), `RESEARCH_MAX_LLM_CALLS` (4), `RESEARCH_BRIEF_TOKENS` (6000), `REVISION_MAX_ROUNDS` (2), `MAX_REGENERATIONS_PER_HOUR` (6, per project) |
 | Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` (unset → spans not exported, ids still logged), `OTEL_SERVICE_NAME` |
 
 `get_settings()` is lru-cached per process. Secrets are `SecretStr` and never logged.
@@ -56,13 +57,13 @@ Child rows `ON DELETE CASCADE` from `projects`; projects cascade from `sessions`
 |---|---|
 | `sessions` | `id` PK, `token_hash` UNIQUE, `created_at`, `last_active_at`, `expires_at`, `status` (active\|deleting) |
 | `projects` | `id` PK, `session_id` FK, `input_type` (github\|zip), `source_locator`, `source_fingerprint`, `detected_name`, `default_branch`, `commit_sha`, `technical_level`, `user_instruction`, `project_type` JSONB, `stats` JSONB, `analysis_version`, `ir_object_key`, `lexical_object_key`, `created_at`, `expires_at` |
-| `analysis_jobs` | `id` PK, `project_id` FK, `status` (queued\|running\|succeeded\|failed), `current_stage`, `stage_progress` JSONB, `attempt`, `error_code`, `error_detail` JSONB, `retryable`, `created_at`, `started_at`, `completed_at`, `heartbeat_at` |
+| `analysis_jobs` | `id` PK, `project_id` FK, `status` (queued\|running\|succeeded\|failed), `kind` (analysis\|regenerate, default analysis), `section_key` (regenerate: the chapter to redo), `current_stage`, `stage_progress` JSONB, `attempt`, `error_code`, `error_detail` JSONB, `retryable`, `created_at`, `started_at`, `completed_at`, `heartbeat_at` |
 | `source_files` | PK(`project_id`,`path`), `language`, `size_bytes`, `sha256`, `tier` (0–4), `role`, `is_text`, `content` (NULL when binary/oversized/tier 4) |
 | `chunks` | `id` PK, `project_id`, `path`, `start_line`, `end_line`, `kind`, `symbol_id`, `symbol_name`, `language`, `content_type` (source\|docs\|config\|test\|infra), `importance`, `subsystem_id`, `graph_node_ids` JSONB, `trust` JSONB, `text`, `content_hash`; idx(`project_id`) |
 | `summaries` | PK(`project_id`,`level`,`key`), `title`, `facts` JSONB (deterministic), `semantic` TEXT (LLM), `members` JSONB, `content_hash`, `prompt_version`, `model` |
 | `findings` | `id` PK, `project_id`, `agent`, `objective`, `status` (completed\|partial\|failed), `content` JSONB, `trajectory` JSONB, `llm_calls`, `tool_calls`, `created_at` |
 | `guide_plans` | `project_id` PK, `plan` JSONB (GuidePlan), `planner_version`, `created_at` |
-| `guide_sections` | `id` PK, `project_id`, `section_key` (UNIQUE with project), `title`, `position`, `status` (pending\|generating\|ready\|degraded\|failed), `content` JSONB, `claims` JSONB, `evidence_summary` JSONB, `quality_scores` JSONB, `research` JSONB (ResearchBrief, nullable), `input_hash` text (nullable, unused until 3.8), `version`, `updated_at` |
+| `guide_sections` | `id` PK, `project_id`, `section_key` (UNIQUE with project), `title`, `position`, `status` (pending\|generating\|ready\|degraded\|failed), `content` JSONB, `claims` JSONB, `evidence_summary` JSONB, `quality_scores` JSONB, `research` JSONB (ResearchBrief, nullable), `verification` JSONB (`StoredVerification`, nullable; set once a chapter is verified and revised, it is the per-chapter checkpoint), `input_hash` text (sha256 of plan entry + evidence content hashes + prompt versions + reader level, nullable), `version`, `updated_at` |
 | `diagrams` | `id` PK, `project_id`, `kind`, `title`, `description`, `spec` JSONB, `mermaid`, `origin` (deterministic\|refined), `section_key` NULL |
 | `chat_sessions` | `id` PK, `project_id`, `title`, `summary`, `summarized_through` (int seq), `learning_state` JSONB, `created_at`, `updated_at` |
 | `chat_messages` | `id` PK, `chat_session_id`, `seq`, `role` (user\|assistant), `mode`, `content` JSONB `{text}`, `evidence` JSONB, `model_metadata` JSONB, `created_at`; UNIQUE(`chat_session_id`,`seq`) |
@@ -79,7 +80,7 @@ Project creation (`api.routes.projects`): session touch + project + job commit �
 RECEIVED → VALIDATING_INPUT → INGESTING → SECURITY_SCANNING → INVENTORY → STRUCTURAL_ANALYSIS
 → BUILDING_IR → BUILDING_GRAPH → INDEXING_LEXICAL → INDEXING_DENSE → SUMMARIZING_HIERARCHY
 → DISCOVERING_SUBSYSTEMS → INVESTIGATING_PROJECT → PLANNING_GUIDE → RESEARCHING_GUIDE → GENERATING_GUIDE
-→ VERIFYING_GUIDE → GENERATING_VISUALS → FINALIZING → READY
+→ VERIFYING_GUIDE → REVISING_GUIDE → GENERATING_VISUALS → FINALIZING → READY
 failures: FAILED_INPUT | FAILED_SECURITY | FAILED_INGESTION | FAILED_ANALYSIS
           | FAILED_PROVIDER_CAPACITY | FAILED_GENERATION | FAILED_EXPORT
 ```
@@ -197,11 +198,15 @@ class AnalysisState(TypedDict, total=False):
 | `plan` | INVESTIGATING_PROJECT, PLANNING_GUIDE | `ArchitectureModel` (rebuilt, not stored), `guide_plans` (`ChapterPlan`s, `guide.plan`), pending sections |
 | `research` | RESEARCHING_GUIDE | `guide_sections.research` (`ResearchBrief` per chapter, `guide.research`) |
 | `sections` | GENERATING_GUIDE | sections written from the brief in `depends_on` waves (`guide.write`; per-section isolation) |
-| `verify_guide` | VERIFYING_GUIDE | claim statuses, repairs, consistency report |
+| `verify` | VERIFYING_GUIDE, REVISING_GUIDE (entered when the first chapter needs a rewrite) | per chapter: `claims` statuses, `quality_scores`, `verification`, final `content`, `status` ready\|degraded (`guide.critique`, `guide.revise`) |
 | `visuals` | GENERATING_VISUALS | `diagrams`, diagram blocks attached to sections |
 | `finalize` | FINALIZING → READY | stats; job succeeded |
 
 Heartbeat task updates `heartbeat_at` every 20 s. Every node overwrites its own outputs (safe re-run).
+
+A job of kind `regenerate` (`analysis_jobs.kind`, `section_key`) runs one step instead of the list above: `regenerate` (RESEARCHING_GUIDE → GENERATING_GUIDE → VERIFYING_GUIDE → REVISING_GUIDE for that chapter, persisted in one transaction with `version + 1`) followed by `visuals`. It is started by `POST /projects/{id}/sections/{key}/regenerate`, travels over `JobQueue.enqueue_analysis`, and is invisible to `GET /projects/{id}` (`latest_job` reads analysis jobs only); `GET /projects/{id}/progress` reports it as `regeneration`.
+
+Per-chapter resume and reuse: `_plan` deletes only stale rows (key not in the new plan, or the recomputed `input_hash` differs from the stored one) and keeps the others with their research, content, claims and verification; `_research` skips a chapter that has a brief or content; `_sections` skips one with content; `_verify` skips one with `verification`. A crash mid-revision therefore redoes that chapter's critique and rewrites only (their result is written atomically when the loop ends).
 
 ## 15. Deep Agents (`unfold.agents`)
 
@@ -217,7 +222,11 @@ Heartbeat task updates `heartbeat_at` every 20 s. Every node overwrites its own 
 
 `SectionContent{summary, blocks: Block[]}`; `Block = heading | paragraph{text} | bullets{items} | callout{tone: note|tip|warning|insight, text} | code{language, code, path, start_line, caption} | diagram{diagram_id} | table{headers, rows} | qa{question, answer, kind: repository|design|failure|security|extension} | glossary{items}`. Inline: `**bold**`, `*em*`, `` `code` ``, citations `[E3]`.
 
-Writer (`guide.write.write_chapter`): chunks fetched by the brief's evidence ids → compile (≈9k tokens including the rendered brief, which is fenced and carries the `[E#]` labels) + one fenced line per `depends_on` chapter → BALANCED structured `SectionDraft{content, claims: [{text, kind: project_fact|inference|improvement, evidence: ["E3"]}]}`. Verifier (`guide.verify`): `E#` → chunk ids; deterministic support (cited evidence exists AND ≥60 % of salient claim tokens appear in cited text) → VERIFIED; `inference` → INFERRED; `improvement` → "proposed", not fact-checked; remaining facts → one batched EVALUATOR call per section → STRONGLY_INFERRED | INFERRED | UNSUPPORTED. UNSUPPORTED → one BALANCED repair rewriting affected blocks; still unsupported → section `degraded` (claims displayed with status). Consistency: one REASONING call over section summaries + key claims → issues in `quality_scores.consistency`; contradictions trigger ≤2 targeted repairs. Simplify/Deepen endpoints regenerate at shifted depth from the same compiled context (P0), cached as variants.
+Writer (`guide.write.write_chapter`, prompt version 4): chunks fetched by the brief's evidence ids → compile (≈9k tokens including the rendered brief, which is fenced and carries the `[E#]` labels) + one fenced line (title, summary) per `depends_on` chapter + one fenced line (title, objective) per other chapter under "Covered in other chapters", so it does not repeat what another chapter owns → BALANCED structured `SectionDraft{content, claims: [{text, kind: project_fact|inference|improvement, evidence: ["E3"]}]}`. Verify (`guide.verify.verify_section`, pure): per block `b<i>` it checks `path_exists` and `line_in_bounds` for `[E#]` labels, `path:L12-L40` mentions and code-block paths, `symbol_exists` for the symbol of cited evidence, `excerpt_matches` (every quoted line is a line of the cited file, whitespace-normalised; the file text is rebuilt from the stored chunks by `text_from_chunks`), `edge_exists` for a claim with two `graph_node_ids` (proof ≠ inferred) and `claim_supported` (`grade_claims` left a project fact UNSUPPORTED or INFERRED; placed in the block with ≥ 50 % word overlap). `grade_claims` itself is unchanged (`VERIFIED` only when the cited text contains ≥ 60 % of the claim's identifiers; the model never grades itself). One `guide.critique` call (`guide.critique.critique_section`, FAST, P2) scores coverage, depth, coherence, specificity and redundancy and names weak block ids; its schema has no field for text. Verdict: `accept`, `revise` (failing blocks listed; at most `REVISION_MAX_ROUNDS` rewrites) or `accept_with_gaps`.
+
+Revise (`guide.revise.run_revision_loop`, injected `verify` and `rewrite`): `plan_revision` builds one item per failing block (why it failed, the brief chunks that bear on it, a query); `guide.rewrite.Rewriter` fetches those chunks plus one targeted retrieval, compiles them like any evidence, asks BALANCED/P2 (`guide.revise`) for replacement blocks and their claims, maps the model's `[E#]` onto the chapter's own labels (new excerpts extend `evidence_summary`) and accepts a code block only if its lines are found in the excerpts shown. The loop stops on `accept`, at the cap, or when a round does not reduce the failures (the earlier content is kept). What still fails is resolved by `resolve_gaps`: a block that fails only because of unsupported claims is fixed at the sentence (or bullet) that made them (a sentence that cites something real is kept as its own paragraph behind "Not confirmed in the code:", which the frontend marks; one that cites nothing is removed); any other failure qualifies the whole block when it cites something real and removes it otherwise. The claim records follow the prose: the claim of a removed statement is dropped, a qualified one becomes an `inference` with status INFERRED. Calls the gateway refuses (`LLM_BUDGET_EXHAUSTED`; P2 is refused first, so revision never starves writing) or whose output is invalid cost the critique or the rewrite, not the chapter: the job gets `degraded` = `guide_critique` / `guide_revision` and the gaps are resolved deterministically. Section status is `degraded` when any gap was resolved, else `ready`; `verification` stores the final `VerificationResult`, `rounds`, `stopped_by` and the statements qualified or removed. A claim the verifier cannot place in any block stays as recorded (UNSUPPORTED) and is counted by the rubric; claims are never dropped to improve a score.
+
+Input hash (`guide.input_hash.chapter_input_hash`): sha256 over the plan entry (without `depends_on`), `[chunk id, content_hash]` of every brief evidence chunk, `PLANNER_VERSION`, `WRITER_PROMPT_VERSION`, `CRITIQUE_PROMPT_VERSION`, `REWRITE_PROMPT_VERSION`, technical level, instruction and `REVISION_MAX_ROUNDS`. Equal hash → the stored chapter is reused. Simplify/Deepen variants are not built.
 
 ## 17. Diagrams (`unfold.diagrams`)
 
@@ -244,12 +253,13 @@ Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no he
 | `POST /projects/zip` multipart `file, technical_level, instruction?` | 202 |
 | `GET /projects/{id}` | project + job status |
 | `DELETE /projects/{id}` | 202; `deleting_at` marker written, cleanup enqueued, project invisible at once |
-| `GET /projects/{id}/progress?after=<seq>` | events after the cursor + durable job (short poll) |
+| `GET /projects/{id}/progress?after=<seq>` | events after the cursor + durable analysis job + `regeneration` (latest single-chapter job, if any) (short poll) |
 | `GET /projects/{id}/guide` | plan + sections |
 | `GET /projects/{id}/guide/sections/{key}` | section + claims |
 | `GET /projects/{id}/evidence/{chunk_id}` | redacted evidence text, path, lines |
 | `GET /projects/{id}/architecture` | graph overview |
 | `GET /projects/{id}/diagrams/{diagram_id}` | DiagramSpec + mermaid |
+| `POST /projects/{id}/sections/{key}/regenerate` | 202 `{job_id, section_key}`; unknown key 404, project not ready 409; the same job again while one runs, another chapter meanwhile 409; 429 past `MAX_REGENERATIONS_PER_HOUR` per project |
 | `POST /projects/{id}/chats` · `GET /projects/{id}/chats` | chat sessions |
 | `GET /chats/{chat_id}` | messages |
 | `POST /chats/{chat_id}/messages?stream=false\|true` `{text, mode, section_key?}` | `ChatReplyOut` JSON, or NDJSON `ChatEvent` lines |
@@ -258,7 +268,7 @@ Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no he
 | `GET /projects/{id}/artifacts` | the project's exports |
 | `GET /health` · `GET /ready` | liveness · readiness |
 
-Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (fixed windows behind `RateLimiter`): project creation 10/h per session, chat 30/min per session, exports 10/h per project; per-IP and global ceilings on session and project creation.
+Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (fixed windows behind `RateLimiter`): project creation 10/h per session, chat 30/min per session, exports 10/h per project, chapter regenerations 6/h per project; per-IP and global ceilings on session and project creation.
 
 ## 21. Cleanup & recovery (`unfold.cleanup`)
 
