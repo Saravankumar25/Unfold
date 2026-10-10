@@ -28,10 +28,16 @@ from unfold.runtime import Runtime
 log = get_logger(__name__)
 
 
-def sweep_stale_workdirs(max_age_s: float = 3600.0) -> int:
-    """Remove job workdirs a killed worker left behind (they hold an untrusted extracted repository)."""
+def sweep_stale_workdirs(max_age_s: float = 3600.0, *, work_dir: str = "") -> int:
+    """Remove job workdirs a killed worker left behind (they hold an untrusted extracted repository).
+
+    Sweeps the system temp dir and, when set, `settings.work_dir` (where the pipeline actually creates them).
+    """
+    roots = [Path(tempfile.gettempdir())]
+    if work_dir:
+        roots.append(Path(work_dir))
     removed = 0
-    for path in Path(tempfile.gettempdir()).glob("unfold-job-*"):
+    for path in (p for root in roots for p in root.glob("unfold-job-*")):
         try:
             if path.is_dir() and time.time() - path.stat().st_mtime > max_age_s:
                 shutil.rmtree(path, ignore_errors=True)
@@ -53,7 +59,7 @@ async def run(task: str, ref: str) -> int:
     configure_logging(settings)
     configure_tracing(settings, "worker")
     _arm_watchdog(settings.job_timeout_seconds + 30.0)
-    swept = sweep_stale_workdirs()
+    swept = sweep_stale_workdirs(work_dir=settings.work_dir)
     if swept:
         log.info("worker.swept_workdirs", count=swept)
     rt = Runtime.create(settings, db_pool_size=4)

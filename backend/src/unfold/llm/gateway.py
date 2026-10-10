@@ -65,10 +65,14 @@ HARD_STOP_FACTOR = 1.3
 
 Invoke = Callable[[Provider, str, int, LLMRequest], Awaitable[R]]
 
-# KEYS: usage hash   ARGV: soft_budget, hard_budget, priority → {1, calls} | {0, 'soft'|'hard'}
+# KEYS: usage hash   ARGV: soft_budget, hard_budget, priority, ttl, token_budget
+#   → {1, calls} | {0, 'soft'|'hard'|'tokens'}
 _ADMIT = """
 local calls = tonumber(redis.call('HGET', KEYS[1], 'calls') or '0')
 if calls >= tonumber(ARGV[2]) then return {0, 'hard'} end
+local used = tonumber(redis.call('HGET', KEYS[1], 'input_tokens') or '0')
+  + tonumber(redis.call('HGET', KEYS[1], 'output_tokens') or '0')
+if used >= tonumber(ARGV[5]) then return {0, 'tokens'} end
 if tonumber(ARGV[3]) >= 2 and calls >= tonumber(ARGV[1]) then return {0, 'soft'} end
 local n = redis.call('HINCRBY', KEYS[1], 'calls', 1)
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
@@ -194,8 +198,10 @@ class LLMGateway:
             return
         soft = max(0, self._settings.analysis_llm_call_budget)
         hard = math.ceil(soft * HARD_STOP_FACTOR)
+        tokens = max(0, self._settings.analysis_llm_token_budget)
         result: Any = await self._admit_script(
-            keys=[self._usage_key(req.job_id)], args=[soft, hard, int(req.priority), USAGE_TTL_SECONDS]
+            keys=[self._usage_key(req.job_id)],
+            args=[soft, hard, int(req.priority), USAGE_TTL_SECONDS, tokens],
         )
         if int(result[0]) == 1:
             return
@@ -205,7 +211,7 @@ class LLMGateway:
             f"LLM call budget exhausted for this analysis ({which} limit; purpose={req.purpose})",
             code=ErrorCode.LLM_BUDGET_EXHAUSTED,
             retryable=False,
-            detail={"limit": which, "budget": soft, "hard_limit": hard},
+            detail={"limit": which, "budget": soft, "hard_limit": hard, "token_budget": tokens},
         )
 
     async def _record(

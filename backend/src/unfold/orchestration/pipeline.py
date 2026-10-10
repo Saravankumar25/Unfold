@@ -33,6 +33,7 @@ from unfold.graph.builder import GraphBuilder
 from unfold.graph.communities import detect as detect_subsystems
 from unfold.graph.communities import entity_subsystems
 from unfold.guide.generate import (
+    SectionEvidenceMissing,
     grade_claims,
     plan_guide,
     project_facts,
@@ -450,6 +451,7 @@ class _Run:
         retriever = HybridRetriever.for_project(self.rt, self.pid, ir, p.lexical_object_key)
         gate = asyncio.Semaphore(max(1, self.rt.settings.section_concurrency))
         written = 0
+        missing: list[SectionEvidenceMissing] = []
 
         async def one(sec_key: str) -> None:
             nonlocal written
@@ -464,17 +466,31 @@ class _Run:
                 ).scalar_one()
             if existing.content:
                 return  # written by an earlier attempt; resume skips it
-            async with gate:
-                draft = await write_section(
-                    self.llm,
-                    retriever,
-                    spec,
-                    facts,
-                    technical_level=p.technical_level,
-                    instruction=p.user_instruction,
-                    job_id=self.job_id,
-                    project_id=self.pid,
-                )
+            try:
+                async with gate:
+                    draft = await write_section(
+                        self.llm,
+                        retriever,
+                        spec,
+                        facts,
+                        technical_level=p.technical_level,
+                        instruction=p.user_instruction,
+                        job_id=self.job_id,
+                        project_id=self.pid,
+                    )
+            except SectionEvidenceMissing as exc:
+                missing.append(exc)
+                async with self.rt.db.transaction() as s:
+                    failed_row = (
+                        await s.execute(
+                            select(GuideSectionRow)
+                            .where(GuideSectionRow.project_id == p.id, GuideSectionRow.section_key == sec_key)
+                            .with_for_update()
+                        )
+                    ).scalar_one()
+                    failed_row.status = SectionStatus.FAILED.value
+                    failed_row.quality_scores = {"reason": exc.message}
+                return
             async with self.rt.db.transaction() as s:
                 row = (
                     await s.execute(
@@ -502,7 +518,11 @@ class _Run:
                 code=ErrorCode.GENERATION_FAILED,
                 retryable=True,
             ) from first
-        return {"written": written}
+        if missing:
+            if len(missing) == len(plan.sections):
+                raise missing[0]  # nothing to show: fail the job as before
+            await self.reporter.degraded("guide_sections")
+        return {"written": written, "failed": len(missing)}
 
     async def _verify(self) -> dict[str, Any]:
         await self.reporter.stage(JobStage.VERIFYING_GUIDE)
@@ -518,6 +538,8 @@ class _Run:
                 .all()
             )
         for row in rows:
+            if row.status == SectionStatus.FAILED.value:
+                continue  # no content to grade; it stays failed
             claims = [ClaimRecord.model_validate(c) for c in row.claims or []]
             ids = sorted({cid for c in claims for cid in c.evidence_ids})
             texts = {c.id: c.text for c in await self.chunks.get_many(self.pid, ids)}

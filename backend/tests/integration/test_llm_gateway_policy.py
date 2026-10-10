@@ -370,6 +370,20 @@ async def test_job_budget_skips_p2_beyond_soft_limit_and_hard_stops_at_1_3x(h: H
     assert usage["input_tokens"] == 33 and usage["output_tokens"] == 21
 
 
+async def test_job_token_budget_refuses_further_calls_once_reached(h: Harness) -> None:
+    gem = _gemini()
+    # one fake call records 11 input + 7 output tokens
+    gw = h.gateway(gem, settings=h.settings_with(analysis_llm_token_budget=18))
+    job = f"job-{uuid.uuid4().hex[:8]}"
+    await gw.generate(_req(job_id=job, priority=Priority.P0))
+    with pytest.raises(UnfoldError) as hit:
+        await gw.generate(_req(job_id=job, priority=Priority.P0))
+    assert hit.value.code is ErrorCode.LLM_BUDGET_EXHAUSTED and hit.value.detail["limit"] == "tokens"
+    assert len(gem.calls) == 1  # refused before any provider call
+    await gw.generate(_req(job_id=f"job-{uuid.uuid4().hex[:8]}"))  # other jobs have their own budget
+    assert len(gem.calls) == 2
+
+
 async def test_requests_without_job_are_not_budgeted(h: Harness) -> None:
     gem = _gemini()
     gw = h.gateway(gem, settings=h.settings_with(analysis_llm_call_budget=0))

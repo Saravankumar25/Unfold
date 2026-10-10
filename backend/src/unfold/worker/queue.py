@@ -15,6 +15,8 @@ from unfold.core.config import Settings
 from unfold.core.logging import get_logger
 from unfold.orchestration.pipeline import ALIVE_WITHIN, RETRY_EXIT_CODE
 from unfold.ports import JobQueue
+from unfold.runtime import Runtime
+from unfold.worker.recovery import fail_abandoned_job
 
 log = get_logger(__name__)
 
@@ -77,5 +79,20 @@ class SubprocessJobQueue(JobQueue):
             log.info("worker.exited", task=task, ref=ref, code=code, attempt=attempt)
             if code == 0:
                 return
-            await asyncio.sleep(min(30.0, 5.0 * attempt) if code == RETRY_EXIT_CODE else CRASH_RETRY_SECONDS)
+            if attempt < self._settings.max_job_attempts:
+                await asyncio.sleep(
+                    min(30.0, 5.0 * attempt) if code == RETRY_EXIT_CODE else CRASH_RETRY_SECONDS
+                )
         log.error("worker.gave_up", task=task, ref=ref)
+        if task == "analysis":
+            await self._record_abandoned(ref)
+
+    async def _record_abandoned(self, job_id: str) -> None:
+        """Mark the job failed (the workers could not), through a short-lived runtime of our own."""
+        rt = Runtime.create(self._settings, db_pool_size=1)
+        try:
+            await fail_abandoned_job(rt, job_id)
+        except Exception as exc:
+            log.error("worker.abandon_not_recorded", job_id=job_id, error_type=type(exc).__name__)
+        finally:
+            await rt.aclose()

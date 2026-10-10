@@ -420,3 +420,109 @@ async def test_resuming_inside_a_stage_group_does_not_move_the_job_backwards(run
         assert await reporter.start(alive_within=_td(minutes=2)) is None
     finally:
         await _teardown(runtime, project_id)
+
+
+def _missing_evidence_for(monkeypatch: pytest.MonkeyPatch, keys: set[str] | None) -> None:
+    """Make `write_section` find no evidence for `keys` (every section when None); others run for real."""
+    from unfold.guide.generate import SectionEvidenceMissing
+    from unfold.orchestration import pipeline
+
+    real = pipeline.write_section
+
+    async def write(llm: Any, retriever: Any, spec: Any, *args: Any, **kwargs: Any) -> Any:
+        if keys is None or spec.key in keys:
+            raise SectionEvidenceMissing(
+                f"No repository evidence was found for section '{spec.title}'.",
+                code=ErrorCode.RETRIEVAL_FAILED,
+                retryable=True,
+            )
+        return await real(llm, retriever, spec, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "write_section", write)
+
+
+async def test_one_section_without_evidence_fails_that_section_not_the_job(
+    runtime: Runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_id, job_id = await _seed(runtime, _zip_of(FIXTURE))
+    _missing_evidence_for(monkeypatch, {"running"})
+    try:
+        outcome = await run_analysis(runtime, ScriptedLLM(), job_id)
+        assert outcome.succeeded, outcome
+        async with runtime.db.session() as s:
+            job = await s.get(AnalysisJobRow, uuid.UUID(job_id))
+            rows = (
+                (
+                    await s.execute(
+                        select(GuideSectionRow).where(GuideSectionRow.project_id == uuid.UUID(project_id))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert job is not None and job.status == "succeeded" and job.attempt == 1
+        assert "guide_sections" in job.stage_progress["degraded"]
+        by_key = {r.section_key: r for r in rows}
+        failed = by_key["running"]
+        assert failed.status == "failed" and failed.content is None
+        assert "No repository evidence" in failed.quality_scores["reason"]
+        assert all(r.status in {"ready", "degraded"} for k, r in by_key.items() if k != "running")
+    finally:
+        await _teardown(runtime, project_id)
+
+
+async def test_job_still_fails_when_no_section_has_evidence(
+    runtime: Runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_id, job_id = await _seed(runtime, _zip_of(FIXTURE))
+    _missing_evidence_for(monkeypatch, None)
+    try:
+        outcome = await run_analysis(runtime, ScriptedLLM(), job_id)
+        assert not outcome.succeeded
+        async with runtime.db.session() as s:
+            job = await s.get(AnalysisJobRow, uuid.UUID(job_id))
+        assert job is not None and job.status != "succeeded"
+        assert job.error_code == ErrorCode.RETRIEVAL_FAILED.value
+    finally:
+        await _teardown(runtime, project_id)
+
+
+class _DeadProc:
+    async def wait(self) -> int:
+        return 1  # the worker process keeps crashing
+
+
+async def test_supervisor_giving_up_marks_the_job_failed(
+    runtime: Runtime, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unfold.worker import queue as queue_mod
+
+    project_id, job_id = await _seed(runtime, _zip_of(FIXTURE))
+    async with runtime.db.transaction() as s:  # a worker claimed it, then died without recording anything
+        job = await s.get(AnalysisJobRow, uuid.UUID(job_id))
+        assert job is not None
+        job.status, job.attempt, job.heartbeat_at = "running", 2, datetime.now(UTC)
+
+    async def spawn(*args: Any, **kwargs: Any) -> _DeadProc:
+        return _DeadProc()
+
+    monkeypatch.setattr(queue_mod.asyncio, "create_subprocess_exec", spawn)
+    queue = queue_mod.SubprocessJobQueue(settings.model_copy(update={"max_job_attempts": 2}))
+    sleeps: list[float] = []
+
+    async def no_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(queue_mod.asyncio, "sleep", no_sleep)
+    try:
+        await queue._supervise("analysis", job_id, 0.0)
+        async with runtime.db.session() as s:
+            row = await s.get(AnalysisJobRow, uuid.UUID(job_id))
+        assert row is not None
+        assert (row.status, row.error_code) == ("failed", ErrorCode.ANALYSIS_STAGE_FAILED.value)
+        assert row.retryable is False and row.completed_at is not None
+        assert len(sleeps) == 1  # waits between attempts, not after the last one
+        events = await runtime.progress.read_after(project_id)
+        assert events and events[-1][1]["type"] == "failed"
+    finally:
+        await _teardown(runtime, project_id)

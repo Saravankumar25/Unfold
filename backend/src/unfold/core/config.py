@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     llm_model_limits: str = ""
     llm_quota_scope: Literal["shared", "per_key"] = "shared"
     analysis_llm_call_budget: int = 150
+    analysis_llm_token_budget: int = 1_500_000  # input + output tokens per job; further calls are refused
     llm_request_timeout_seconds: float = 120.0
 
     # local models

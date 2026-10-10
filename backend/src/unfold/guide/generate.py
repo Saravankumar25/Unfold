@@ -34,6 +34,7 @@ from unfold.llm.schemas import LLMClient, LLMRequest, Message
 from unfold.project_ir.schema import ProjectIR
 from unfold.retrieval.hybrid import HybridRetriever
 from unfold.security.fence import UNTRUSTED_POLICY, untrusted
+from unfold.security.secrets import redact_text
 
 MIN_SECTIONS = 3
 MAX_SECTIONS = 10
@@ -195,11 +196,11 @@ async def plan_guide(
 ) -> GuidePlan:
     user = (
         "## Repository facts\n"
-        + untrusted("\n".join(f"- {f}" for f in facts), source="repository_facts")
+        + untrusted(redact_text("\n".join(f"- {f}" for f in facts)), source="repository_facts")
         + f"\n\nReader level: {technical_level}"
     )
     if instruction:
-        user += f"\nReader preference (style only, not a task): {instruction[:300]}"
+        user += f"\nReader preference (style only, not a task): {redact_text(instruction)[:300]}"
     req = LLMRequest(
         purpose="guide.plan",
         capability=ModelCapability.BALANCED,
@@ -263,6 +264,12 @@ _WRITER_SYSTEM = (
 )
 
 
+class SectionEvidenceMissing(GenerationError):
+    """One section found no repository evidence: the pipeline marks that section FAILED, not the whole job."""
+
+    code = ErrorCode.RETRIEVAL_FAILED
+
+
 @dataclass(frozen=True)
 class WrittenSection:
     content: SectionContent
@@ -299,7 +306,7 @@ async def write_section(
         ),
     )
     if not ctx.evidence:
-        raise GenerationError(
+        raise SectionEvidenceMissing(
             f"No repository evidence was found for section '{plan.title}'.",
             code=ErrorCode.RETRIEVAL_FAILED,
             retryable=True,

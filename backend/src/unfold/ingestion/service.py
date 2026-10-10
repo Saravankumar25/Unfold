@@ -5,6 +5,7 @@ The caller owns `workdir` and must delete it (the orchestration `ingest` node do
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,7 +33,8 @@ async def acquire_github(settings: Settings, locator: str, workdir: Path) -> Acq
         fetched = await client.fetch(ref, workdir)
     finally:
         await client.aclose()
-    report = safe_extract(fetched.archive_path, workdir / "src", ExtractionLimits.from_settings(settings))
+    limits = ExtractionLimits.from_settings(settings)
+    report = await asyncio.to_thread(safe_extract, fetched.archive_path, workdir / "src", limits)
     fetched.archive_path.unlink(missing_ok=True)
     return AcquiredSource(
         root=report.root,
@@ -50,7 +52,8 @@ async def acquire_zip(
     if not upload_key:
         raise InputError("The uploaded archive is missing.", code=ErrorCode.ZIP_INVALID)
     archive = await objects.get_file(upload_key, workdir / "upload.zip")
-    report = safe_extract(archive, workdir / "src", ExtractionLimits.from_settings(settings))
+    limits = ExtractionLimits.from_settings(settings)
+    report = await asyncio.to_thread(safe_extract, archive, workdir / "src", limits)
     archive.unlink(missing_ok=True)
     return AcquiredSource(
         root=report.root, name=name, commit_sha=None, default_branch=None, description=None, report=report
