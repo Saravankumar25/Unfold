@@ -34,6 +34,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # code without `kind` would run a leftover regenerate job as a full analysis of the project
+    op.execute("DELETE FROM analysis_jobs WHERE kind = 'regenerate'")
     op.drop_column("analysis_jobs", "section_key")
     op.drop_column("analysis_jobs", "kind")
     op.drop_column("guide_sections", "verification")
