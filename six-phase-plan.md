@@ -2,6 +2,9 @@
 
 Source inputs: `PROJECT_AUDIT.md` (repo state) and `docs/infra/strategy.md` (authoritative AWS strategy, supersedes the earlier scale-to-zero plan; Appendix A is only the original candidate).
 
+Guide-quality strategy: `docs/design/investigation-engine.md` (ADR 0017). It is owned by phase 3, run on AWS in phase 4,
+regressed and hardened in phase 5 and verified live in phase 6. It adds no phase, store or always-on service.
+
 **Rule of the plan:** phases 1-5 each end merged to `main` and pushed. Phase 6 deploys to AWS only after phase 5 is pushed. If all six exit gates pass, the product is built, tested, shipped and live.
 
 ## Operating rules (every phase)
@@ -41,6 +44,9 @@ Source inputs: `PROJECT_AUDIT.md` (repo state) and `docs/infra/strategy.md` (aut
 | 5 | Hardening and full verification | [ ] | [ ] | [ ] |
 | 6 | Deploy to AWS and ship | n/a | n/a | n/a |
 
+Phases 1-2 are complete and unchanged by the quality strategy. The phase 3 branch holds 3A (features) built and reviewed;
+3B (engine) is open. The phase 4 branch holds stages A-B and part of C. Both branches are unmerged.
+
 ---
 
 ## Phase 1: Foundation (branch `phase-1-foundation`)
@@ -77,22 +83,46 @@ Tests: pipeline integration test on a small fixture repo against docker-compose 
 
 Exit gate: fixture repo and one real public repo yield a persisted guide with diagrams; killing the worker mid-run and rerunning completes without duplicate rows; no stage touches an uploaded file's code for execution.
 
-## Phase 3: Chat, exports, cleanup, evals, frontend contract (branch `phase-3-features`)
+## Phase 3: Chat, exports, cleanup, evals, frontend contract, investigation engine (branch `phase-3-features`)
 
-Goal: every feature the frontend and HLD claim exists and is proven.
+Goal: every feature the frontend and HLD claim exists and is proven, and guides explain how the repository works
+(investigate, plan, research, write, verify) instead of summarising retrieved chunks. Design and contracts:
+`docs/design/investigation-engine.md`.
 
-Tasks
-1. Chat backend: `POST /chats`, `POST /chats/{id}/messages`, retrieval-grounded answers with evidence refs, streamed or chunked per request (first-token latency measured separately). Prompt-injection fencing (`security/fence.py`, `security/injection.py`) exercised for real.
-2. Exports: Markdown and Chromium PDF routes, run as a worker job type (heavy), stored through `BlobStore`, returned by presigned or proxied download.
-3. `cleanup_project` and stale-job sweeper: session expiry removes DB rows, blobs, vector entries, graph nodes, rate-limit keys. One idempotent function, callable by a scheduler.
-4. `evaluation/`: offline evals for groundedness, retrieval hit rate, graph usefulness, injection fixtures. Wire the `poe eval-*` tasks. Record a baseline score file; later phases must not regress it.
-5. Align frontend client to the real API; replace SSE UI with polling hook (backoff, "waking up" state for slow first request); add error, not-found and loading states; vitest component tests.
-6. Update `docs/HLD.md` to match reality.
-7. Optional agent use (Deep Agents) only if it measurably beats the plain retrieval-then-write path in evals; otherwise cut it.
+### 3A. Product features (built on the branch, review fixes applied)
+1. Chat backend: `POST /chats`, `POST /chats/{id}/messages`, retrieval-grounded answers with evidence refs, first-token
+   latency measured separately. Prompt-injection fencing exercised for real.
+2. Exports: Markdown and Chromium PDF as a worker job type, stored through `BlobStore`.
+3. `cleanup_project` and stale-job sweeper: one idempotent function across DB, blobs, vectors, graph, rate-limit keys.
+4. `evaluation/`: offline evals (groundedness, retrieval hit rate, graph usefulness, injection fixtures), baseline file.
+5. Frontend aligned to the real API; polling hook; error, not-found, loading states; vitest component tests.
+6. `docs/HLD.md` and LLD to reality.
 
-Tests: chat grounding and injection evals above threshold; export golden-file test (PDF renders, Mermaid sanitized); cleanup test proves nothing is left in any store; vitest for polling and chat UI.
+### 3B. Investigation engine (new; tasks in dependency order)
+| # | Task | Reuses | New | Depends on |
+|---|---|---|---|---|
+| 3.1 | **Baseline.** Run the current pipeline on 2 repos (small: `evals/fixtures/repos/fastapi_rag`; moderate: a pinned public repo). Preserve guides, tokens, seconds, cost and per-dimension scores in `evals/baselines/pipeline-v1/` | `run_analysis`, gateway usage log | scorer harness stub | 3A.4 |
+| 3.2 | **RepoMap and proof labels.** Symbol lookup, neighbour expansion, edge `proof` (static/heuristic/inferred), entry points | `ProjectIR`, `graph/builder.py`, `graph/queries.py` | `understand/repomap.py`, `proof` on graph edges | none |
+| 3.3 | **Flow tracing and architecture model.** Deterministic `trace_flow`, components, persistence boundaries, uncertainty list; diagrams only from non-inferred edges | `graph/communities.py`, `diagrams/` | `understand/flows.py`, `understand/architecture.py` | 3.2 |
+| 3.4 | **Adaptive planner v2.** Deterministic skeleton per project kind, chapter count from complexity, LLM refines; validation with typed fallback | `plan_guide`, `normalise_plan` | `guide/plan.py`, `ChapterPlan` | 3.3 |
+| 3.5 | **Investigator.** Per-chapter bounded loop: symbol lookup, hybrid retrieve, flow trace, tests; `ResearchBrief` with coverage and budget caps | `HybridRetriever`, sufficiency, `compile_context` | `guide/research.py`, stage `RESEARCHING_GUIDE` | 3.2, 3.4 |
+| 3.6 | **Writer from brief.** Same `SectionDraft` blocks, plus failure-mode and change-guidance blocks when the brief supports them | `write_section` | `guide/write.py` | 3.5 |
+| 3.7 | **Verifier and reviser.** Deterministic path/line/symbol/excerpt/edge checks, existing `grade_claims`, one semantic critique, <= 2 targeted revision rounds, unsupported statements qualified or removed | `grade_claims`, `_verify` | `guide/verify.py`, `guide/revise.py`, stage `REVISING_GUIDE` | 3.6 |
+| 3.8 | **Reading experience and regeneration.** Compact commit-pinned citations, evidence appendix, exports read canonical content, `input_hash`, `POST /projects/{id}/sections/{key}/regenerate`, per-chapter progress | `GuideSectionRow.version`, exports, guide page | additive columns `research`, `verification`, `input_hash` | 3.7 |
+| 3.9 | **Rubric and A/B.** Automated scorers, human review sheet, run v2 vs baseline, record in `evals/baselines/pipeline-v2/` and `docs/design/quality-report.md` | 3A.4 harness | `evaluation/rubric.py`, `poe eval-guide` | 3.1, 3.8 |
 
-Exit gate: all frontend pages work against the real backend locally; eval baseline recorded; `ponytail:ponytail-debt` shows no unused modules.
+Rules: ports only (no SDK imports); no new store; additive migrations only; chat reuses RepoMap lookups where it
+helps and is measured by the existing chat evals; Deep Agents stay cut unless 3.9 shows a measurable win.
+
+Tests: contract tests for every model in section 4 of the design; fixture repos with known edges and flows (RepoMap,
+`trace_flow`, planner validation); investigator budget-exhaustion and early-stop tests; verifier rejects a fabricated
+path, out-of-range line, altered excerpt and non-existent edge; revision loop terminates and touches only failing
+blocks; resume mid-chapter; single-chapter regeneration leaves others untouched; export golden file; cleanup
+completeness; vitest for polling, chat and citation rendering.
+
+Exit gate: all frontend pages work against the real backend locally; eval baseline recorded; v2 meets the rubric gate
+(no dimension > 0.3 below baseline, citation accuracy >= 0.98, no unsupported statement presented as fact) on both
+repos, with a human spot-check recorded; `ponytail:ponytail-debt` shows no unused modules.
 
 ## Phase 4: AWS infrastructure strategy and implementation (branch `phase-4-aws`)
 
@@ -125,8 +155,18 @@ Stages (each ends in a committed artifact; implementation does not start before 
   env/secrets, limits, performance, reliability and recovery, cost for five scenarios (zero month, occasional use,
   interview demo, moderate, spike) split by cost type with stated assumptions, scaling, known limitations.
 
-Tests: as stage E. Exit gate: gate green on `main`; `terraform validate` and policy tests pass; ADRs and docs
-recorded; both images build in CI; unmeasured items are labelled "requires AWS"; no resource was deployed.
+Pipeline support (no new services; the engine runs on the ports and the phase 4 backends):
+- Retrieval-backend swaps (embedded dense, in-memory graph, S3 Vectors, Neo4j removal) are gated by the phase 3 rubric
+  and retrieval evals; a swap that drops any dimension > 0.3 below the v2 baseline is rejected.
+- Worker size, task timeout and per-job token budget come from the measured engine profile (research rounds, revision
+  rounds, peak memory) on the fixture repos, not from guesses; limits stay configuration.
+- Chapter regeneration and revision run as worker work through the same `JobQueue`; the API Lambda never runs the
+  investigator. Interactive chat keeps its separate capacity.
+- Cost scenarios include the engine's measured LLM spend per guide next to compute.
+
+Tests: as stage E, plus the rubric gate on the in-memory and embedded backends against the v2 baseline.
+Exit gate: gate green on `main`; `terraform validate` and policy tests pass; ADRs and docs recorded; both images build
+in CI; unmeasured items are labelled "requires AWS"; no resource was deployed.
 
 ## Phase 5: Hardening and full verification (branch `phase-5-hardening`)
 
@@ -141,8 +181,20 @@ Tasks
 6. UI polish with `impeccable:impeccable`: mobile layout, keyboard-accessible diagram, reduced motion, empty and error states, OG/icons.
 7. Docs: README quickstart, runbook (deploy, rollback, drain DLQ, rotate keys), `docs/HLD.md` final.
 8. Run `ponytail:ponytail-audit` and `ponytail:ponytail-debt`; delete what is unused.
+9. **Guide-quality regression suite.** Deterministic scorers run in CI on stored guides and snapshots (citation
+   resolve rate, verified-claim ratio, coverage of IR components and entry points, redundancy, injection fixtures); live
+   LLM evals run on demand (`-m llm`) and their recorded scores are compared to `evals/baselines/pipeline-v2/`.
+10. **Depth and coverage checks** on three fixture repos (small CLI, web service, multi-module) so the planner is
+    proven to emit different outlines; negative fixtures (unsupported language, empty repo, huge file, dynamic dispatch)
+    must produce stated uncertainty, not invented flows.
+11. **Performance and cost**: per-stage and per-chapter latency, tokens and cost for investigator, writer, reviser;
+    retrieval and trace p50/p95; peak worker memory; set budget alarms from these numbers.
+12. **Failure recovery**: LLM 429/timeout mid-research, worker kill between research and write, kill during revision,
+    duplicate SQS delivery of a chapter task, regenerate-during-run; each must resume or fail typed with no duplicate
+    rows and no half-written chapter.
 
-Exit gate: CI green including e2e; security scan has no open High/Critical; evals at or above baseline; runbook and cost doc exist; `main` pushed and clean.
+Exit gate: CI green including e2e; security scan has no open High/Critical; evals and the guide-quality suite at or above
+the phase 3 baseline; failure-recovery cases pass; runbook and cost doc exist; `main` pushed and clean.
 
 ## Phase 6: Deploy to AWS and ship (no feature branch; infra applied from `main` via OIDC)
 
@@ -156,13 +208,17 @@ Steps (use `engineering:deploy-checklist`; confirm each destructive or billable 
    - Idle check: no running ECS tasks, Aurora paused at 0 ACU, no NAT/ALB in the account.
    - Cold start: Lambda first request, Aurora resume, Fargate start to first progress event.
    - Real analysis of a small and a medium public repo; ZIP upload; chat first-token latency; PDF export.
+   - **Guide quality in production**: run the rubric on both repos from the deployed system; every score within 0.3 of
+     the phase 5 record; 100% of sampled citations resolve to the pinned commit and line range; no unsupported
+     statement presented as fact; regenerate one chapter and confirm the others are unchanged; record guide tokens,
+     seconds and cost against the model. Tracked in `docs/deploy-log.md`.
    - Failure drill: kill a task, force a DLQ message, confirm alarms fire.
    - Cleanup: expire a session and confirm S3, DB, vector, graph and DynamoDB entries are gone.
    - Cost: check Cost Explorer after 24-48 h against the phase 5 model.
 5. Rollback ready: previous image tags and Terraform state versions kept; `terraform destroy` for dev documented; Vercel instant rollback.
 6. Ship: tag `v1.0.0`, GitHub release notes, final `graphify update .`, update the status table, delete any remaining worktrees/branches.
 
-Exit gate: all production verification items pass; idle cost matches the model; release tagged and pushed. Product is done.
+Exit gate: all production verification items pass, including live guide quality; idle cost matches the model; release tagged and pushed. Product is done.
 
 ---
 
