@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from unfold.core.errors import ErrorCode, GenerationError
+from unfold.core.errors import ErrorCode, GenerationError, UnfoldError
 from unfold.evaluation.corpus import load_fixture
 from unfold.guide.models import PLANNER_VERSION, ChapterPlan, GuidePlan
 from unfold.guide.plan import (
@@ -254,6 +254,14 @@ async def test_invalid_model_output_degrades_but_provider_errors_propagate() -> 
     outage = GenerationError("down", code=ErrorCode.GENERATION_FAILED, retryable=True)
     with pytest.raises(GenerationError):
         await _plan(_LLM(outage), ir)
+
+
+async def test_a_budget_refusal_degrades_to_the_skeleton() -> None:
+    ir = load_fixture("fastapi_rag").ir
+    refused = UnfoldError("budget", code=ErrorCode.LLM_BUDGET_EXHAUSTED, retryable=False)
+    plan, degraded = await _plan(_LLM(refused), ir)
+    rm, arch = _parts(ir)
+    assert degraded and plan.sections == build_skeleton(ir, rm, arch)
 
 
 async def test_facts_and_instruction_are_redacted_and_fenced_in_the_prompt() -> None:

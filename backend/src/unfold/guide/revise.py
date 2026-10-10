@@ -194,13 +194,6 @@ def resolve_gaps(
     return SectionContent(summary=content.summary, blocks=blocks), disposed
 
 
-def qualify_or_remove(content: SectionContent, unsupported: Sequence[Unsupported]) -> SectionContent:
-    """Blocks with no evidence at all, quoted code and tables/glossaries (cannot be half-trusted) are removed;
-    prose that still cites something real keeps its text behind "Not confirmed in the code:". A block that fails
-    only because of unsupported claims is fixed at the sentences that made them."""
-    return resolve_gaps(content, unsupported)[0]
-
-
 def _worse_or_equal(new: VerificationResult, old: VerificationResult) -> bool:
     def size(v: VerificationResult) -> tuple[int, int]:
         return len(v.failing_blocks), sum(1 for r in v.deterministic if not r.ok)
@@ -214,15 +207,14 @@ async def run_revision_loop(
     content: SectionContent,
     max_rounds: int = MAX_REVISION_ROUNDS,
     *,
-    plan: Callable[[VerificationResult, SectionContent], list[RevisionItem]] | None = None,
+    plan: Callable[[VerificationResult, SectionContent], list[RevisionItem]],
 ) -> RevisionOutcome:
     """verify -> (rewrite failing blocks -> verify)* with at most `max_rounds` rewrites.
 
     `verify(content, round)` runs the deterministic checks (and the critique, if any); `rewrite(content, items)`
     returns replacement blocks keyed by block id (ids that are not failing are ignored). `plan` builds the items
-    (default: no findings, queries only; the pipeline passes `plan_revision` bound to the chapter's brief).
+    (the pipeline passes `plan_revision` bound to the chapter's brief).
     """
-    plan = plan or _queries_only
     result = await verify(content, 0)
     rounds, stopped = 0, "accept"
     while result.verdict == "revise":
@@ -253,16 +245,11 @@ async def run_revision_loop(
     return RevisionOutcome(content, verified, result, rounds, stopped, tuple(g.block for g in gaps), disposed)
 
 
-def _queries_only(v: VerificationResult, c: SectionContent) -> list[RevisionItem]:
-    return [RevisionItem(block=b, failures=[], evidence_ids=[], query="") for b in v.failing_blocks]
-
-
 __all__ = [
     "RevisionItem",
     "RevisionOutcome",
     "apply_revision",
     "plan_revision",
-    "qualify_or_remove",
     "resolve_gaps",
     "run_revision_loop",
     "unsupported_blocks",

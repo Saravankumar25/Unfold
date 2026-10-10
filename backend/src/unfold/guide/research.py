@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from unfold.context.budget import estimate_tokens
 from unfold.core.config import Settings
-from unfold.core.errors import ErrorCode, GenerationError, NotFound
+from unfold.core.errors import ErrorCode, NotFound, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ModelCapability, Priority, Proof, RetrievalMode
 from unfold.guide.models import ChapterPlan, EdgeRef, Finding, ResearchBrief, ResearchSpent
@@ -38,7 +38,6 @@ from unfold.understand.repomap import RepoMap
 log = get_logger(__name__)
 
 COVERAGE_TARGET = 0.7
-MAX_ROUNDS = 2  # the first pass plus at most one targeted extra round
 FINDINGS_PER_QUESTION = 3
 MAX_FLOWS = 3
 MAX_TESTS = 5
@@ -57,10 +56,13 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s")
 
 @dataclass(frozen=True)
 class ResearchCaps:
-    rounds: int = 2
-    retrievals: int = 12
-    llm_calls: int = 4
-    brief_tokens: int = 6000
+    """Per-chapter limits; the defaults live in `Settings` only. `rounds` is the first pass plus at most one
+    targeted extra round (the setting refuses more)."""
+
+    rounds: int
+    retrievals: int
+    llm_calls: int
+    brief_tokens: int
 
     @classmethod
     def from_settings(cls, s: Settings) -> ResearchCaps:
@@ -342,9 +344,10 @@ class Investigator:
                 spent.llm_calls += 1
                 try:
                     questions += await self._decompose(plan, refs)
-                except GenerationError as exc:
-                    if exc.code is not ErrorCode.INVALID_MODEL_OUTPUT:
+                except UnfoldError as exc:  # the plan's own question stands in for a refused or invalid split
+                    if exc.code not in (ErrorCode.INVALID_MODEL_OUTPUT, ErrorCode.LLM_BUDGET_EXHAUSTED):
                         raise
+                    stopped = "budget" if exc.code is ErrorCode.LLM_BUDGET_EXHAUSTED else None
             else:
                 stopped = "llm_calls"
         questions = list(dict.fromkeys(questions)) or [plan.objective]
@@ -354,9 +357,8 @@ class Investigator:
         findings: list[Finding] = list(flow_findings)
         answered: set[int] = {f.question_id for f in flow_findings if f.proof is not Proof.INFERRED}
         facets: dict[int, str] = {}
-        rounds = min(caps.rounds, MAX_ROUNDS)
 
-        for round_no in range(rounds):
+        for round_no in range(caps.rounds):
             # the extra round is targeted: a question without a missing facet would only repeat its query
             todo = [i for i in range(len(questions)) if i not in answered and (not round_no or facets.get(i))]
             if not todo:

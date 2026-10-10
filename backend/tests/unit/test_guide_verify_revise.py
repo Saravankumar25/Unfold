@@ -26,11 +26,10 @@ from unfold.guide.revise import (
     RevisionItem,
     apply_revision,
     plan_revision,
-    qualify_or_remove,
     run_revision_loop,
     unsupported_blocks,
 )
-from unfold.guide.verification_models import NOT_CONFIRMED, Unsupported, VerificationResult
+from unfold.guide.verification_models import NOT_CONFIRMED, VerificationResult
 from unfold.guide.verify import cited_paths, verify_section
 from unfold.project_ir.schema import ProjectIR, RelationshipIR
 from unfold.understand.repomap import RepoMap
@@ -205,19 +204,8 @@ def test_apply_revision_replaces_only_named_blocks() -> None:
         apply_revision(content, {"b7": _para("x")})
 
 
-def test_qualify_or_remove() -> None:
-    content = _content(_para("cited, partly wrong"), _para("no evidence"), GOOD_CODE, _para("fine"))
-    out = qualify_or_remove(
-        content,
-        [
-            Unsupported(block="b0", has_evidence=True),
-            Unsupported(block="b1", has_evidence=False),
-            Unsupported(block="b2", has_evidence=True),
-        ],
-    )
-    assert [b.text for b in out.blocks] == [f"{NOT_CONFIRMED} cited, partly wrong", "fine"]  # type: ignore[union-attr]
-    again = qualify_or_remove(out, [Unsupported(block="b0", has_evidence=True)])
-    assert again.blocks[0].text.count(NOT_CONFIRMED) == 1  # type: ignore[union-attr]
+def _queries_only(v: VerificationResult, c: SectionContent) -> list[RevisionItem]:
+    return [RevisionItem(block=b, failures=[], evidence_ids=[], query="") for b in v.failing_blocks]
 
 
 def test_plan_revision_picks_the_findings_that_bear_on_the_block(
@@ -270,7 +258,7 @@ async def test_loop_accepts_when_a_round_fixes_everything(world: tuple[ProjectIR
     calls: list[int] = []
     verify, rewrite = _runner(world, {}, calls)
     content = _content(_para("Fine [E1]."), _para("See pkg/nope.py:1-2."), _para("See pkg/none.py:1-2."))
-    out = await run_revision_loop(verify, rewrite, content)
+    out = await run_revision_loop(verify, rewrite, content, plan=_queries_only)
     assert out.stopped_by == "accept" and out.rounds == 1 and out.verification.verdict == "accept"
     assert out.content.blocks[0] is content.blocks[0]  # b0 was not failing: the rewrite for it was ignored
     assert [b.text for b in out.content.blocks[1:]] == ["Now correct [E1]."] * 2  # type: ignore[union-attr]
@@ -288,7 +276,7 @@ async def test_loop_stops_at_the_cap_and_qualifies_what_is_left(
         _para("Cites pkg/two.py:1-2 only."),
         _para("Cites pkg/three.py:1-2 only."),
     )
-    out = await run_revision_loop(verify, rewrite, content, max_rounds=2)
+    out = await run_revision_loop(verify, rewrite, content, max_rounds=2, plan=_queries_only)
     assert len(calls) == 2 and out.rounds == 2 and out.stopped_by == "cap"
     assert out.verification.verdict == "accept_with_gaps"
     assert out.gaps == ("b3",)  # b1 and b2 were rewritten; b3 cited nothing real and is removed
@@ -307,7 +295,7 @@ async def test_loop_stops_when_a_round_does_not_improve(world: tuple[ProjectIR, 
         return {i.block: _para("Still wrong: pkg/gone.py:1-2.") for i in items}
 
     content = _content(_para("Real [E1], and pkg/gone.py:1-2 too."))
-    out = await run_revision_loop(verify, rewrite, content, max_rounds=2)
+    out = await run_revision_loop(verify, rewrite, content, max_rounds=2, plan=_queries_only)
     assert calls == [1] and out.stopped_by == "no_improvement" and out.rounds == 1
     assert out.verification.verdict == "accept_with_gaps" and out.gaps == ("b0",)
     assert out.content.blocks[0].text == f"{NOT_CONFIRMED} Real [E1], and pkg/gone.py:1-2 too."  # type: ignore[union-attr]
@@ -318,7 +306,7 @@ async def test_loop_never_calls_the_model_for_a_clean_chapter(
 ) -> None:
     calls: list[int] = []
     verify, rewrite = _runner(world, None, calls)
-    out = await run_revision_loop(verify, rewrite, _content(_para("Fine [E1].")))
+    out = await run_revision_loop(verify, rewrite, _content(_para("Fine [E1].")), plan=_queries_only)
     assert calls == [] and out.rounds == 0 and out.stopped_by == "accept"
     assert unsupported_blocks(out.verification) == []
 
@@ -345,7 +333,9 @@ async def test_an_unsupported_uncited_sentence_is_removed_and_its_claim_goes_wit
     content = _content(
         _para("`a` calls `b` [E1]. Retries use exponential backoff in the client. `b` returns one [E1].")
     )
-    out = await run_revision_loop(_claims_verifier(world, [good, bad]), _no_fix, content, max_rounds=2)
+    out = await run_revision_loop(
+        _claims_verifier(world, [good, bad]), _no_fix, content, max_rounds=2, plan=_queries_only
+    )
 
     assert out.verification.verdict == "accept_with_gaps" and out.stopped_by == "no_improvement"
     assert [b.text for b in out.content.blocks] == ["`a` calls `b` [E1]. `b` returns one [E1]."]  # type: ignore[union-attr]
@@ -360,7 +350,9 @@ async def test_a_cited_but_unsupported_sentence_is_marked_in_place_not_dropped(
 ) -> None:
     bad = ClaimRecord(text="`a` retries failed calls", status=ClaimStatus.INFERRED, evidence_ids=["c1"])
     content = _content(_para("Intro to the module. `a` retries failed calls [E1]. Closing remark."))
-    out = await run_revision_loop(_claims_verifier(world, [bad]), _no_fix, content, max_rounds=1)
+    out = await run_revision_loop(
+        _claims_verifier(world, [bad]), _no_fix, content, max_rounds=1, plan=_queries_only
+    )
 
     assert [b.text for b in out.content.blocks] == [  # type: ignore[union-attr]
         "Intro to the module.",
@@ -382,7 +374,9 @@ async def test_bullets_are_fixed_item_by_item(world: tuple[ProjectIR, dict[str, 
             items=["`a` is the entry [E1].", "Uses a global lock", "`a` returns what `b` returns [E1]."]
         )
     )
-    out = await run_revision_loop(_claims_verifier(world, [bad, cited]), _no_fix, content, max_rounds=1)
+    out = await run_revision_loop(
+        _claims_verifier(world, [bad, cited]), _no_fix, content, max_rounds=1, plan=_queries_only
+    )
     (block,) = out.content.blocks
     assert block.items == [  # type: ignore[union-attr]
         "`a` is the entry [E1].",
@@ -396,7 +390,9 @@ async def test_a_failure_that_is_not_a_claim_falls_back_to_the_whole_block(
 ) -> None:
     bad = ClaimRecord(text="The loader reads pkg/loader.py", status=ClaimStatus.UNSUPPORTED)
     content = _content(_para("The loader reads pkg/loader.py at start. See pkg/nope.py:1-2."))
-    out = await run_revision_loop(_claims_verifier(world, [bad]), _no_fix, content, max_rounds=1)
+    out = await run_revision_loop(
+        _claims_verifier(world, [bad]), _no_fix, content, max_rounds=1, plan=_queries_only
+    )
     assert out.content.blocks == []  # no real citation at all: removed whole
     assert out.dispositions == {bad.text: "removed"}
 

@@ -7,7 +7,7 @@ import json
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     max_concurrent_jobs: int = 2
     section_concurrency: int = 2
     # per-chapter investigation caps (docs/design/investigation-engine.md §5); inside the per-job LLM budget
-    research_max_rounds: int = 2
+    research_max_rounds: int = Field(2, ge=0, le=2)  # the first pass and at most one targeted extra round
     research_max_retrievals: int = 12
     research_max_llm_calls: int = 4
     research_brief_tokens: int = 6000

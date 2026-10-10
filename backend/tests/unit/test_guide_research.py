@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
 import gc
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from unfold.context.budget import estimate_tokens
+from unfold.core.config import Settings
+from unfold.core.errors import ErrorCode, UnfoldError
 from unfold.domain.enums import Proof
 from unfold.evaluation.corpus import FixtureProject, MemoryChunks, load_fixture
 from unfold.evaluation.scripted import ScriptedLLM
@@ -23,6 +28,11 @@ def fx() -> Iterator[FixtureProject]:
     gc.collect()
 
 
+def _caps(**override: int) -> ResearchCaps:
+    """The settings' defaults, with some limits changed."""
+    return dataclasses.replace(ResearchCaps.from_settings(Settings(_env_file=None)), **override)
+
+
 def _inv(
     fx: FixtureProject, caps: ResearchCaps | None = None, llm: ScriptedLLM | None = None
 ) -> Investigator:
@@ -32,7 +42,7 @@ def _inv(
         chunks=MemoryChunks(fx.chunks),
         rm=RepoMap(fx.ir),
         arch=build_architecture(fx.ir),
-        caps=caps or ResearchCaps(),
+        caps=caps or _caps(),
         project_id=fx.project_id,
         job_id="job",
     )
@@ -147,7 +157,7 @@ async def test_extra_round_needs_a_missing_facet(fx: FixtureProject) -> None:
 async def test_retrieval_cap(fx: FixtureProject) -> None:
     cfg = RepoMap(fx.ir).symbol("app/core/config.py")
     assert cfg is not None
-    brief = await _inv(fx, ResearchCaps(retrievals=1)).research(_plan([cfg.id], UNANSWERABLE))
+    brief = await _inv(fx, _caps(retrievals=1)).research(_plan([cfg.id], UNANSWERABLE))
     assert brief.spent.retrievals == 1 and brief.stopped_by == "retrievals"
     assert len(brief.open_questions) == len(UNANSWERABLE)
 
@@ -155,7 +165,7 @@ async def test_retrieval_cap(fx: FixtureProject) -> None:
 async def test_round_cap(fx: FixtureProject) -> None:
     cfg = RepoMap(fx.ir).symbol("app/core/config.py")
     assert cfg is not None
-    brief = await _inv(fx, ResearchCaps(rounds=1)).research(_plan([cfg.id], UNANSWERABLE))
+    brief = await _inv(fx, _caps(rounds=1)).research(_plan([cfg.id], UNANSWERABLE))
     assert brief.spent.rounds == 1 and brief.stopped_by == "rounds"
     assert brief.spent.retrievals == len(UNANSWERABLE)
 
@@ -163,31 +173,31 @@ async def test_round_cap(fx: FixtureProject) -> None:
 async def test_llm_cap_and_decomposition_of_a_thin_plan(fx: FixtureProject) -> None:
     thin = _plan([_id(fx, "answer_query")], ["What does answer_query do?"])
     blocked = ScriptedLLM()
-    brief = await _inv(fx, ResearchCaps(llm_calls=0), blocked).research(thin)
+    brief = await _inv(fx, _caps(llm_calls=0), blocked).research(thin)
     assert blocked.calls == [] and brief.spent.llm_calls == 0 and len(brief.questions) == 1
     assert brief.stopped_by in {"llm_calls", "coverage"}
 
     allowed = ScriptedLLM()
-    brief = await _inv(fx, ResearchCaps(llm_calls=1), allowed).research(thin)
+    brief = await _inv(fx, _caps(llm_calls=1), allowed).research(thin)
     assert allowed.calls == ["guide.research"] and brief.spent.llm_calls == 1
     assert len(brief.questions) == 3 and brief.questions[0] == thin.questions[0]
     prompt = allowed.requests[0].messages[0].content
     assert "<repository_data" in prompt and "repository_data" in allowed.requests[0].system
 
 
-@pytest.mark.parametrize("rounds", [0, 1, 2, 3])
+@pytest.mark.parametrize("rounds", [0, 1, 2])
 @pytest.mark.parametrize("retrievals", [0, 1, 4, 12])
 @pytest.mark.parametrize("llm_calls", [0, 1])
 async def test_spent_never_exceeds_any_cap(
     fx: FixtureProject, rounds: int, retrievals: int, llm_calls: int
 ) -> None:
-    caps = ResearchCaps(rounds=rounds, retrievals=retrievals, llm_calls=llm_calls)
+    caps = _caps(rounds=rounds, retrievals=retrievals, llm_calls=llm_calls)
     cfg = RepoMap(fx.ir).symbol("app/core/config.py")
     assert cfg is not None
     thin = _plan([cfg.id], ["Where is the moon?"])
     llm = ScriptedLLM()
     brief = await _inv(fx, caps, llm).research(thin)
-    assert brief.spent.rounds <= min(rounds, 2)
+    assert brief.spent.rounds <= rounds
     assert brief.spent.retrievals <= retrievals
     assert brief.spent.llm_calls <= llm_calls and len(llm.calls) == brief.spent.llm_calls
 
@@ -195,7 +205,7 @@ async def test_spent_never_exceeds_any_cap(
 async def test_brief_token_cap_is_enforced_and_coverage_stays_honest(fx: FixtureProject) -> None:
     plan = _plan([_id(fx, "answer_query"), _id(fx, "LLMClient.answer")], ANSWERABLE)
     full = await _inv(fx).research(plan)
-    capped = await _inv(fx, ResearchCaps(brief_tokens=120)).research(plan)
+    capped = await _inv(fx, _caps(brief_tokens=120)).research(plan)
     assert estimate_tokens(render_brief(capped)) <= 120 and capped.spent.tokens <= 120
     assert capped.stopped_by == "tokens" and len(capped.findings) < len(full.findings)
     assert capped.coverage <= full.coverage
@@ -216,3 +226,23 @@ def test_brief_round_trips_through_json(fx: FixtureProject) -> None:
         spent={"rounds": 1},  # type: ignore[arg-type]
     )
     assert ResearchBrief.model_validate(brief.model_dump(mode="json")) == brief
+
+
+class _BudgetRefused(ScriptedLLM):
+    async def generate_structured(self, req: Any, schema: Any) -> Any:
+        self.calls.append(req.purpose)
+        raise UnfoldError("budget", code=ErrorCode.LLM_BUDGET_EXHAUSTED, retryable=False)
+
+
+async def test_a_refused_decomposition_falls_back_to_the_plans_own_question(fx: FixtureProject) -> None:
+    thin = _plan([_id(fx, "answer_query")], ["What does answer_query do?"])
+    llm = _BudgetRefused()
+    brief = await _inv(fx, _caps(), llm).research(thin)
+    assert llm.calls == ["guide.research"]  # it was asked, was refused, and the chapter is still researched
+    assert brief.questions == thin.questions and brief.findings
+
+
+def test_more_research_rounds_than_the_loop_runs_is_a_configuration_error() -> None:
+    assert Settings(_env_file=None, research_max_rounds=2).research_max_rounds == 2
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, research_max_rounds=3)

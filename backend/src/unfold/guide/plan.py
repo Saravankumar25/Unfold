@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from unfold.core.errors import ErrorCode, GenerationError
+from unfold.core.errors import ErrorCode, GenerationError, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ModelCapability, Priority
 from unfold.guide.generate import slugify
@@ -629,10 +629,10 @@ async def plan_chapters(
         )  # fmt: skip
         merged, problems = _merge(skeleton, refined, v)
         problems += validate_chapters(merged, v.is_valid) if merged else []
-    except GenerationError as exc:
-        if exc.code is not ErrorCode.INVALID_MODEL_OUTPUT:
+    except UnfoldError as exc:  # an invalid answer or a refused call: the deterministic skeleton is the plan
+        if exc.code not in (ErrorCode.INVALID_MODEL_OUTPUT, ErrorCode.LLM_BUDGET_EXHAUSTED):
             raise
-        merged, problems = [], [f"invalid model output: {exc.message}"]
+        merged, problems = [], [f"model refinement unavailable ({exc.code.value}): {exc.message}"]
     if problems:
         degraded = True
         log.warning("guide.plan_degraded", problems=problems[:5])

@@ -7,6 +7,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from unfold.core.config import Settings
 from unfold.domain.enums import Proof
 from unfold.evaluation.corpus import FixtureProject, MemoryChunks, load_fixture
 from unfold.evaluation.scripted import ScriptedLLM, evidence_blocks
@@ -50,7 +51,7 @@ async def _brief(fx: FixtureProject, plan: ChapterPlan) -> ResearchBrief:
         chunks=MemoryChunks(fx.chunks),
         rm=rm,
         arch=build_architecture(fx.ir),
-        caps=ResearchCaps(),
+        caps=ResearchCaps.from_settings(Settings(_env_file=None)),
         project_id=fx.project_id,
         job_id="j",
     )
