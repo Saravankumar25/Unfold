@@ -69,8 +69,11 @@ Neo4j implementation instead of on evals.
   Cost tables **exclude credits** and include only the always-free allowances (Lambda 1 M requests + 400 000 GB-s,
   SQS 1 M requests, DynamoDB 25 GB, CloudWatch Logs 5 GB, EventBridge Scheduler 14 M).
 - The AWS account is **unknown**: `aws sts get-caller-identity` returned `NoCredentials`. No other AWS call was made.
-- Phase 3 items (chat with `stream=false|true`, `export` job type and `enqueue_export`, `sweep`, evals) are
-  **[planned]**; the design leaves interfaces for them and does not depend on their implementation details.
+- Phase 3 items (chat with `stream=false|true`, `export` job type and `enqueue_export`, `sweep`, evals) were
+  **[planned]** when this document was written. Update 2026-10-11: phase 3 is merged into this branch and its
+  records (chats, messages, exports, the delete marker, typed jobs) are behind `ControlStore` on both adapters, the
+  dispatcher starts `export` tasks, and the investigation engine runs in the worker (`deployment.md`, ADR 0011,
+  0012, 0017). The `[planned]` marks below are kept as written; this note is their status.
 
 Key sources (all retrieved 2026-10-10):
 

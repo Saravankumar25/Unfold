@@ -1,7 +1,7 @@
 # Unfold — High-Level Design (HLD)
 
-> Status: **as built after phases 1-3** (2026-10-10). When code and this document disagree, fix one of them in the same change.
-> Decisions: [`adr/`](adr/) · Low-level design: [`LLD.md`](LLD.md) (sections 14-15 predate ADRs 0001 and 0003 and describe a LangGraph/Deep Agents design that was dropped) · AWS target: [`infra/strategy.md`](infra/strategy.md) (phase 4, nothing deployed)
+> Status: **as built after phases 1-3, plus phase 4 (AWS profile, built and verified locally, nothing deployed)**. When code and this document disagree, fix one of them in the same change.
+> Decisions: [`adr/`](adr/) · Low-level design: [`LLD.md`](LLD.md) (sections 14-15 predate ADRs 0001 and 0003 and describe a LangGraph/Deep Agents design that was dropped) · AWS profile: [`infra/deployment.md`](infra/deployment.md), rules in [`infra/strategy.md`](infra/strategy.md) (nothing deployed)
 > Requirements: [`specs/PRD.md`](specs/PRD.md) · [`specs/ESD.md`](specs/ESD.md)
 
 ---
@@ -10,7 +10,7 @@
 
 A user submits a **public GitHub URL or a ZIP**, a technical level and an optional focus instruction. Unfold
 statically analyses the repository (never executing it) into a **project knowledge system**: Project IR, Neo4j graph,
-BM25 index, Qdrant vectors, chunked evidence in Postgres. A fixed pipeline plans and writes a **chaptered guide** with
+BM25 index, dense vectors, chunked evidence in the control store. A fixed pipeline plans and writes a **chaptered guide** with
 deterministic diagrams and graded claims. On top of the same knowledge the user can **chat** with cited, graded
 answers and **export** the guide or a chat as PDF or Markdown. There is no sign-in; everything expires.
 
@@ -35,21 +35,43 @@ flowchart LR
 | `web` | Landing, progress (polled), guide reader, architecture, chat, exports. No analysis logic; proxies `/api/*` so the session cookie is first-party. |
 | `api` | Sessions, project creation and deletion, guide/diagram/evidence/progress reads, chat (retrieval + model call in this process), export requests and downloads, an in-process sweeper loop. Never analyses or renders PDFs inline. |
 | worker | **No long-lived loop.** `python -m unfold.worker.run <task> <ref>` runs one job and exits: `analysis <job_id>`, `export <export_id>`, `cleanup <project_id>`, `sweep`. Locally `SubprocessJobQueue` starts one process per job (bounded; retries on exit 75 or a crash). |
-| `postgres` | Application truth: sessions, projects, jobs, stage checkpoints, progress events, chunks, guide, diagrams, chats, artifacts. |
+| `postgres` | Application truth on the local profile (the `ControlStore`, `ChunkStore` and `ProgressStore` adapters): sessions, projects, jobs, stage checkpoints, progress events, chunks, guide, diagrams, chats, artifacts. DynamoDB and S3 hold the same records on the AWS profile. |
 | `redis` | Rate-limit windows (behind `RateLimiter`), LLM provider budgets/circuit/key health and per-job/per-chat usage, LLM response and embedding caches. No durable data. |
 | `neo4j` / `qdrant` | Relationship graph; dense vectors (one collection, `project_id` filter). Both optional per job: failure marks the job `degraded`, retrieval adapts. |
 | `minio` | ZIP uploads, IR snapshots, BM25 artifacts, export files (`projects/{id}/...`). |
 
-Infrastructure is reached through four ports in `unfold/ports.py` (`BlobStore`, `JobQueue`, `RateLimiter`,
-`ProgressStore`; ADR 0002). `JobQueue` has `enqueue_analysis`, `enqueue_project_cleanup`, `enqueue_export`.
+Infrastructure is reached through ports in `unfold/ports.py`: `ControlStore` (sessions, projects, jobs, checkpoints,
+guide content, chats, exports), `ChunkStore`, `BlobStore`/`UploadStore`, `ProgressStore`, `RateLimiter`, `CounterStore`
+and `JobQueue` (`enqueue_analysis`, `enqueue_project_cleanup`, `enqueue_export`); ADR 0002, ADR 0012.
+
+### Two profiles behind the same ports
+
+`PERSISTENCE_BACKEND` selects the bundle at the composition root; no application module knows which one runs.
+
+| Port | `postgres` (local stack, default) | `dynamodb` (AWS profile, phase 4, ADR 0010-0016) |
+|---|---|---|
+| `ControlStore` | PostgreSQL (SQLAlchemy, Alembic) | one DynamoDB table, conditional version writes, transactions for caps |
+| `ChunkStore` | PostgreSQL `chunks` | one S3 object per project |
+| `BlobStore` / `UploadStore` | MinIO | S3 (presigned POST upload, presigned GET download) |
+| `ProgressStore` | PostgreSQL `job_events` | DynamoDB items, one conditional `ADD` per event |
+| `RateLimiter`, `CounterStore` | Redis | DynamoDB atomic counters (fixed windows) |
+| `JobQueue` | one-shot subprocess per job | SQS, then a dispatcher Lambda starts one Fargate task per job |
+| dense / graph (`DENSE_BACKEND`, `GRAPH_BACKEND`) | Qdrant, Neo4j (embedded variants selectable) | embedded dense artifact in S3, in-memory graph |
+| sweeper | API start-up and loop, `worker.run sweep` | EventBridge Scheduler -> sweeper Lambda (same `cleanup.sweeper.sweep`, plus task-aware work) |
+
+Where code runs on AWS: the API Lambda serves sessions, reads, chat (retrieval and the model call), export requests and
+downloads, and only **records** an analysis, regeneration or export job. The investigator, verifier, reviser and
+regenerate run in the Fargate `analysis` task (`worker.run analysis <job_id>`, whether the job kind is `analysis` or
+`regenerate`); PDF and Markdown exports run in the `export` task on the exporter image. An architecture test fails if
+anything under `unfold.api` can reach the pipeline or its stages.
 
 ## 3. Logical modules (Python package `unfold`)
 
 ```text
 core            config, errors (envelope + codes), logging, ids
 domain          enums (stages, claim status, artifact kinds), shared models
-ports           BlobStore, JobQueue, RateLimiter, ProgressStore, rate-limit key helpers
-persistence     postgres (SQLAlchemy async + Alembic), redis, neo4j, qdrant, object_store adapters
+ports           ControlStore, ChunkStore, BlobStore/UploadStore, JobQueue, RateLimiter, CounterStore, ProgressStore, key helpers
+persistence     postgres (SQLAlchemy async + Alembic), dynamodb, s3, redis, neo4j, qdrant, object_store adapters
 ingestion       github archive fetch, zip extraction with hard limits
 security        secret redaction, prompt-injection scanner, untrusted-data fence
 repo_intel      inventory, language/framework detection, analyzers (ast + tree-sitter)
@@ -94,6 +116,10 @@ sequenceDiagram
   A-->>W: events ... ready
 ```
 
+On AWS the same sequence is: API Lambda writes project + job in one DynamoDB transaction and sends SQS -> dispatcher
+Lambda `RunTask` -> Fargate `analysis` task runs the identical pipeline against DynamoDB and S3 -> `task_stopped` and the
+scheduled sweeper heal what a crash or a lost message leaves (`infra/deployment.md` section 2).
+
 A rerun skips finished groups, so no stage duplicates rows; inside a group a chapter that already has its result is
 skipped (a verified chapter is never redone). Limits: wall clock, per-job model-call and token budget, stage retry cap
 with a failed (dead-letter) state. The hierarchy summaries, workflow investigation and LangGraph checkpoints of the
@@ -120,8 +146,10 @@ A chapter is not reused across analyses: Chapter-level reuse by input hash is no
 `POST /projects/{id}/sections/{key}/regenerate` -> an `analysis_jobs` row of kind `regenerate` + `enqueue_analysis` ->
 the same one-shot worker redoes research, writing, verification and revision for that chapter only and swaps it in
 whole -> the other chapters are untouched. Idempotent while one runs (same job returned; another chapter is a 409),
-rate-limited per project, progress through `GET /projects/{id}/progress` (`regeneration`). A failed regeneration
-leaves the chapter and the project as they were.
+rate-limited per project and per session, progress through `GET /projects/{id}/progress` (`regeneration`). A failed
+regeneration leaves the chapter and the project as they were. The job is created by `ControlStore.add_regeneration`
+(one non-terminal regeneration per project, counted in the same active-job and queue caps as an analysis) and the
+dispatcher starts it as an ordinary `analysis` task: the stage that runs is chosen by the job's `kind`.
 
 ### Chat (ADR 0004)
 `POST /projects/{id}/chats` -> `POST /chats/{id}/messages` (`stream=false` JSON, or `stream=true` NDJSON): history and
@@ -130,19 +158,24 @@ dropped, sentences graded against cited text, citations renumbered -> user and a
 
 ### Export (ADR 0005)
 `POST .../exports/...?format=pdf|md` -> artifact row + `enqueue_export` -> worker renders -> `BlobStore` ->
-`GET /exports/{id}` (poll) -> `GET /exports/{id}/download` (proxied or presigned). `GET /projects/{id}/artifacts` lists.
+`GET /exports/{id}` (poll) -> `GET /exports/{id}/download` (proxied locally, a 302 to a presigned S3 URL on AWS).
+`GET /projects/{id}/artifacts` lists. On AWS the dispatcher starts the `export` task (own task definition, one at a
+time, retried for 15 minutes then failed with a message); a pending export that lost its message is re-sent by the
+sweeper.
 
 ### Delete and expiry (ADR 0006)
-`DELETE /projects/{id}` writes `deleting_at` and enqueues; the sweeper (API loop, `worker.run sweep`, start-up) finishes
-every marked project, expires sessions, projects and exports, restarts stale jobs and exports.
+`DELETE /projects/{id}` writes `deleting_at` and enqueues; the sweeper (API loop, `worker.run sweep`, start-up, or the
+scheduled sweeper Lambda on AWS) finishes every marked project, expires sessions, projects and exports, restarts stale
+jobs and exports. The marker is a field of the project record on both control stores (on DynamoDB it also moves the
+item to a `DELETING` index so the sweeper finds exactly the unfinished deletes); TTL attributes are only a backstop.
 
 ## 5. Key design decisions (as built)
 
 | # | Decision | Why |
 |---|---|---|
 | D1 | **Gemini-only V1, provider-agnostic gateway.** Keys are credentials, not quota multipliers; capacity is budgeted per model in Redis; fallback across model tiers. Groq adapter present, off without keys. | Free-tier quota reality. |
-| D2 | **One-shot workers + stage checkpoints in Postgres**; no queue server, no LangGraph (ADR 0001, 0003). | Fits scale-to-zero task launchers; resume semantics we own. |
-| D3 | **Source files and chunks persisted in Postgres** (TTL-cleaned). | Chat and exports need the evidence after the ingesting worker is gone. |
+| D2 | **One-shot workers + stage checkpoints in the `ControlStore`** (Postgres, or DynamoDB on AWS); no queue server, no LangGraph (ADR 0001, 0003, 0012). | Fits scale-to-zero task launchers; resume semantics we own. |
+| D3 | **Chunks persisted behind `ChunkStore`** (Postgres, or one S3 object per project on AWS), cleaned with the project. | Chat and exports need the evidence after the ingesting worker is gone. |
 | D4 | **fastembed (ONNX, CPU)** for embeddings and cross-encoder. | No torch, small images, saves model quota. |
 | D5 | **tree-sitter + Python ast**, never executing repository code. | Broad coverage, safe. |
 | D6 | **No agent runtime.** Retrieval-then-write for guide and chat (ADR 0009). | Evals show no gap an agent would close; cost per turn is bounded. |
@@ -165,13 +198,13 @@ every marked project, expires sessions, projects and exports, restarts stale job
 | Recoverable | Stage checkpoints, heartbeats, requeue of stale jobs and exports, kill/retry-safe exports, supervisor give-up recording. |
 | Observable | structlog JSON with request/project/job ids; spans for API, stages, retrieval, LLM; chat first-token histogram; per-job and per-chat LLM usage. |
 | Evaluable | Offline evals gate (ADR 0007): groundedness, retrieval, graph, injection, with `evals/baseline.json`. |
-| Portable | Ports for blob, queue, limiter, progress; S3-compatible object store; no cloud SDKs in application code. |
+| Portable | Ports for control records, chunks, blobs, queue, limiter, counters, progress; two real adapter sets run the same contract suites; no cloud SDKs in application code. |
 
 ## 7. Not built (do not assume)
 
 Deep Agents / LangGraph / workflow investigation and sequence diagrams from investigations; section "simpler/deeper"
 variants; chat summary compaction and learning state; online (LLM-judged) evals; private repositories, accounts,
-cross-session memory; any AWS resource (phase 4: ports have local adapters only); CSP nonce for the web app.
+cross-session memory; a deployed AWS environment (phase 4 builds and validates the Terraform and the AWS adapters locally; nothing was applied, see `infra/operations.md` section 7 for what needs a real account); CSP nonce for the web app.
 
 Known limitations of the guide engine (stated, not hidden):
 

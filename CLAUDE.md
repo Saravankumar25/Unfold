@@ -21,7 +21,9 @@ decisions in `docs/adr/`.
 
 ## Architecture rules (enforced by `backend/tests/unit/test_architecture.py`)
 
-- Application code depends on `unfold.ports` (`BlobStore`, `JobQueue`, `RateLimiter`, `ProgressStore`).
+- Application code depends on `unfold.ports` (`ControlStore`, `ChunkStore`, `BlobStore`/`UploadStore`, `JobQueue`,
+  `RateLimiter`, `CounterStore`, `ProgressStore`); it never touches an ORM row or a DynamoDB item. The investigation
+  engine (research, verify, revise, regenerate) runs in the worker only, never under `unfold.api`.
   Only adapters import `minio`, `arq` or `boto3`; `redis` is imported only by `persistence.redis_store` and the
   allow-listed LLM coordination modules `llm.budget`, `llm.circuit`, `llm.key_pool` (ADR 0002, known exception;
   `indexing.dense` uses the Redis client it is handed, not the SDK).

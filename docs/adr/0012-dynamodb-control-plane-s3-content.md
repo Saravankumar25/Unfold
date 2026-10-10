@@ -40,4 +40,11 @@ and the existing SQLAlchemy adapter (reference and local dev) replaces direct OR
   see old, mixed or new during a re-plan that follows a crash.
 - Active-job and queued-job caps are counters updated in the transaction that changes the job; a cap that looks
   exceeded is re-counted from the job records before a request is rejected.
-- Chat and export records of phase 3 are not yet modelled; they add item types to this table.
+- Chat and export records of phase 3 are item types of the same table, behind the same port (phase 4 after the
+  phase 3 merge): `CHAT#<id>` with a `message_count` that is the seq source and `MSG#<chat>#<seq>` written in one
+  transaction per turn; `ART#<id>` with a `GSI3` `ARTIFACTS` entry for expiry; pointer items `H#<chat>` and
+  `A#<artifact>`. The delete marker is a project field that also moves the item to a `GSI3` `DELETING` partition, so
+  the sweeper finds exactly the unfinished deletes. Typed jobs carry `kind`/`section_key`; `add_regeneration` keeps one
+  non-terminal regeneration per project with a `REGEN` marker item that the finishing transaction removes. The
+  contract suite covers all of it against both adapters. Accepted limit: two simultaneous identical export requests
+  can both create a pending export on DynamoDB (Postgres serialises them).

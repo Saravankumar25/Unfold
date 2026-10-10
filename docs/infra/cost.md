@@ -13,7 +13,9 @@ measured tokens, Fargate seconds and request counts (`six-phase-plan.md`).
 | Analysis task | 4 vCPU / 8 GB x86, **8 min** per analysis | laptop run of a 2 424-chunk repo took 7.7 min; Fargate unmeasured, benchmark plan in `architecture-decision.md` 4.10 |
 | Fargate price | $0.04048 per vCPU-hour, $0.004445 per GB-hour, per second, 1 min minimum | AWS Fargate pricing |
 | Public IPv4 | $0.005 per hour while a task runs | VPC pricing |
-| Chat turn | 10 s at 3 GB on the API Lambda | assumption (chat is phase 3) |
+| Chat turn | 10 s at 3 GB on the API Lambda | assumption; chat now runs in the API function. With a scripted model a local turn took 1.0 to 1.3 s of retrieval and answer assembly; the provider's first token and the Lambda figure are unmeasured (require AWS) |
+| Export task | 2 vCPU / 4 GB x86, **90 s** per export (image pull, Chromium start, render, upload) | assumption; the task definition sizes are `export_cpu`/`export_memory`, the time is unmeasured on Fargate |
+| Regeneration | 4 vCPU / 8 GB analysis task, **3 min** per chapter (start, research, write, verify, revise one chapter) | assumption derived from the 8 min whole-guide figure and 6 to 10 chapters; unmeasured on Fargate |
 | Light request (poll, read) | 0.25 s at 2 GB, 3 DynamoDB reads, no S3 | measured shape: a status poll is 2 to 4 reads, no other service |
 | DynamoDB per analysis | **258 requests, about 350 WRU and 190 RRU** plus polling (about 4 RRU per poll) | measured, section 2 |
 | SQS idle polling | about 0.65 M requests per month | five long pollers, inside the 1 M free tier |
@@ -49,11 +51,31 @@ balancer, endpoint or secret-store charge. Budgets alert at 50/80/100 % of $10 p
 they are alerts, not caps; the caps are the quotas in `deployment.md` section 6. Mumbai (`ap-south-1`) is within 5 %
 of these totals for the serverless design (`architecture-decision.md` 3.1) and cheaper for the EC2 comparison.
 
+### Added by the phase 3 features (export and regeneration), derived
+
+The five scenarios above were computed before exports and regeneration existed on this profile. Their Fargate cost
+is `seconds x (vCPU x $0.04048/3600 + GB x $0.004445/3600 + $0.005/3600)`: one export task about **$0.0026**, one
+regeneration about **$0.0101** (assumptions in section 1). The counts per scenario are assumptions.
+
+| Scenario | Exports | Regenerations | Added USD per month |
+|---|---|---|---|
+| Zero month | 0 | 0 | 0.00 |
+| Occasional | 3 | 2 | 0.03 |
+| Interview demo | 5 | 3 | 0.04 |
+| Moderate | 90 | 60 | 0.84 |
+| Spike | 200 | 150 | 2.04 |
+
+Neither changes a conclusion: Fargate seconds of full analyses remain the driver. The exporter image's ECR storage is
+already inside the storage column (section 1 assumes about 3 GB of images).
+
 ## 4. External model spend (a parameter, not an estimate)
 
-The engine's LLM spend is **not** in the table. It is a parameter because it is not measured yet: the guide
-baseline (`evals/baselines/pipeline-v1`, phase 3.1) and the investigation engine profile do not exist on this
-branch, and paid Gemini prices were not retrieved (UNVERIFIED).
+The engine's LLM spend is **not** in the table: it is a parameter, because paid Gemini prices were not retrieved
+(UNVERIFIED) and the keys used for the runs are free tier. What exists now is the measured token and call profile of
+the engine (`evals/baselines/pipeline-v2`, `docs/design/quality-report.md`): per guide, 19 and 13 model calls and
+43 018 / 11 140 and 34 716 / 6 530 input / output tokens on the two fixture repositories (fastapi_rag, requests),
+2.5x and 1.2x the tokens of the previous pipeline. A run of the same pipeline on this AWS profile is recorded in
+`operations.md` section 7.
 
     llm_usd = jobs x (input_tokens_per_guide x P_in + output_tokens_per_guide x P_out) / 1e6
 

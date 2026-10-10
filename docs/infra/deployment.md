@@ -1,7 +1,8 @@
 # Unfold on AWS: what is deployed, how, and with what settings
 
-Status: implemented and tested **locally only** (2026-10-10). Nothing in this document was applied to AWS. Choices
-and their evidence: `architecture-decision.md`, ADRs 0010 to 0016. Measured numbers and the list of tests that need a
+Status: implemented and tested **locally only** (2026-10-11, after merging phase 3: chat, exports, regeneration and
+the investigation engine now run on this profile too). Nothing in this document was applied to AWS. Choices
+and their evidence: `architecture-decision.md`, ADRs 0010 to 0017. Measured numbers and the list of tests that need a
 real account: `operations.md`. Costs: `cost.md`.
 
 ## 1. Architecture
@@ -15,9 +16,12 @@ flowchart LR
   API --> S3
   API -->|SendMessage| Q[SQS jobs + DLQ]
   Q -->|event source, max 2| D[Lambda dispatcher]
-  D -->|RunTask startedBy=job| ECS[ECS Fargate task<br/>image worker<br/>public subnet, no inbound]
+  D -->|RunTask startedBy=job| ECS[ECS Fargate task<br/>image worker, analysis or regenerate<br/>public subnet, no inbound]
+  D -->|RunTask startedBy=export-id| EXP[ECS Fargate task<br/>image exporter, Chromium]
   ECS --> DDB
   ECS --> S3
+  EXP --> DDB
+  EXP --> S3
   ECS -->|tarball| GH[GitHub codeload]
   ECS --> LLM[Gemini / Groq]
   API --> LLM
@@ -41,11 +45,14 @@ instance. Policy tests assert this (section 7).
 | Flow | Path |
 |---|---|
 | Session, reads, progress polling | Browser -> Vercel -> Function URL -> API Lambda -> DynamoDB. No queue, no task, no S3 wake-up. |
+| Chat | API Lambda: ownership through `ControlStore.get_chat`, IR, BM25, dense artifact and graph from S3 (cached per instance), retrieval and the model call in the function, turn written as one DynamoDB transaction (`message_count` is the seq source). `stream=false` is a plain JSON body; `stream=true` is NDJSON through the Function URL (end-to-end streaming through Vercel requires AWS). Chat has its own call and token budget (`chat:<id>` usage counters). |
+| Regenerate one chapter | API Lambda: `ControlStore.add_regeneration` (one per project, same caps as an analysis) -> SQS `analysis` message -> the same dispatcher and `analysis` task as a full run; the task reads `job.kind` and redoes research, writing, verification and revision of that chapter. The investigator, verifier and reviser never run in the API function (architecture test). |
+| Export | API Lambda records the artifact and sends SQS `export` -> dispatcher `RunTask` with the `export` task definition (`startedBy=export-<id>`, one at a time) -> exporter renders (Chromium for PDF) -> S3 -> artifact `ready`. `GET /exports/{id}/download` answers 302 to a presigned S3 URL (the function never buffers a PDF). A crashed export is retried for 15 minutes, then failed with a message; a pending one whose message was lost is re-sent by the sweeper. |
 | Project from a GitHub URL | quota counters -> one DynamoDB transaction (project + job + pointer + cap counters) -> progress event -> SQS -> dispatcher -> `RunTask` -> task claims the job -> stages checkpointed in DynamoDB, artifacts in S3 -> `succeeded`. |
 | ZIP upload | `POST /projects/zip/upload-url` (limits, project record without job, presigned POST for the exact key, 50 MiB policy) -> browser POSTs to S3 -> `POST /projects/{id}/zip/complete` (stat, magic bytes, delete on failure, job + enqueue). Idempotent. |
 | Task ends | EventBridge `STOPPED` -> `task_stopped`: exit 0 ignore, 75 re-send with backoff, other codes re-send after the heartbeat guard until `MAX_JOB_ATTEMPTS`, then the job is failed with a typed error. Every stop also hands the freed slot to the oldest waiting job. |
 | Lost enqueue (commit without send) | The sweeper re-sends jobs `queued` for more than 10 minutes and jobs `running` with a heartbeat older than 5 minutes. Duplicates are harmless (claim). |
-| Delete / expiry | `DELETE` hides the project at once (expiry set to now) and sends `cleanup`; the dispatcher deletes S3 prefix, progress events and the project partition. The sweeper does the same for expired projects and removes sessions without projects. TTL and the S3 lifecycle rule are backstops only. |
+| Delete / expiry | `DELETE` writes the `deleting_at` marker (hidden from every route at once; the item moves to the `DELETING` index) and sends `cleanup`; the dispatcher deletes the S3 prefix, progress events, usage counters and the project partition (jobs, chats, messages, exports, guide). The sweeper runs the same `cleanup.sweeper.sweep` for expired sessions, projects and exports and finishes every marked project; a project whose task has a fresh heartbeat is deferred to the next pass. TTL and the S3 lifecycle rule are backstops only. |
 
 ## 3. Resources per environment (`infra/terraform/envs/{dev,prod}`)
 
@@ -56,7 +63,7 @@ instance. Policy tests assert this (section 7).
 | `queue` | SQS jobs queue + DLQ (redrive 5, 14 d), TLS-only policies | durable bounded dispatch |
 | `registry` | ECR repositories api/worker/exporter (immutable tags, scan on push, lifecycle) | images |
 | `network` | VPC, 2 public subnets, IGW, route table, worker SG (no inbound, egress 443), S3 + DynamoDB gateway endpoints | Fargate networking without NAT |
-| `worker` | ECS cluster, task definitions `analysis` (and `export` when enabled) | heavy work; no ECS service |
+| `worker` | ECS cluster, task definitions `analysis` (also runs `cleanup` and regenerations) and `export` (when `enable_export_task`; without it the dispatcher fails a requested export with a message) | heavy work; no ECS service |
 | `api` | Lambda `unfold-<env>-api` (image, Function URL `RESPONSE_STREAM`, reserved concurrency) | API |
 | `control` | Lambdas dispatcher, task_stopped, sweeper (worker image, `awslambdaric` entry point), SQS event source (batch 1, max concurrency 2), EventBridge rule, Scheduler schedule + role | orchestration and recovery |
 | `iam` | roles api, worker-task, task-execution, dispatcher (+ scheduler role in `control`), all under a permissions boundary, no wildcard actions | least privilege |
@@ -74,7 +81,7 @@ Provider `hashicorp/aws ~> 6.68` (6.x is required for the Function URL `lambda:I
 |---|---|---|
 | `api-lambda` | core + `ai` group (bm25s, fastembed, google-genai), retrieval models, Lambda Web Adapter 1.1.0 | API Lambda (`unfold.api.aws:create_aws_app`) |
 | `worker` | core + `ai` + `analysis` + `lambda-runtime`, models, tree-sitter grammars | Fargate `analysis`/`cleanup`; control Lambdas (entry point overridden) |
-| `exporter` | worker + Chromium | PDF export task (phase 3) |
+| `exporter` | worker + Chromium + Jinja | Fargate `export` task (`worker.run export <id>`). 3.28 GB uncompressed, the heaviest image; a known limitation (`operations.md` section 8) |
 | `api` | core + `ai` + `local` | local stack development only; not pushed |
 
 ## 5. Environment variables and secrets
@@ -86,7 +93,9 @@ Non-secret settings are Lambda/task environment variables written by Terraform (
 | `PERSISTENCE_BACKEND=dynamodb` | Terraform | AWS profile: DynamoDB control store, S3 chunks/blobs, SQS, DynamoDB counters |
 | `DENSE_BACKEND=artifact`, `GRAPH_BACKEND=memory` | Terraform | embedded retrieval stores (ADR 0013) |
 | `DYNAMODB_TABLE`, `OBJECT_STORE_BUCKET`, `JOBS_QUEUE_URL` | Terraform | resource names |
-| `ECS_CLUSTER_ARN`, `TASK_DEFINITION_ANALYSIS`, `SUBNET_IDS`, `SECURITY_GROUP_IDS` | Terraform (control Lambdas) | `RunTask` parameters |
+| `ECS_CLUSTER_ARN`, `TASK_DEFINITION_ANALYSIS`, `TASK_DEFINITION_EXPORT`, `SUBNET_IDS`, `SECURITY_GROUP_IDS` | Terraform (control Lambdas) | `RunTask` parameters; the export definition is empty when `enable_export_task` is false |
+| `EXPORT_DOWNLOAD` | default `presigned` on `PERSISTENCE_BACKEND=dynamodb` | downloads redirect to a presigned URL; `proxy` would buffer the file in the function |
+| `RESEARCH_MAX_ROUNDS`, `RESEARCH_MAX_RETRIEVALS`, `RESEARCH_MAX_LLM_CALLS`, `RESEARCH_BRIEF_TOKENS`, `REVISION_MAX_ROUNDS` | defaults in code | per-chapter investigation caps, inside the per-job LLM budget; worker size and timeout must be re-derived from a measured engine profile (`operations.md` section 7) |
 | `SSM_PATH_PREFIX=/unfold/<env>/` | Terraform | where the API loads secrets from |
 | `ALLOW_DIRECT_UPLOAD=false` | Terraform | multipart upload route off (6 MB Lambda request limit) |
 | `APP_ENV=production`, `COOKIE_SECURE=true`, `PUBLIC_WEB_ORIGIN` | Terraform | production guard refuses unsafe values |
@@ -111,12 +120,15 @@ decrypted values into state); the runbook is in `ci-additions.md` section 5. The
 | queued jobs globally | 20 | same |
 | concurrent analysis tasks | 1 (2 after the Fargate vCPU quota is raised) | dispatcher (`ListTasks`), Fargate quota |
 | ZIP / tarball / extracted | 50 MiB / 100 MiB / 300 MiB, 20 000 files, 1 MiB per file, ratio 100 | presigned policy, `inspect_upload`, worker extraction |
-| chunks per project | 5 000 | setting present; enforcement in chunking is part of the engine work |
+| chunks per project | 5 000 | enforced in the analyze stage before embedding (`INPUT_TOO_LARGE`) |
 | job wall clock / attempts | 1 800 s / 3 | worker watchdog, sweeper `StopTask`, claim attempt counter |
 | LLM calls / tokens per job | 150 (hard 195) / 1.5 M | conditional counter per job |
 | provider minute/day windows | per model (`DEFAULT_MODEL_LIMITS`) | DynamoDB fixed windows (approximate) + in-process slots |
 | API reserved concurrency / timeout | 5 / 120 s | Lambda |
-| chat per session per minute / hour, global per day; exports per session per hour | 30 / 200 / 2 000; 5 | settings present, consumed by the phase 3 routes |
+| chat per session per minute / hour, global per day | 30 / 200 / 2 000 | DynamoDB fixed-window counters in the chat route |
+| exports per session per hour, per project per hour | 5, 10 | same, in the export route |
+| chapter regenerations per project / session per hour | 6 / 12 | same, in the regenerate route; each counts against the active-job and queue caps |
+| concurrent export tasks | 1 | dispatcher (`ListTasks` by `startedBy` prefix), separate from the analysis cap |
 
 Rejections are typed (`RATE_LIMITED` 429, `STORE_UNAVAILABLE` 503, `QUEUE_UNAVAILABLE` 503); a store outage fails
 closed.

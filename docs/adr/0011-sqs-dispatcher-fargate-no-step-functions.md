@@ -42,3 +42,10 @@ concurrency, no always-on service.
 - Two dispatcher invocations racing on the same job can still start two tasks; the second exits on the claim.
 - Control handlers run from the worker image via the Lambda runtime interface client (`awslambdaric`, entry point
   override in the `control` module).
+- After the phase 3 merge: `export` is a second message type with its own task definition (exporter image),
+  `startedBy=export-<id>` and its own concurrency cap, so a PDF never waits behind an analysis slot. A single-chapter
+  `regenerate` job is an ordinary `analysis` message: the dispatcher does not look at the kind, the worker does.
+  An export that keeps failing is retried until it is 15 minutes old, then failed with a message (the artifact's age
+  bounds the retries; the exit code is the only signal the stopped-task event carries). The investigator, verifier and
+  reviser run only in the analysis task: `tests/unit/test_architecture.py` fails if anything under `unfold.api` can
+  reach the pipeline.
