@@ -35,7 +35,7 @@ dependencies = [
     "sse-starlette>=3.4.11",
     "structlog>=26.1.0",
     "tomli-w>=1.2.0",
-    "tree-sitter>=0.26.0",
+    "tree-sitter>=0.25.2,<0.26",  # 0.26.0 corrupts memory on TS input (access violation, see tests)
     "tree-sitter-language-pack>=1.20.0",
     "uvicorn[standard]>=0.53.0",
 ]
