@@ -16,7 +16,24 @@ locals {
 
 # --- shared statements ------------------------------------------------------------------------------------------
 
-data "aws_iam_policy_document" "data_plane" {
+data "aws_iam_policy_document" "table" {
+  statement {
+    sid = "ControlTable"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:Query",
+      "dynamodb:ConditionCheckItem",
+    ]
+    resources = local.table_and_indexes
+  }
+}
+
+data "aws_iam_policy_document" "objects" {
   statement {
     sid       = "ObjectsUnderProjects"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"]
@@ -34,21 +51,14 @@ data "aws_iam_policy_document" "data_plane" {
       values   = ["projects/*", "projects/"]
     }
   }
+}
 
-  statement {
-    sid = "ControlTable"
-    actions = [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:UpdateItem",
-      "dynamodb:DeleteItem",
-      "dynamodb:BatchGetItem",
-      "dynamodb:BatchWriteItem",
-      "dynamodb:Query",
-      "dynamodb:ConditionCheckItem",
-    ]
-    resources = local.table_and_indexes
-  }
+# API and worker read and write project content.
+data "aws_iam_policy_document" "data_plane" {
+  source_policy_documents = [
+    data.aws_iam_policy_document.objects.json,
+    data.aws_iam_policy_document.table.json,
+  ]
 }
 
 data "aws_iam_policy_document" "lambda_trust" {
@@ -185,7 +195,26 @@ resource "aws_iam_role" "dispatcher" {
 }
 
 data "aws_iam_policy_document" "dispatcher" {
-  source_policy_documents = [data.aws_iam_policy_document.data_plane.json]
+  source_policy_documents = [data.aws_iam_policy_document.table.json]
+
+  # Cleanup only deletes (blobs, dense artifact, multipart parts); the handlers never read or write content.
+  statement {
+    sid       = "DeleteProjectObjects"
+    actions   = ["s3:DeleteObject", "s3:AbortMultipartUpload"]
+    resources = ["${var.bucket_arn}/projects/*"]
+  }
+
+  statement {
+    sid       = "ListProjectPrefixForCleanup"
+    actions   = ["s3:ListBucket", "s3:ListBucketMultipartUploads"]
+    resources = [var.bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["projects/*", "projects/"]
+    }
+  }
 
   statement {
     sid       = "Logs"
@@ -195,7 +224,7 @@ data "aws_iam_policy_document" "dispatcher" {
 
   statement {
     sid       = "ConsumeJobs"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"] # what the event source mapping uses
     resources = [var.queue_arn]
   }
 

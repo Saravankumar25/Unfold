@@ -568,12 +568,6 @@ data "aws_iam_policy_document" "apply" {
   }
 
   statement {
-    sid       = "Parameters"
-    actions   = ["ssm:PutParameter", "ssm:DeleteParameter", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource"]
-    resources = ["arn:aws:ssm:${var.region}:${var.account_id}:parameter/unfold/*"]
-  }
-
-  statement {
     sid       = "Budgets"
     actions   = ["budgets:ModifyBudget", "budgets:CreateBudgetAction", "budgets:TagResource", "budgets:UntagResource"]
     resources = ["arn:aws:budgets::${var.account_id}:budget/unfold-*"]

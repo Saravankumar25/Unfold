@@ -150,6 +150,10 @@ baseline needs the phase 3 engine.
 * The response cache and embedding cache of the Redis stack are not part of the AWS profile.
 * DynamoDB item limit: records are guarded at 300 KB; chunks live in one S3 object per project (5 000 chunks cap).
 * Two dispatcher invocations racing on the same job can start two tasks; the claim makes the second exit at once.
+  The concurrency cap is read (`ListTasks`) and then used (`RunTask`) without a lock, so two invocations racing on
+  different jobs can exceed it by at most `dispatcher_max_concurrency - 1`; the Fargate vCPU quota is the hard stop.
+* Deleting a project whose task is still running removes everything at that moment; a write the task makes before
+  its next heartbeat can leave a few items under the deleted partition (no `ttl`, not found by the sweeper).
 * Chat sessions, messages and export artifacts (phase 3) are not yet behind `ControlStore`; they need item types in
   the same table when phase 3 merges. The investigation engine (phase 3.x) runs on these ports unchanged but its
   worker size, timeout and token budget must be set from its measured profile.

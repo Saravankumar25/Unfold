@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from policy import RULES, Plan, evaluate, load_plan
+from policy import _FORBIDDEN_TYPES, RULES, Plan, evaluate, load_plan
 
 HERE = Path(__file__).resolve().parent
 TERRAFORM_ROOT = HERE.parent / "terraform"
@@ -64,10 +64,15 @@ def _terraform() -> str:
 
 
 def _run(cmd: list[str], cwd: Path, env: dict[str, str]) -> str:
-    proc = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, check=False)  # noqa: S603
-    if proc.returncode != 0:
-        raise RuntimeError(f"{' '.join(cmd[:3])} failed in {cwd.name}:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}")
-    return proc.stdout
+    # The provider binary is ~600 MB; several starting at once can exceed Terraform's fixed 1 minute plugin start
+    # timeout (slow disk, antivirus). That is the one transient failure worth a retry; anything else is real.
+    for attempt in range(3):
+        proc = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, check=False)  # noqa: S603
+        if proc.returncode == 0:
+            return proc.stdout
+        if "waiting for plugin to start" not in proc.stdout + proc.stderr or attempt == 2:
+            break
+    raise RuntimeError(f"{' '.join(cmd[:3])} failed in {cwd.name}:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}")
 
 
 def _plan_json(workdir: Path, variables: dict[str, str]) -> dict[str, Any]:
@@ -116,7 +121,7 @@ def plans(terraform_tree: Path, tmp_path_factory: pytest.TempPathFactory) -> dic
     order = list(jobs)
     first = order[0]
     results: dict[str, Plan] = {first: load_plan(_plan_json(*jobs[first]))}
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=int(os.environ.get("UNFOLD_TF_WORKERS", "2"))) as pool:
         futures = {name: pool.submit(_plan_json, *jobs[name]) for name in order[1:]}
         for name, fut in futures.items():
             results[name] = load_plan(fut.result())
@@ -167,6 +172,11 @@ def test_dev_and_prod_use_separate_state_keys() -> None:
 def test_every_rule_has_a_violating_fixture() -> None:
     fixtures = {p.name for p in FIXTURES.iterdir() if p.is_dir()}
     assert set(RULES) <= fixtures
+    assert fixtures - {"clean"} <= set(RULES), "a fixture without a registered rule is never evaluated"
+
+
+def test_every_forbidden_type_rule_is_registered() -> None:
+    assert set(_FORBIDDEN_TYPES) <= set(RULES)
 
 
 @pytest.mark.parametrize("rule_id", sorted(RULES))

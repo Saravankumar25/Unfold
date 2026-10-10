@@ -390,6 +390,7 @@ RULES: dict[str, Callable[[Plan], list[str]]] = {
     "no_interface_vpc_endpoints": no_interface_vpc_endpoints,
     "no_unapproved_services": _forbidden("no_unapproved_services"),
     "no_static_access_keys": _forbidden("no_static_access_keys"),
+    "no_secrets_in_state": _forbidden("no_secrets_in_state"),
     "s3_private_and_encrypted": s3_private_and_encrypted,
     "no_iam_wildcards": no_iam_wildcards,
     "log_retention_set": log_retention_set,
