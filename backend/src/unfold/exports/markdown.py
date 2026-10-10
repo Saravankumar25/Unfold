@@ -15,11 +15,15 @@ from unfold.guide.models import GuideSection
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _BACKTICKS = re.compile(r"`+")
+_DEFINITION = re.compile(r"\[([^\]\n]*)\]:")
 
 
 def _neutralise(text: str) -> str:
-    """No inline HTML and no `[text](url)` / `![alt](url)` link syntax can survive in repository-derived text."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace("](", "]\\(")
+    """No inline HTML and no inline or reference-style link / image syntax can survive in repository-derived
+    text: `](` and `][` are broken, and a `[label]:` definition (anywhere, so also inside a quote or list item)
+    loses its bracket, so a `[x][r]` or `![x][r]` has nothing to resolve to."""
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace("](", "]\\(").replace("][", "]\\[")
+    return _DEFINITION.sub(r"\\[\1]:", text)
 
 
 def _prose(text: str | None) -> str:

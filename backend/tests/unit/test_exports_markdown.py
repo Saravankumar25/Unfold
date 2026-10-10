@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from unfold.domain.enums import ClaimKind, ClaimStatus
@@ -106,3 +107,20 @@ def test_crafted_fences_and_links_cannot_smuggle_markup() -> None:
         {},
     )
     assert "\n# injected" not in guide and "\n## second heading" not in guide
+
+
+_DEFINITION = re.compile(r"(?m)^[\s>*+-]*\[[^\]]*\]:")
+
+
+def test_reference_style_links_and_images_cannot_survive() -> None:
+    hostile = "[r]: https://evil/x\n![pic][r]\n[text][r]\n> [q]: https://evil/y\n- [^n]: note\nplain [1] stays"
+    md = render_chat_markdown(
+        PROJECT, "t", [ExportChatMessage(role="assistant", text=hostile, created_at=NOW)]
+    )
+    assert not _DEFINITION.search(md)  # no live definition at line start or inside a quote / list item
+    assert "][" not in md
+    assert "plain [1] stays" in md
+    guide = render_guide_markdown(
+        ExportProject(name="p", generated_at=NOW), [_section(title="[r]: https://evil/z")], {}
+    )
+    assert not _DEFINITION.search(guide)
