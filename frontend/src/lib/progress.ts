@@ -36,7 +36,7 @@ export function initialProgress(job?: JobOut | null): ProgressState {
     stage: job?.current_stage ?? "RECEIVED",
     label: job?.stage_label ?? "Connecting…",
     index: job?.stage_index ?? 0,
-    total: job?.stage_total ?? 19,
+    total: job?.stage_total ?? 20,
     detail: null,
     outcome: ready ? "ready" : failed ? "failed" : "running",
     error: failed ? { code: job?.error_code ?? null, message: job?.error_message ?? null, retryable: !!job?.retryable } : null,

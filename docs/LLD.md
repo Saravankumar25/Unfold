@@ -62,7 +62,7 @@ Child rows `ON DELETE CASCADE` from `projects`; projects cascade from `sessions`
 | `summaries` | PK(`project_id`,`level`,`key`), `title`, `facts` JSONB (deterministic), `semantic` TEXT (LLM), `members` JSONB, `content_hash`, `prompt_version`, `model` |
 | `findings` | `id` PK, `project_id`, `agent`, `objective`, `status` (completed\|partial\|failed), `content` JSONB, `trajectory` JSONB, `llm_calls`, `tool_calls`, `created_at` |
 | `guide_plans` | `project_id` PK, `plan` JSONB (GuidePlan), `planner_version`, `created_at` |
-| `guide_sections` | `id` PK, `project_id`, `section_key` (UNIQUE with project), `title`, `position`, `status` (pending\|generating\|ready\|degraded\|failed), `content` JSONB, `claims` JSONB, `evidence_summary` JSONB, `quality_scores` JSONB, `version`, `updated_at` |
+| `guide_sections` | `id` PK, `project_id`, `section_key` (UNIQUE with project), `title`, `position`, `status` (pending\|generating\|ready\|degraded\|failed), `content` JSONB, `claims` JSONB, `evidence_summary` JSONB, `quality_scores` JSONB, `research` JSONB (ResearchBrief, nullable), `input_hash` text (nullable, unused until 3.8), `version`, `updated_at` |
 | `diagrams` | `id` PK, `project_id`, `kind`, `title`, `description`, `spec` JSONB, `mermaid`, `origin` (deterministic\|refined), `section_key` NULL |
 | `chat_sessions` | `id` PK, `project_id`, `title`, `summary`, `summarized_through` (int seq), `learning_state` JSONB, `created_at`, `updated_at` |
 | `chat_messages` | `id` PK, `chat_session_id`, `seq`, `role` (user\|assistant), `mode`, `content` JSONB `{text}`, `evidence` JSONB, `model_metadata` JSONB, `created_at`; UNIQUE(`chat_session_id`,`seq`) |
@@ -78,7 +78,7 @@ Project creation (`api.routes.projects`): session touch + project + job commit �
 ```text
 RECEIVED → VALIDATING_INPUT → INGESTING → SECURITY_SCANNING → INVENTORY → STRUCTURAL_ANALYSIS
 → BUILDING_IR → BUILDING_GRAPH → INDEXING_LEXICAL → INDEXING_DENSE → SUMMARIZING_HIERARCHY
-→ DISCOVERING_SUBSYSTEMS → INVESTIGATING_PROJECT → PLANNING_GUIDE → GENERATING_GUIDE
+→ DISCOVERING_SUBSYSTEMS → INVESTIGATING_PROJECT → PLANNING_GUIDE → RESEARCHING_GUIDE → GENERATING_GUIDE
 → VERIFYING_GUIDE → GENERATING_VISUALS → FINALIZING → READY
 failures: FAILED_INPUT | FAILED_SECURITY | FAILED_INGESTION | FAILED_ANALYSIS
           | FAILED_PROVIDER_CAPACITY | FAILED_GENERATION | FAILED_EXPORT
@@ -194,8 +194,9 @@ class AnalysisState(TypedDict, total=False):
 | `summarize` | SUMMARIZING_HIERARCHY | `summaries` (deterministic file/module; semantic for top files, ≤12 files per FAST call) |
 | `discover_subsystems` | DISCOVERING_SUBSYSTEMS | subsystem summaries (1 REASONING call labels communities) + inferred PART_OF edges |
 | `investigate` (`direct` \| `deep` by complexity) | INVESTIGATING_PROJECT | `findings`, project synthesis (summary level=project) |
-| `plan_guide` | PLANNING_GUIDE | `guide_plans`, pending sections |
-| `generate_sections` | GENERATING_GUIDE | sections (concurrency 3; per-section isolation) |
+| `plan` | INVESTIGATING_PROJECT, PLANNING_GUIDE | `ArchitectureModel` (rebuilt, not stored), `guide_plans` (`ChapterPlan`s, `guide.plan`), pending sections |
+| `research` | RESEARCHING_GUIDE | `guide_sections.research` (`ResearchBrief` per chapter, `guide.research`) |
+| `sections` | GENERATING_GUIDE | sections written from the brief in `depends_on` waves (`guide.write`; per-section isolation) |
 | `verify_guide` | VERIFYING_GUIDE | claim statuses, repairs, consistency report |
 | `visuals` | GENERATING_VISUALS | `diagrams`, diagram blocks attached to sections |
 | `finalize` | FINALIZING → READY | stats; job succeeded |
@@ -210,11 +211,13 @@ Heartbeat task updates `heartbeat_at` every 20 s. Every node overwrites its own 
 
 ## 16. Guide (`unfold.guide`)
 
-`GuidePlan{estimated_read_minutes, sections: [GuideSectionPlan{key, title, kind: backbone|core, purpose, target_minutes, required_concepts, evidence_objectives, visual_needs, depth, related_subsystems}]}` — one REASONING structured call, then validated (applicable PRD §8.1 backbone present, unique keys, minutes within target ±30 %).
+`GuidePlan{estimated_read_minutes, sections: [ChapterPlan]}`; `ChapterPlan` extends the v1 `GuideSectionPlan{key, title, kind: backbone|core, purpose, target_minutes, required_concepts, evidence_objectives, visual_needs, depth, related_subsystems}` with `objective` (mirrors `purpose`), `questions` (2-6), `targets` (RepoMap entity or component ids), `depends_on` (acyclic chapter keys), `expected_evidence`; v1 rows load with the new fields empty. `guide.plan.plan_chapters`: deterministic skeleton by `ArchitectureModel.project_kind`, chapter count from the complexity score (4-14), one structured call (`PlanRefinement`) that may refine titles/objectives/questions/targets/dependencies inside the skeleton; unknown targets, cycles, wrong key set or bad question counts fall back to the skeleton and set job `degraded` = `guide_plan`.
+
+`guide.research.Investigator.research(plan) -> ResearchBrief{questions, findings: [Finding{question_id, statement, evidence: chunk ids, proof}], flows, tests, open_questions, coverage, spent{rounds, retrievals, llm_calls, tokens}, stopped_by}`: per question target lookup (free; a question that names its target and is answered by it skips retrieval), `HybridRetriever.search`, `trace_flow` for entry-point targets, test lookup; one targeted extra round when coverage < 0.7; caps `RESEARCH_MAX_ROUNDS` (<= 2 used), `RESEARCH_MAX_RETRIEVALS`, `RESEARCH_MAX_LLM_CALLS`, `RESEARCH_BRIEF_TOKENS`. The only model call is decomposing a plan with fewer than 2 questions.
 
 `SectionContent{summary, blocks: Block[]}`; `Block = heading | paragraph{text} | bullets{items} | callout{tone: note|tip|warning|insight, text} | code{language, code, path, start_line, caption} | diagram{diagram_id} | table{headers, rows} | qa{question, answer, kind: repository|design|failure|security|extension} | glossary{items}`. Inline: `**bold**`, `*em*`, `` `code` ``, citations `[E3]`.
 
-Writer: retrieval (guide mode) → compile (≈9k tokens) → BALANCED structured `SectionDraft{content, claims: [{text, kind: project_fact|inference|improvement, evidence: ["E3"]}]}`. Verifier (`guide.verify`): `E#` → chunk ids; deterministic support (cited evidence exists AND ≥60 % of salient claim tokens appear in cited text) → VERIFIED; `inference` → INFERRED; `improvement` → "proposed", not fact-checked; remaining facts → one batched EVALUATOR call per section → STRONGLY_INFERRED | INFERRED | UNSUPPORTED. UNSUPPORTED → one BALANCED repair rewriting affected blocks; still unsupported → section `degraded` (claims displayed with status). Consistency: one REASONING call over section summaries + key claims → issues in `quality_scores.consistency`; contradictions trigger ≤2 targeted repairs. Simplify/Deepen endpoints regenerate at shifted depth from the same compiled context (P0), cached as variants.
+Writer (`guide.write.write_chapter`): chunks fetched by the brief's evidence ids → compile (≈9k tokens including the rendered brief, which is fenced and carries the `[E#]` labels) + one fenced line per `depends_on` chapter → BALANCED structured `SectionDraft{content, claims: [{text, kind: project_fact|inference|improvement, evidence: ["E3"]}]}`. Verifier (`guide.verify`): `E#` → chunk ids; deterministic support (cited evidence exists AND ≥60 % of salient claim tokens appear in cited text) → VERIFIED; `inference` → INFERRED; `improvement` → "proposed", not fact-checked; remaining facts → one batched EVALUATOR call per section → STRONGLY_INFERRED | INFERRED | UNSUPPORTED. UNSUPPORTED → one BALANCED repair rewriting affected blocks; still unsupported → section `degraded` (claims displayed with status). Consistency: one REASONING call over section summaries + key claims → issues in `quality_scores.consistency`; contradictions trigger ≤2 targeted repairs. Simplify/Deepen endpoints regenerate at shifted depth from the same compiled context (P0), cached as variants.
 
 ## 17. Diagrams (`unfold.diagrams`)
 
