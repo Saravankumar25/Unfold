@@ -145,3 +145,21 @@ def test_short_follow_up_is_searched_with_the_previous_question() -> None:
         history=[("user", "Where is split_text?")],
     )
     assert "split_text" not in retrieval_query(long)
+
+
+async def test_grouped_citations_are_split_and_history_labels_do_not_leak(fx: FixtureProject) -> None:
+    from unfold.evaluation.scripted import evidence_blocks
+
+    def answer(req: LLMRequest) -> str:
+        blocks = evidence_blocks(req.messages[0].content)
+        return f"`a_name` and `b_name` live here [{blocks[0][0]}, {blocks[1][0]}]."
+
+    llm = ScriptedLLM(answer)
+    done = (await _events(fx, llm, history=[("assistant", "The fusion is in retriever.py [E2] and [E7].")]))[
+        -1
+    ]
+    assert done.text is not None and "[E1] [E2]" in done.text  # split into separate, renumbered markers
+    assert [r.path for r in done.evidence or []] and len(done.evidence or []) == 2
+    prompt = llm.requests[0].messages[0].content
+    history = prompt.split("## Conversation so far")[1].split("## Question")[0]
+    assert "[E2]" not in history and "retriever.py" in history  # the text stays, the stale labels go

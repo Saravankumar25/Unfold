@@ -169,8 +169,10 @@ async def run_export(rt: Runtime, export_id: str, renderer: PdfRenderer) -> None
     await rt.objects.put_bytes(key, data, kind.content_type)
     async with rt.db.transaction() as s:
         fresh = await s.get(ArtifactRow, art.id, with_for_update=True)
-        removed = fresh is None
-        if fresh is not None:
+        owner = await s.get(ProjectRow, art.project_id, with_for_update=True)
+        # A project marked for deletion mid-render must not end up with a blob its cleanup already passed.
+        removed = fresh is None or owner is None or owner.deleting_at is not None
+        if fresh is not None and not removed:
             fresh.status = ArtifactStatus.READY.value
             fresh.object_key = key
             fresh.size_bytes = len(data)

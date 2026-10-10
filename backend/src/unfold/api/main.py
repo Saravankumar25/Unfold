@@ -26,6 +26,7 @@ from unfold.runtime import Runtime
 from unfold.worker.queue import SubprocessJobQueue
 
 log = get_logger(__name__)
+STARTUP_SWEEP_SECONDS = 60.0
 
 
 async def _sweep_forever(rt: Runtime, queue: JobQueue, every_s: float) -> None:
@@ -50,25 +51,32 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rt = Runtime.create(settings)
-        rt.llm = llm if llm is not None else build_gateway(settings, rt.redis)
-        app.state.runtime = rt
-        app.state.queue = queue if queue is not None else await SubprocessJobQueue.connect(settings)
-        await rt.objects.ensure_bucket()
-        # Finishes deletes a previous process never completed and restarts jobs whose worker is gone.
-        await sweep(rt, app.state.queue)
-        ticker = (
-            asyncio.create_task(_sweep_forever(rt, app.state.queue, settings.sweep_interval_seconds))
-            if settings.sweep_interval_seconds > 0
-            else None
-        )
-        log.info("api.started", version=__version__, env=settings.app_env)
+        ticker: asyncio.Task[None] | None = None
         try:
+            rt.llm = llm if llm is not None else build_gateway(settings, rt.redis)
+            app.state.runtime = rt
+            app.state.queue = queue if queue is not None else await SubprocessJobQueue.connect(settings)
+            await rt.objects.ensure_bucket()
+            # Finishes deletes a previous process never completed and restarts jobs whose worker is gone.
+            # Bounded and guarded: a store hiccup or a slow cleanup must not keep the API from starting
+            # (the next tick, or the next start, finishes what is left; the sweep is idempotent).
+            try:
+                async with asyncio.timeout(STARTUP_SWEEP_SECONDS):
+                    await sweep(rt, app.state.queue)
+            except Exception as exc:
+                log.error("sweep.startup_failed", error_type=type(exc).__name__)
+            if settings.sweep_interval_seconds > 0:
+                ticker = asyncio.create_task(
+                    _sweep_forever(rt, app.state.queue, settings.sweep_interval_seconds)
+                )
+            log.info("api.started", version=__version__, env=settings.app_env)
             yield
         finally:
             if ticker is not None:
                 ticker.cancel()
                 await asyncio.gather(ticker, return_exceptions=True)
-            await app.state.queue.aclose()
+            if getattr(app.state, "queue", None) is not None:
+                await app.state.queue.aclose()
             await rt.aclose()
 
     app = FastAPI(

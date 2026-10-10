@@ -88,5 +88,21 @@ def test_chat_markdown_keeps_fences_and_neutralises_html() -> None:
     ]
     md = render_chat_markdown(PROJECT, "Q&A", msgs)
     assert "<script>" not in md and "&lt;b>bold" in md
-    assert "<div>kept</div>" in md  # inside a fence it stays literal
+    assert (
+        "<div>" not in md and "&lt;div>kept" in md
+    )  # escaped everywhere: a fence tracker can be desynchronised
     assert "Evidence: `a.py:1-4`" in md
+
+
+def test_crafted_fences_and_links_cannot_smuggle_markup() -> None:
+    hostile = "~~~\n```\n~~~\n```\n<img src=x onerror=alert(1)>\n[click](javascript:alert(1))\n![t](http://evil/p.png)"
+    md = render_chat_markdown(
+        PROJECT, "t", [ExportChatMessage(role="assistant", text=hostile, created_at=NOW)]
+    )
+    assert "<img" not in md and "](javascript" not in md and "](http" not in md
+    guide = render_guide_markdown(
+        ExportProject(name="a\n# injected heading", generated_at=NOW),
+        [_section(title="x\n## second heading")],
+        {},
+    )
+    assert "\n# injected" not in guide and "\n## second heading" not in guide

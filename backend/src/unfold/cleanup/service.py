@@ -15,6 +15,7 @@ from unfold.core.logging import get_logger
 from unfold.graph.builder import GraphBuilder
 from unfold.indexing.dense import DenseIndex
 from unfold.indexing.embeddings import embedder_for
+from unfold.llm.schemas import CHAT_JOB_PREFIX
 from unfold.orchestration.pipeline import ALIVE_WITHIN
 from unfold.persistence.postgres.models import AnalysisJobRow, ChatSessionRow, ProjectRow
 from unfold.ports import PROJECT_RATE_BUCKETS, project_prefix, project_rate_key
@@ -91,7 +92,7 @@ async def cleanup_project(rt: Runtime, project_id: str) -> dict[str, int]:
     for bucket in PROJECT_RATE_BUCKETS:
         limiter_keys += await rt.limiter.delete_prefix(project_rate_key(bucket, key))
     counts["rate_limit_keys"] = limiter_keys
-    usage = [f"usage:{i}" for i in job_ids] + [f"usage:chat:{i}" for i in chat_ids]
+    usage = [f"usage:{i}" for i in job_ids] + [f"usage:{CHAT_JOB_PREFIX}{i}" for i in chat_ids]
     counts["usage_keys"] = int(await rt.redis.client.delete(*usage)) if usage else 0
     async with rt.db.transaction() as s:
         result = await s.execute(delete(ProjectRow).where(ProjectRow.id == pid))

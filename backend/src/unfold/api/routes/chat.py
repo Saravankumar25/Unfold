@@ -11,8 +11,9 @@ that point is an `error` line in the stream, or the normal error response in JSO
 
 from __future__ import annotations
 
+import contextlib
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
@@ -25,6 +26,7 @@ from unfold.api.schemas import (
     ChatMessageOut,
     ChatReplyOut,
     ChatSessionOut,
+    ErrorEnvelope,
     PostChatMessage,
 )
 from unfold.chat.models import ChatEvent
@@ -33,10 +35,13 @@ from unfold.core.errors import Conflict, ErrorCode, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ChatMode
 from unfold.domain.models import EvidenceRef
-from unfold.persistence.postgres.models import ChatMessageRow, ChatSessionRow
+from unfold.persistence.postgres.models import ChatMessageRow, ChatSessionRow, ProjectRow
 from unfold.runtime import Runtime
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(
+    tags=["chat"],
+    responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 429: {"model": ErrorEnvelope}},
+)
 log = get_logger(__name__)
 
 
@@ -68,6 +73,9 @@ async def create_chat(project_id: str, rt: RuntimeDep, session: SessionDep) -> C
     project = await owned_project(rt, session, project_id)
     require_ready(project)
     async with rt.db.transaction() as s:
+        await s.execute(  # serialise concurrent creates so the per-project cap holds
+            select(ProjectRow.id).where(ProjectRow.id == project.id).with_for_update()
+        )
         count = (
             await s.execute(
                 select(func.count())
@@ -124,10 +132,11 @@ async def get_chat(chat_id: str, rt: RuntimeDep, session: SessionDep) -> ChatDet
 # --- transports -----------------------------------------------------------------------------------------------
 
 
-async def _chained(first: ChatEvent, rest: AsyncIterator[ChatEvent]) -> AsyncIterator[ChatEvent]:
-    yield first
-    async for event in rest:
-        yield event
+async def _chained(first: ChatEvent, rest: AsyncGenerator[ChatEvent, None]) -> AsyncIterator[ChatEvent]:
+    async with contextlib.aclosing(rest):  # releases the model stream when the client goes away
+        yield first
+        async for event in rest:
+            yield event
 
 
 async def _ndjson(events: AsyncIterator[ChatEvent]) -> AsyncIterator[bytes]:
@@ -135,6 +144,7 @@ async def _ndjson(events: AsyncIterator[ChatEvent]) -> AsyncIterator[bytes]:
         async for event in events:
             yield event.model_dump_json(exclude_none=True).encode() + b"\n"
     except UnfoldError as exc:
+        log.warning("chat.stream_error", code=exc.code.value, http_status=exc.http_status)
         err = ChatEvent(type="error", code=exc.code.value, message=exc.message, retryable=exc.retryable)
     except Exception as exc:
         log.exception("chat.stream_failed", error_type=type(exc).__name__)
@@ -177,7 +187,16 @@ async def _json_reply(rt: Runtime, events: AsyncIterator[ChatEvent]) -> ChatRepl
     )
 
 
-@router.post("/chats/{chat_id}/messages", response_model=ChatReplyOut)
+@router.post(
+    "/chats/{chat_id}/messages",
+    response_model=ChatReplyOut,
+    responses={
+        200: {
+            "description": "`ChatReplyOut` JSON; with `stream=true`, `application/x-ndjson`: one `ChatEvent` per line",
+            "content": {"application/x-ndjson": {"schema": ChatEvent.model_json_schema()}},
+        }
+    },
+)
 async def post_message(
     chat_id: str,
     body: PostChatMessage,

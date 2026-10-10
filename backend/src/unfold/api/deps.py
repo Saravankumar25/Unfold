@@ -89,7 +89,12 @@ async def owned_project(rt: Runtime, session: CurrentSession, project_id: str) -
     pid = parse_uuid(project_id)
     async with rt.db.session() as s:
         row = await s.get(ProjectRow, pid)
-    if row is None or row.session_id != session.id or row.deleting_at is not None:
+    if (
+        row is None
+        or row.session_id != session.id
+        or row.deleting_at is not None
+        or row.expires_at <= datetime.now(UTC)
+    ):
         raise NotFound("Project not found.")
     return row
 
@@ -99,7 +104,13 @@ async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tupl
     async with rt.db.session() as s:
         chat = await s.get(ChatSessionRow, cid)
         project = await s.get(ProjectRow, chat.project_id) if chat else None
-    if chat is None or project is None or project.session_id != session.id or project.deleting_at is not None:
+    if (
+        chat is None
+        or project is None
+        or project.session_id != session.id
+        or project.deleting_at is not None
+        or project.expires_at <= datetime.now(UTC)
+    ):
         raise NotFound("Chat not found.")
     return chat, project
 

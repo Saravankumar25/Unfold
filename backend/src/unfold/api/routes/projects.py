@@ -233,7 +233,7 @@ async def get_project(project_id: str, rt: RuntimeDep, session: SessionDep) -> P
     )
 
 
-@router.delete("/{project_id}", status_code=202)
+@router.delete("/{project_id}", status_code=202, response_model=dict[str, str])
 async def delete_project(
     project_id: str, request: Request, rt: RuntimeDep, session: SessionDep
 ) -> dict[str, str]:

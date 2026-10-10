@@ -16,13 +16,13 @@ from dataclasses import dataclass, field
 
 from unfold.chat.models import ChatEvent
 from unfold.context.compiler import compile_context
-from unfold.context.models import CompiledContext, safe_header_field
+from unfold.context.models import CompiledContext
 from unfold.core.errors import ErrorCode, GenerationError, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ChatMode, ClaimKind, ModelCapability, Priority, RetrievalMode
 from unfold.domain.models import ClaimRecord, EvidenceRef, SessionProfile
 from unfold.guide.generate import grade_claims
-from unfold.llm.schemas import LLMClient, LLMRequest, Message
+from unfold.llm.schemas import CHAT_JOB_PREFIX, LLMClient, LLMRequest, Message
 from unfold.observability.tracing import chat_first_token, span
 from unfold.retrieval.hybrid import HybridRetriever
 from unfold.security.fence import UNTRUSTED_POLICY, untrusted
@@ -31,7 +31,6 @@ from unfold.security.secrets import redact_text
 
 log = get_logger(__name__)
 
-CHAT_JOB_PREFIX = "chat:"  # gateway accounting key prefix: the call/token budget is per chat, not per job
 MAX_QUESTION_CHARS = 4_000
 MAX_HISTORY_CHARS = 1_500
 NO_EVIDENCE_REPLY = (
@@ -64,6 +63,7 @@ _MODE_INSTRUCTIONS: dict[ChatMode, str] = {
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
 _CITATION = re.compile(r"(\s?)\[(E[1-9][0-9]{0,3})\]")
+_GROUPED = re.compile(r"\[(E[1-9][0-9]{0,3}(?:\s*,\s*E[1-9][0-9]{0,3})+)\]")  # [E1, E3] -> [E1] [E3]
 
 
 @dataclass(frozen=True)
@@ -95,11 +95,15 @@ def render_user_message(ctx: CompiledContext, req: AnswerRequest) -> str:
     if req.section:
         title, summary = req.section
         blocks.append(
-            f"## Guide section being discussed\n{safe_header_field(title)}\n"
-            + untrusted(redact_text(summary), source="guide_section", trust="derived_summary")
+            "## Guide section being discussed\n"
+            + untrusted(redact_text(f"{title}\n{summary}"), source="guide_section", trust="derived_summary")
         )
     if req.history:
-        lines = [f"{role}: {redact_text(text)[:MAX_HISTORY_CHARS]}" for role, text in req.history]
+        # Earlier answers carry their own [E#] numbering: it would collide with this turn's labels.
+        lines = [
+            f"{role}: {_CITATION.sub('', redact_text(text))[:MAX_HISTORY_CHARS]}"
+            for role, text in req.history
+        ]
         blocks.append(
             "## Conversation so far\n"
             + untrusted("\n\n".join(lines), source="chat_history", trust="derived_summary")
@@ -113,6 +117,7 @@ def render_user_message(ctx: CompiledContext, req: AnswerRequest) -> str:
 def resolve_citations(text: str, ctx: CompiledContext) -> tuple[str, int]:
     """Drop `[E#]` markers that name no real evidence; returns (clean text, number dropped)."""
     dropped = 0
+    text = _GROUPED.sub(lambda m: " ".join(f"[{label.strip()}]" for label in m.group(1).split(",")), text)
 
     def keep(m: re.Match[str]) -> str:
         nonlocal dropped

@@ -48,7 +48,7 @@ from unfold.llm.providers.base import (
     TransientError,
 )
 from unfold.llm.router import Candidate, ModelRouter
-from unfold.llm.schemas import LLMRequest, LLMResponse, Message, Usage
+from unfold.llm.schemas import CHAT_JOB_PREFIX, LLMRequest, LLMResponse, Message, Usage
 from unfold.observability.tracing import llm_calls, llm_tokens, set_attrs, span
 from unfold.persistence.redis_store import RedisStore
 from unfold.security.secrets import redact_text
@@ -197,7 +197,7 @@ class LLMGateway:
         if not req.job_id:
             return
         # A chat is accounted under "chat:<id>" with its own, smaller allowance.
-        chat = req.job_id.startswith("chat:")
+        chat = req.job_id.startswith(CHAT_JOB_PREFIX)
         soft = max(
             0, self._settings.chat_llm_call_budget if chat else self._settings.analysis_llm_call_budget
         )

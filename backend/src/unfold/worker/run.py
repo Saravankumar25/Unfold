@@ -94,7 +94,8 @@ async def run(task: str, ref: str) -> int:
     settings = get_settings()
     configure_logging(settings)
     configure_tracing(settings, "worker")
-    _arm_watchdog(settings.job_timeout_seconds + 30.0)
+    if task != "sweep":  # a sweep supervises restarted jobs and legitimately outlives one job's limit
+        _arm_watchdog(settings.job_timeout_seconds + 30.0)
     swept = sweep_stale_workdirs(work_dir=settings.work_dir)
     if swept:
         log.info("worker.swept_workdirs", count=swept)

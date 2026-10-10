@@ -10,22 +10,25 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 
 from unfold.api.deps import API_PREFIX, RuntimeDep, SessionDep, owned_chat, owned_project, parse_uuid
-from unfold.api.schemas import ArtifactOut, ExportCreated
-from unfold.core.errors import ErrorCode, NotFound, ProjectNotReady, RateLimited, UnfoldError
+from unfold.api.schemas import ArtifactOut, ErrorEnvelope, ExportCreated
+from unfold.core.errors import Conflict, ErrorCode, NotFound, ProjectNotReady, RateLimited, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ArtifactKind, ArtifactStatus
 from unfold.persistence.postgres.models import ArtifactRow, ChatMessageRow, GuideSectionRow, ProjectRow
 from unfold.ports import JobQueue, project_rate_key
 from unfold.runtime import Runtime
 
-router = APIRouter(tags=["exports"])
+router = APIRouter(
+    tags=["exports"],
+    responses={404: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 429: {"model": ErrorEnvelope}},
+)
 log = get_logger(__name__)
 
 Format = Annotated[Literal["pdf", "md"], Query()]
@@ -33,7 +36,7 @@ REUSE_PENDING_WITHIN = timedelta(minutes=10)
 
 
 def _out(row: ArtifactRow) -> ArtifactOut:
-    ready = row.status == ArtifactStatus.READY.value
+    ready = row.status == ArtifactStatus.READY.value and row.expires_at > datetime.now(UTC)
     return ArtifactOut(
         id=str(row.id),
         kind=row.kind,
@@ -46,28 +49,46 @@ def _out(row: ArtifactRow) -> ArtifactOut:
     )
 
 
+def _pending_like(
+    project_id: uuid.UUID, kind: ArtifactKind, chat_id: uuid.UUID | None, now: datetime
+) -> Select[Any]:
+    query = select(ArtifactRow.id).where(
+        ArtifactRow.project_id == project_id,
+        ArtifactRow.kind == kind.value,
+        ArtifactRow.status == ArtifactStatus.PENDING.value,
+        ArtifactRow.created_at > now - REUSE_PENDING_WITHIN,
+    )
+    return query.where(
+        ArtifactRow.chat_session_id.is_(None) if chat_id is None else ArtifactRow.chat_session_id == chat_id
+    ).limit(1)
+
+
 async def _create(
     request: Request, rt: Runtime, project: ProjectRow, kind: ArtifactKind, chat_id: uuid.UUID | None
 ) -> ExportCreated:
     cfg = rt.settings
     now = datetime.now(UTC)
+    async with rt.db.session() as s:
+        existing = (await s.execute(_pending_like(project.id, kind, chat_id, now))).scalar_one_or_none()
+    if existing is not None:
+        return ExportCreated(artifact_id=str(existing))
+    # The limiter is a network call: keep it outside the transaction (a slot lost to a later failure is cheap).
+    if not await rt.limiter.hit(project_rate_key("export", project.id), cfg.max_exports_per_hour, 3600):
+        raise RateLimited(f"At most {cfg.max_exports_per_hour} exports per project per hour.")
     async with rt.db.transaction() as s:
-        same = select(ArtifactRow).where(
-            ArtifactRow.project_id == project.id,
-            ArtifactRow.kind == kind.value,
-            ArtifactRow.status == ArtifactStatus.PENDING.value,
-            ArtifactRow.created_at > now - REUSE_PENDING_WITHIN,
-        )
-        same = same.where(
-            ArtifactRow.chat_session_id.is_(None)
-            if chat_id is None
-            else ArtifactRow.chat_session_id == chat_id
-        )
-        existing = (await s.execute(same.limit(1))).scalar_one_or_none()
-        if existing is not None:
-            return ExportCreated(artifact_id=str(existing.id))
-        if not await rt.limiter.hit(project_rate_key("export", project.id), cfg.max_exports_per_hour, 3600):
-            raise RateLimited(f"At most {cfg.max_exports_per_hour} exports per project per hour.")
+        # Lock the project row: it serialises concurrent creates and refuses a project deleted since the lookup.
+        alive = (
+            await s.execute(
+                select(ProjectRow.id)
+                .where(ProjectRow.id == project.id, ProjectRow.deleting_at.is_(None))
+                .with_for_update()
+            )
+        ).first()
+        if alive is None:
+            raise NotFound("Project not found.")
+        raced = (await s.execute(_pending_like(project.id, kind, chat_id, now))).scalar_one_or_none()
+        if raced is not None:
+            return ExportCreated(artifact_id=str(raced))
         row = ArtifactRow(
             project_id=project.id,
             chat_session_id=chat_id,
@@ -120,7 +141,7 @@ async def export_chat(
             )
         ).scalar_one()
     if not messages:
-        raise ProjectNotReady("The chat has no messages yet.")
+        raise Conflict("The chat has no messages yet.")
     kind = ArtifactKind.CHAT_PDF if format == "pdf" else ArtifactKind.CHAT_MD
     return await _create(request, rt, project, kind, chat.id)
 

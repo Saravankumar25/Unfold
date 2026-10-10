@@ -17,21 +17,21 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _BACKTICKS = re.compile(r"`+")
 
 
+def _neutralise(text: str) -> str:
+    """No inline HTML and no `[text](url)` / `![alt](url)` link syntax can survive in repository-derived text."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace("](", "]\\(")
+
+
 def _prose(text: str | None) -> str:
-    return _CONTROL.sub("", text or "").replace("&", "&amp;").replace("<", "&lt;")
+    """One logical line of repository-derived text: whitespace collapsed so it cannot start a heading or row."""
+    return _neutralise(" ".join(_CONTROL.sub("", text or "").split()))
 
 
 def _markdown_text(text: str) -> str:
-    """Model-written Markdown: keep its fences intact, neutralise inline HTML everywhere else."""
-    out: list[str] = []
-    in_fence = False
-    for line in _CONTROL.sub("", text).splitlines():
-        if line.lstrip().startswith(("```", "~~~")):
-            in_fence = not in_fence
-            out.append(line)
-        else:
-            out.append(line if in_fence else line.replace("&", "&amp;").replace("<", "&lt;"))
-    return "\n".join(out)
+    """Model-written Markdown. Fences are not tracked (a hand-rolled tracker can be desynchronised by crafted
+    input, and a renderer would then see live HTML): `<` and `&` are escaped on every line, code included, which
+    only changes how code looks."""
+    return "\n".join(_neutralise(line) for line in _CONTROL.sub("", text).splitlines())
 
 
 def _fence(body: str, language: str = "") -> str:

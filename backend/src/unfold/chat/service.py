@@ -7,7 +7,7 @@ generation leaves no half turn behind and a client retry is clean.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 from sqlalchemy import func, select
 
@@ -96,7 +96,7 @@ async def run_turn(
     section_key: str | None,
     transport: str,
     retriever: HybridRetriever | None = None,
-) -> AsyncIterator[ChatEvent]:
+) -> AsyncGenerator[ChatEvent, None]:
     """Stream one turn's events. Raises `UnfoldError` on failure (the transport decides how to show it)."""
     if rt.llm is None:
         raise UnfoldError(
@@ -182,6 +182,7 @@ async def _persist_turn(
                 model_metadata={"grounding": done.grounding or {}, "timings": done.timings or {}},
             )
         )
+        chat.updated_at = func.now()  # the thread list orders by recent activity
         if not chat.title:
             chat.title = " ".join(question.split())[:TITLE_CHARS]
     return assistant_id, int(last) + 2

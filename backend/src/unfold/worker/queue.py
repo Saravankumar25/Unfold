@@ -61,7 +61,9 @@ class SubprocessJobQueue(JobQueue):
         if key in self._tasks and not self._tasks[key].done():
             return  # idempotent: the same job is never supervised twice
         supervised = asyncio.create_task(self._supervise(task, ref, delay), name=key)
-        supervised.add_done_callback(lambda _t: self._tasks.pop(key, None))
+        supervised.add_done_callback(
+            lambda t: self._tasks.pop(key, None) if self._tasks.get(key) is t else None
+        )
         self._tasks[key] = supervised
 
     async def _supervise(self, task: str, ref: str, delay: float) -> None:

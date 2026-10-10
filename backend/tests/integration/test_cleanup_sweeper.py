@@ -300,3 +300,24 @@ async def test_worker_sweep_task_runs_the_same_function(
             )
         ).scalar_one()
     assert left == 0
+
+
+async def test_a_failing_sweep_step_does_not_starve_the_others(
+    runtime: Runtime,
+    seed_project: Callable[..., Awaitable[Seeded]],
+    recording_queue: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seeded = await seed_project(session_expires_in=timedelta(minutes=-1))  # an expired session with a project
+
+    async def broken(prefix: str) -> int:
+        raise RuntimeError("redis is down")
+
+    monkeypatch.setattr(runtime.limiter, "delete_prefix", broken)
+    report = await sweep(runtime, recording_queue)
+    monkeypatch.undo()
+    assert report.steps_failed >= 1  # the rate-limit key removal failed ...
+    assert report.projects_cleaned >= 1  # ... and the cleanup before it, and the steps after it, still ran
+    assert _total(await inventory(runtime, seeded)) == 0
+    again = await sweep(runtime, None)  # the next pass removes the session that had to wait
+    assert again.sessions_removed >= 1
