@@ -60,8 +60,9 @@ COPY docker/prefetch.py /app/docker/prefetch.py
 # ---------------------------------------------------------------- api-lambda
 FROM runtime AS api-lambda
 COPY --from=build-api /app/.venv /app/.venv
+# Build-time only: APP_ENV=development because the production guard (rightly) refuses default credentials.
 # Retrieval models are baked in: a Lambda has no persistent cache and must not download at cold start.
-RUN python /app/docker/prefetch.py models && chown -R unfold:unfold /opt/unfold
+RUN APP_ENV=development python /app/docker/prefetch.py models && chown -R unfold:unfold /opt/unfold
 COPY --from=lwa /lambda-adapter /opt/extensions/lambda-adapter
 # Lambda runs the image read-only apart from /tmp; the settings below mirror the function configuration
 ENV HOME=/tmp XDG_CACHE_HOME=/tmp \
@@ -76,7 +77,7 @@ FROM runtime AS api
 COPY --from=build-api-local /app/.venv /app/.venv
 COPY backend/alembic.ini /app/backend/alembic.ini
 COPY backend/migrations /app/backend/migrations
-RUN python /app/docker/prefetch.py models && chown -R unfold:unfold /opt/unfold
+RUN APP_ENV=development python /app/docker/prefetch.py models && chown -R unfold:unfold /opt/unfold
 USER unfold
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
@@ -87,7 +88,7 @@ CMD ["uvicorn", "unfold.api.main:create_app", "--factory", "--host", "0.0.0.0", 
 # ---------------------------------------------------------------- worker (analysis task; control Lambdas)
 FROM runtime AS worker
 COPY --from=build-worker /app/.venv /app/.venv
-RUN python /app/docker/prefetch.py models grammars && chown -R unfold:unfold /opt/unfold
+RUN APP_ENV=development python /app/docker/prefetch.py models grammars && chown -R unfold:unfold /opt/unfold
 USER unfold
 # Fargate: `analysis <job_id>` / `cleanup <project_id>`; one task per container run, exits when done.
 # Lambda: the control module overrides the entry point with awslambdaric and sets the handler as the command.
@@ -97,7 +98,7 @@ ENTRYPOINT ["python", "-m", "unfold.worker.run"]
 FROM runtime AS exporter
 COPY --from=build-exporter /app/.venv /app/.venv
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/unfold/ms-playwright
-RUN python /app/docker/prefetch.py models grammars \
+RUN APP_ENV=development python /app/docker/prefetch.py models grammars \
     && playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
     && chown -R unfold:unfold /opt/unfold

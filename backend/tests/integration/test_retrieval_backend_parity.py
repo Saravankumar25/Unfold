@@ -24,8 +24,8 @@ from unfold.core.ids import token_hash
 from unfold.graph.builder import ir_graph
 from unfold.graph.memory import MemoryGraph
 from unfold.graph.queries import Neo4jGraphQueries
-from unfold.indexing.dense import DenseIndex
 from unfold.indexing.dense_artifact import ArtifactDenseStore, DenseArtifactCache
+from unfold.indexing.dense_qdrant import DenseIndex
 from unfold.indexing.embeddings import embedder_for
 from unfold.indexing.models import Chunk
 from unfold.indexing.store import ChunkRepository

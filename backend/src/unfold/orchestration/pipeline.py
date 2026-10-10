@@ -254,6 +254,12 @@ class _Run:
                 )
             key = await save_ir(rt.objects, ir)
             chunks = await asyncio.to_thread(chunk_project, ir, texts)
+            cap = rt.settings.max_chunks_per_project
+            if cap > 0 and len(chunks) > cap:  # bounds embedding time, memory and the chunk object
+                raise InputError(
+                    f"The project is too large to analyse ({len(chunks)} chunks; the limit is {cap}).",
+                    code=ErrorCode.INPUT_TOO_LARGE,
+                )
             await self.chunks.replace_project_chunks(self.pid, chunks)
         project_type = {
             "categories": ir.project.categories,

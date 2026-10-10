@@ -73,7 +73,7 @@ class Runtime:
 
     @classmethod
     def _aws(cls, settings: Settings) -> Runtime:
-        from unfold.indexing.store import ObjectChunkStore
+        from unfold.indexing.object_chunks import ObjectChunkStore
         from unfold.persistence.dynamodb.control import DynamoControlStore
         from unfold.persistence.dynamodb.counters import DynamoCounters, DynamoRateLimiter
         from unfold.persistence.dynamodb.progress import DynamoProgressStore

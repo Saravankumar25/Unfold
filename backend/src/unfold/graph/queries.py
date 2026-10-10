@@ -25,9 +25,9 @@ from unfold.graph.models import (
     PathResult,
     check_rel_type,
 )
-from unfold.persistence.neo4j_store import Neo4jStore
 
 if TYPE_CHECKING:
+    from unfold.persistence.neo4j_store import Neo4jStore
     from unfold.project_ir.schema import ProjectIR
     from unfold.runtime import Runtime
 

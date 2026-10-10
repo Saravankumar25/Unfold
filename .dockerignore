@@ -1,0 +1,12 @@
+# The image build copies a handful of paths (docker/backend.Dockerfile); everything else stays out of the context,
+# above all secrets and the multi-hundred-megabyte local environments.
+**
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/README.md
+!backend/src/**
+!backend/alembic.ini
+!backend/migrations/**
+!docker/prefetch.py
+**/__pycache__
+**/*.pyc

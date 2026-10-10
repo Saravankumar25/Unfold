@@ -26,7 +26,8 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
+  // https://*.amazonaws.com: the browser POSTs a ZIP straight to the S3 bucket with a presigned policy
+  `connect-src 'self' https://*.amazonaws.com${isDev ? " ws: wss:" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

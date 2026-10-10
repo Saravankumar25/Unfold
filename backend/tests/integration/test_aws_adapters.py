@@ -19,7 +19,7 @@ import pytest
 
 from unfold.core.errors import NotFound, StoreUnavailable, UnfoldError
 from unfold.indexing.models import Chunk
-from unfold.indexing.store import ObjectChunkStore
+from unfold.indexing.object_chunks import ObjectChunkStore
 from unfold.persistence.dynamodb.counters import DynamoCounters, DynamoRateLimiter
 from unfold.persistence.dynamodb.table import DynamoTable
 from unfold.persistence.s3_store import S3BlobStore

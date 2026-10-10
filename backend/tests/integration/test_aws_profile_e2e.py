@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import io
 import json
+import math
+import os
 import re
 import zipfile
 from collections.abc import AsyncIterator
@@ -97,6 +99,52 @@ class ScriptedLLM:
         )
 
 
+class CountingDynamo:
+    """Wraps the DynamoDB client: counts requests and estimates capacity units from the item sizes sent/received.
+    Writes: 1 WRU per KB (x2 in a transaction). Reads: 0.5 RRU per 4 KB eventual, 1 consistent (x2 transactional
+    is not used by reads here). An estimate from payload size, not a billing figure."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.calls: dict[str, int] = {}
+        self.wru = 0.0
+        self.rru = 0.0
+
+    @staticmethod
+    def _kb(item: Any) -> float:
+        return max(1.0, len(json.dumps(item, default=str)) / 1024)
+
+    def __getattr__(self, name: str) -> Any:
+        fn = getattr(self._inner, name)
+
+        def call(**kw: Any) -> Any:
+            self.calls[name] = self.calls.get(name, 0) + 1
+            out = fn(**kw)
+            if name == "put_item":
+                self.wru += math.ceil(self._kb(kw["Item"]))
+            elif name == "update_item":
+                self.wru += math.ceil(self._kb(out.get("Attributes", {})))
+            elif name == "transact_write_items":
+                for t in kw["TransactItems"]:
+                    item = next(iter(t.values())).get("Item", {})
+                    self.wru += 2 * math.ceil(self._kb(item))
+            elif name == "batch_write_item":
+                for reqs in kw["RequestItems"].values():
+                    for r in reqs:
+                        self.wru += math.ceil(self._kb(r.get("PutRequest", {}).get("Item", {})))
+            elif name == "get_item":
+                self.rru += math.ceil(self._kb(out.get("Item", {})) / 4) * (
+                    1.0 if kw.get("ConsistentRead") else 0.5
+                )
+            elif name == "query":
+                self.rru += math.ceil(self._kb(out.get("Items", [])) / 4) * (
+                    1.0 if kw.get("ConsistentRead") else 0.5
+                )
+            return out
+
+        return call
+
+
 class InProcessRunner:
     """ECS stand-in: starting a task runs the same entry function the Fargate container runs."""
 
@@ -168,6 +216,8 @@ async def test_zip_to_guide_duplicate_delivery_resume_and_cleanup(
 ) -> None:
     rt: Runtime = app.state.runtime
     queue: SqsJobQueue = app.state.queue
+    counting = CountingDynamo(rt.control._t._client)  # type: ignore[attr-defined]
+    rt.control._t._client = counting  # type: ignore[attr-defined]
     assert (await client.post("/api/v1/sessions")).status_code == 201
     assert (await client.get("/ready")).json()["status"] == "ok"
 
@@ -242,6 +292,15 @@ async def test_zip_to_guide_duplicate_delivery_resume_and_cleanup(
     assert await rt.control.sections(project_id) == [] and await rt.control.diagrams(project_id) == []
     assert await rt.progress.read_after(project_id, 0) == []
     assert await rt.objects.delete_prefix(f"projects/{project_id}/") == 0
+    if out := os.environ.get("UNFOLD_DDB_PROFILE_OUT"):
+        profile = {
+            "requests": counting.calls,
+            "estimated_wru": counting.wru,
+            "estimated_rru": counting.rru,
+            "chunks": done["stats"]["chunks"],
+            "note": "one ZIP analysis (33 files) incl. 2 attempts, API reads and cleanup; payload-size estimate",
+        }
+        Path(out).write_text(json.dumps(profile, indent=2), encoding="utf-8")  # noqa: ASYNC240
 
 
 async def test_upload_ticket_rules_ownership_size_and_type(aws: Any, client: httpx.AsyncClient) -> None:
@@ -306,3 +365,18 @@ async def test_unverified_callers_share_one_rate_limit_bucket(aws: Any) -> None:
 
         signed = proxy_auth.sign(b"k" * 32, "203.0.113.50")
         assert (await c.post("/api/v1/sessions", headers={"x-unfold-client": signed})).status_code == 201
+
+
+async def test_a_project_over_the_chunk_cap_fails_typed_before_any_embedding(aws: Any) -> None:
+    settings = aws.settings.model_copy(update={"max_chunks_per_project": 5})
+    application = create_app(settings, queue=SqsJobQueue(settings))
+    async with application.router.lifespan_context(application), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application), base_url="http://t"
+    ) as c:
+        assert (await c.post("/api/v1/sessions")).status_code == 201
+        project_id, job_id = await _upload(c, aws, _zip_of(FIXTURE))
+        llm = ScriptedLLM()
+        outcome = await run_analysis(application.state.runtime, llm, job_id)  # type: ignore[arg-type]
+        assert not outcome.succeeded and not outcome.retry and llm.calls == []
+        job = (await c.get(f"/api/v1/projects/{project_id}")).json()["job"]
+        assert job["status"] == "failed" and job["error_code"] == "INPUT_TOO_LARGE"

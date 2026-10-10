@@ -10,6 +10,7 @@
  */
 import type { NextRequest } from "next/server";
 import { clientAddress } from "@/lib/client-address";
+import { signClient } from "@/lib/client-signature";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,8 +56,11 @@ async function proxy(request: NextRequest): Promise<Response> {
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
   headers.delete("x-forwarded-for");
   headers.delete("x-real-ip");
+  headers.delete("x-unfold-client"); // only this proxy may assert an identity
   const clientIp = clientAddress(request);
   if (clientIp) headers.set("x-forwarded-for", clientIp);
+  const secret = process.env.PROXY_HMAC_SECRET;
+  if (secret && clientIp) headers.set("x-unfold-client", signClient(secret, clientIp));
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD" && request.body !== null;
   const init: RequestInit & { duplex?: "half" } = {

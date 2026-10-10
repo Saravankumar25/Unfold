@@ -135,3 +135,48 @@ def test_api_import_loads_no_heavy_or_local_only_stack() -> None:
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == ""
+
+
+def _imports_without(blocked: list[str], modules: list[str]) -> subprocess.CompletedProcess[str]:
+    """Import `modules` in a fresh interpreter where `blocked` packages are not installed."""
+    code = (
+        "import sys, importlib\n"
+        f"blocked = {blocked!r}\n"
+        "class Block:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name.split('.')[0] in blocked:\n"
+        "            raise ModuleNotFoundError(f'blocked {name}')\n"
+        "sys.meta_path.insert(0, Block())\n"
+        f"for m in {modules!r}:\n"
+        "    importlib.import_module(m)\n"
+    )
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)  # noqa: S603
+
+
+LOCAL_STACK = ["sqlalchemy", "asyncpg", "alembic", "redis", "minio", "neo4j", "qdrant_client"]
+ANALYSIS_STACK = ["tree_sitter", "tree_sitter_language_pack", "networkx", "hcl2", "yaml", "jinja2", "playwright"]
+
+
+def test_api_lambda_image_needs_neither_the_local_stack_nor_the_analysis_stack() -> None:
+    """Mirrors the `api-lambda` target's dependency groups: core + ai only."""
+    proc = _imports_without(
+        LOCAL_STACK + ANALYSIS_STACK, ["unfold.api.aws", "unfold.retrieval.hybrid", "unfold.llm.factory"]
+    )
+    assert proc.returncode == 0, proc.stderr[-800:]
+
+
+def test_worker_image_needs_no_local_stack_package() -> None:
+    """Mirrors the `worker` target: core + ai + analysis + lambda-runtime (no `local` group, no Chromium)."""
+    proc = _imports_without(
+        [*LOCAL_STACK, "jinja2", "playwright"],
+        [
+            "unfold.worker.run",
+            "unfold.worker.dispatch",
+            "unfold.orchestration.pipeline",
+            "unfold.cleanup.service",
+            "unfold.indexing.dense_artifact",
+            "unfold.graph.memory",
+            "unfold.llm.factory",
+        ],
+    )
+    assert proc.returncode == 0, proc.stderr[-800:]

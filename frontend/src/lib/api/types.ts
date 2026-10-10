@@ -492,3 +492,12 @@ export interface ArtifactOut {
   /** relative, e.g. /api/v1/exports/{id}/download when ready */
   download_url: string | null;
 }
+
+/** `POST /projects/zip/upload-url`: a presigned POST for the browser (send `fields`, then the file, to `url`). */
+export interface UploadTicket {
+  project_id: string;
+  url: string;
+  fields: Record<string, string>;
+  max_bytes: number;
+  expires_at: string;
+}

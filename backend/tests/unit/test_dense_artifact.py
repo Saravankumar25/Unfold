@@ -167,7 +167,8 @@ async def test_cache_entries_expire_so_a_rewrite_is_seen() -> None:
 def test_backend_setting_selects_the_store() -> None:
     from types import SimpleNamespace
 
-    from unfold.indexing.dense import DenseIndex, dense_store_for
+    from unfold.indexing.dense import dense_store_for
+    from unfold.indexing.dense_qdrant import DenseIndex
 
     qdrant = SimpleNamespace(collection="c")
     cfg = SimpleNamespace(

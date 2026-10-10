@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from unfold.core.logging import get_logger
 from unfold.graph.models import (
@@ -24,8 +24,10 @@ from unfold.graph.models import (
     check_label,
     check_rel_type,
 )
-from unfold.persistence.neo4j_store import Neo4jStore
 from unfold.project_ir.schema import Entity, ProjectIR
+
+if TYPE_CHECKING:
+    from unfold.persistence.neo4j_store import Neo4jStore
 
 log = get_logger(__name__)
 
