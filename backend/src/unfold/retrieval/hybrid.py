@@ -33,7 +33,7 @@ from unfold.indexing.models import Chunk
 from unfold.indexing.reranker import CrossEncoderReranker, reranker_for
 from unfold.indexing.store import ChunkRepository
 from unfold.observability.tracing import retrieval_latency, set_attrs, span
-from unfold.persistence.object_store import ObjectStore
+from unfold.ports import BlobStore
 from unfold.project_ir.schema import ProjectIR
 from unfold.retrieval.config import CHUNKABLE_LABELS, DEFAULT_CONFIG, FINAL_K_BY_BREADTH, RetrievalConfig
 from unfold.retrieval.errors import RetrievalFailed
@@ -89,7 +89,7 @@ class HybridRetriever:
         project_id: str,
         chunks: ChunkRepository,
         lexical_cache: LexicalIndexCache,
-        objects: ObjectStore,
+        objects: BlobStore,
         lexical_key: str | None,
         dense: DenseIndex | None,
         reranker: CrossEncoderReranker | None,

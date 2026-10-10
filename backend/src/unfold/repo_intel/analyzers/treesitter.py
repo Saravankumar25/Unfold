@@ -127,9 +127,13 @@ _JS_WEB_PACKAGES: Final[dict[str, str]] = {
     "hono": "hono",
     "restify": "restify",
 }
-_ROUTERISH_VAR: Final = re.compile(r"^(app|api|server|router|routes|route|[a-z]\w*Router|[a-z]\w*Routes|[a-z]\w*App)$")
+_ROUTERISH_VAR: Final = re.compile(
+    r"^(app|api|server|router|routes|route|[a-z]\w*Router|[a-z]\w*Routes|[a-z]\w*App)$"
+)
 _ROUTERISH_TARGET: Final = re.compile(r"(router|routes|route|api|controller)s?$", re.IGNORECASE)
-_HANDLER_WRAPPERS: Final = frozenset({"asyncHandler", "catchAsync", "wrap", "wrapAsync", "asyncWrapper", "handle"})
+_HANDLER_WRAPPERS: Final = frozenset(
+    {"asyncHandler", "catchAsync", "wrap", "wrapAsync", "asyncWrapper", "handle"}
+)
 _COMPONENT_WRAPPERS: Final = frozenset({"memo", "forwardRef", "observer"})
 _JS_GLOBALS: Final = frozenset(
     {
@@ -141,7 +145,16 @@ _JS_GLOBALS: Final = frozenset(
 )  # fmt: skip
 
 _PRISMA_READ: Final = frozenset(
-    {"findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow", "findMany", "count", "aggregate", "groupBy"}
+    {
+        "findUnique",
+        "findUniqueOrThrow",
+        "findFirst",
+        "findFirstOrThrow",
+        "findMany",
+        "count",
+        "aggregate",
+        "groupBy",
+    }
 )
 _PRISMA_WRITE: Final = frozenset(
     {"create", "createMany", "createManyAndReturn", "update", "updateMany", "upsert", "delete", "deleteMany"}
@@ -165,9 +178,24 @@ _MONGOOSE_WRITE: Final = frozenset(
         "findOneAndReplace", "replaceOne", "bulkWrite", "save",
     }
 )  # fmt: skip
-_SEQUELIZE_READ: Final = frozenset({"findAll", "findByPk", "findAndCountAll", "findOne", "count", "max", "min", "sum"})
-_SEQUELIZE_WRITE: Final = frozenset({"create", "bulkCreate", "destroy", "update", "upsert", "findOrCreate", "increment"})
-_REPO_READ_PREFIXES: Final = ("find", "get", "count", "exists", "query", "read", "search", "select", "list", "load")
+_SEQUELIZE_READ: Final = frozenset(
+    {"findAll", "findByPk", "findAndCountAll", "findOne", "count", "max", "min", "sum"}
+)
+_SEQUELIZE_WRITE: Final = frozenset(
+    {"create", "bulkCreate", "destroy", "update", "upsert", "findOrCreate", "increment"}
+)
+_REPO_READ_PREFIXES: Final = (
+    "find",
+    "get",
+    "count",
+    "exists",
+    "query",
+    "read",
+    "search",
+    "select",
+    "list",
+    "load",
+)
 _REPO_WRITE_PREFIXES: Final = (
     "save", "insert", "update", "delete", "remove", "create", "upsert", "persist", "merge", "put", "softDelete",
     "softRemove", "restore", "increment", "decrement", "clear",
@@ -181,7 +209,17 @@ _EF_READ: Final = frozenset(
     }
 )  # fmt: skip
 _EF_WRITE: Final = frozenset(
-    {"Add", "AddAsync", "AddRange", "AddRangeAsync", "Remove", "RemoveRange", "Update", "UpdateRange", "Attach"}
+    {
+        "Add",
+        "AddAsync",
+        "AddRange",
+        "AddRangeAsync",
+        "Remove",
+        "RemoveRange",
+        "Update",
+        "UpdateRange",
+        "Attach",
+    }
 )
 _AR_READ: Final = frozenset(
     {
@@ -380,10 +418,7 @@ class _RepoIndex:
 
     def dir_has_ext(self, directory: str, ext: str) -> bool:
         prefix = directory + "/" if directory else ""
-        for p in self._by_ext_cache(ext):
-            if p.startswith(prefix) and "/" not in p[len(prefix) :]:
-                return True
-        return False
+        return any(p.startswith(prefix) and "/" not in p[len(prefix) :] for p in self._by_ext_cache(ext))
 
     @lru_cache(maxsize=16)  # noqa: B019 - bounded, index objects are few and long-lived per analysis run
     def _by_ext_cache(self, ext: str) -> tuple[str, ...]:
@@ -470,7 +505,10 @@ def _go_package(path: str) -> str:
     segs = path.split("/")
     if "." not in segs[0]:
         return segs[0]
-    if segs[0] in {"github.com", "gitlab.com", "bitbucket.org", "golang.org", "codeberg.org"} and len(segs) >= 3:
+    if (
+        segs[0] in {"github.com", "gitlab.com", "bitbucket.org", "golang.org", "codeberg.org"}
+        and len(segs) >= 3
+    ):
         return "/".join(segs[:3])
     return "/".join(segs[:2])
 
@@ -803,7 +841,9 @@ class _Extractor:
             self.fa.errors.append(f"treesitter: nesting deeper than {_MAX_DEPTH} levels was not analysed")
         if self.truncated:
             self.fa.errors.append("treesitter: symbol/call extraction truncated (file too large)")
-        exported = [s.name for s in self.fa.symbols if s.exported and s.parent is None and "." not in s.qualname]
+        exported = [
+            s.name for s in self.fa.symbols if s.exported and s.parent is None and "." not in s.qualname
+        ]
         for name in exported:
             if name not in self.fa.exports:
                 self.fa.exports.append(name)
@@ -863,10 +903,13 @@ class _Extractor:
                     if has_sequelize and (op in _SEQUELIZE_READ or op in _SEQUELIZE_WRITE):
                         emit(call, model, "read" if op in _SEQUELIZE_READ else "write", "sequelize")
                         continue
-                    if op in _MONGOOSE_READ or op in _MONGOOSE_WRITE:
-                        if model in self.model_vars or has_mongoose or op not in {"find", "create", "where", "save"}:
-                            emit(call, model, "read" if op in _MONGOOSE_READ else "write", "mongoose")
-                            continue
+                    if (op in _MONGOOSE_READ or op in _MONGOOSE_WRITE) and (
+                        model in self.model_vars
+                        or has_mongoose
+                        or op not in {"find", "create", "where", "save"}
+                    ):
+                        emit(call, model, "read" if op in _MONGOOSE_READ else "write", "mongoose")
+                        continue
                     if op in {"findAll", "findByPk", "findAndCountAll", "bulkCreate", "destroy"}:
                         emit(call, model, "read" if op in _SEQUELIZE_READ else "write", "sequelize")
                         continue
@@ -884,15 +927,21 @@ class _Extractor:
                         continue
             if family == "csharp" and len(p) >= 3 and (op in _EF_READ or op in _EF_WRITE):
                 ctx_name = p[-3].lower().lstrip("_")
-                if (ctx_name in {"db", "context", "dbcontext", "ctx"} or ctx_name.endswith("context")) and _is_pascal(
-                    p[-2]
-                ):
+                if (
+                    ctx_name in {"db", "context", "dbcontext", "ctx"} or ctx_name.endswith("context")
+                ) and _is_pascal(p[-2]):
                     emit(call, p[-2], "read" if op in _EF_READ else "write", "efcore")
                     continue
-            if family == "ruby" and len(p) == 2 and p[0][:1].isupper() and (op in _AR_READ or op in _AR_WRITE):
-                if p[0] not in {"Rails", "File", "Dir", "JSON", "Time", "Date", "Hash", "Array", "ENV", "YAML"}:
-                    emit(call, p[0], "read" if op in _AR_READ else "write", "active_record")
-                    continue
+            if (
+                family == "ruby"
+                and len(p) == 2
+                and p[0][:1].isupper()
+                and (op in _AR_READ or op in _AR_WRITE)
+                and p[0]
+                not in {"Rails", "File", "Dir", "JSON", "Time", "Date", "Hash", "Array", "ENV", "YAML"}
+            ):
+                emit(call, p[0], "read" if op in _AR_READ else "write", "active_record")
+                continue
             if (
                 family == "php"
                 and len(p) == 2
@@ -925,7 +974,8 @@ class _Extractor:
                     continue
                 target = imp.package or imp.module if fam == "js" else imp.module
                 if (exact and target == prefix) or (
-                    not exact and (target == prefix or target.startswith(prefix) or imp.module.startswith(prefix))
+                    not exact
+                    and (target == prefix or target.startswith(prefix) or imp.module.startswith(prefix))
                 ):
                     if not imp.external and fam != "js":
                         continue
@@ -936,7 +986,9 @@ class _Extractor:
         for call in self.fa.calls:
             p = call.parts
             tail = ".".join(p[-3:])
-            if tail.endswith("chat.completions.create") or (p[-2:] == ["responses", "create"] and "openai" in techs):
+            if tail.endswith("chat.completions.create") or (
+                p[-2:] == ["responses", "create"] and "openai" in techs
+            ):
                 emit("llm_client", "openai", call.line, call.caller)
             elif p[-2:] == ["embeddings", "create"]:
                 emit("embedding", "openai" if "openai" in techs else sorted(techs)[0], call.line, call.caller)
@@ -946,7 +998,10 @@ class _Extractor:
                 emit("llm_client", "gemini", call.line, call.caller)
             elif p[-1] in {"embedContent", "batchEmbedContents"} and "gemini" in techs:
                 emit("embedding", "gemini", call.line, call.caller)
-            elif p[-1] in {"generateText", "streamText", "generateObject", "streamObject"} and "vercel_ai" in techs:
+            elif (
+                p[-1] in {"generateText", "streamText", "generateObject", "streamObject"}
+                and "vercel_ai" in techs
+            ):
                 emit("llm_client", "vercel_ai", call.line, call.caller)
             elif p[-1] in {"embed", "embedMany"} and len(p) == 1 and "vercel_ai" in techs:
                 emit("embedding", "vercel_ai", call.line, call.caller)
@@ -1106,7 +1161,9 @@ class _JsExtractor(_Extractor):
                 return c
         return None
 
-    def import_binding(self, local: str, spec: str, resolved: str | None, external: bool, attr: str | None) -> None:
+    def import_binding(
+        self, local: str, spec: str, resolved: str | None, external: bool, attr: str | None
+    ) -> None:
         self.imported_names[local] = spec
         if external:
             if attr is None or attr == "default":
@@ -1422,7 +1479,9 @@ class _JsExtractor(_Extractor):
     def is_component(self, name: str, fn: Node) -> bool:
         return self.jsx and _is_pascal(name) and self.contains(fn, _JSX_TYPES)
 
-    def function_like(self, name: str, fn: Node, outer: Node, *, exported: bool, decl_node: Node) -> SymbolDef | None:
+    def function_like(
+        self, name: str, fn: Node, outer: Node, *, exported: bool, decl_node: Node
+    ) -> SymbolDef | None:
         if self.fn_depth:
             self.visit_body(fn, None)
             return None
@@ -1521,7 +1580,9 @@ class _JsExtractor(_Extractor):
             self.visit(value) if value is not None else None
         return declared
 
-    def class_decl(self, node: Node, *, exported: bool, outer: Node | None, decorators: list[Node]) -> list[str]:
+    def class_decl(
+        self, node: Node, *, exported: bool, outer: Node | None, decorators: list[Node]
+    ) -> list[str]:
         name_n = node.child_by_field_name("name")
         if name_n is None or self.fn_depth:
             self.visit_body(node, None)
@@ -1714,7 +1775,9 @@ class _JsExtractor(_Extractor):
             fn = value.child_by_field_name("function")
             p = self.parts(fn) or []
             args = self.args(value)
-            if p == ["express"] or (p and p[-1] == "express" and self.web_framework == "express" and len(p) == 1):
+            if p == ["express"] or (
+                p and p[-1] == "express" and self.web_framework == "express" and len(p) == 1
+            ):
                 self.router_vars[name] = "express"
                 self.add_router(name, "express", decl)
                 self.add_app_object("express")
@@ -1751,7 +1814,11 @@ class _JsExtractor(_Extractor):
                 self.router_vars[name] = "koa"
                 self.add_router(name, "koa_router", decl)
             elif last == "Schema" and args and args[0].type == "object":
-                self.mongoose_schemas[name] = (self.object_fields(args[0]), self.line(decl), self.end_line(decl))
+                self.mongoose_schemas[name] = (
+                    self.object_fields(args[0]),
+                    self.line(decl),
+                    self.end_line(decl),
+                )
             elif last in ("Queue", "Bull", "BeeQueue") and args:
                 qname = self.first_string_arg(args)
                 if qname:
@@ -2018,7 +2085,9 @@ class _JsExtractor(_Extractor):
                         job = self.string_value(args[1]) or job
                     if job:
                         self.fa.publishes.append(
-                            PublishRef(caller=self.caller(), task=job, technology="agenda", line=self.line(node))
+                            PublishRef(
+                                caller=self.caller(), task=job, technology="agenda", line=self.line(node)
+                            )
                         )
                 return
             if meth in ("add", "addBulk"):
@@ -2027,7 +2096,9 @@ class _JsExtractor(_Extractor):
                 )
             elif meth == "process" and args:
                 handler, _ = self.handler(args[-1])
-                self.fa.tasks.append(TaskDef(name=qname, technology=tech, line=self.line(node), symbol=handler))
+                self.fa.tasks.append(
+                    TaskDef(name=qname, technology=tech, line=self.line(node), symbol=handler)
+                )
             return
         if meth == "schedule" and self.imported_names.get(recv) in ("node-cron", "cron") and args:
             expr = self.first_string_arg(args)
@@ -2202,7 +2273,9 @@ class _JvmMixin(_Extractor):
 
     def method_tasks(self, qual: str, anns: dict[str, list[str]], node: Node) -> None:
         if "Scheduled" in anns:
-            self.fa.tasks.append(TaskDef(name=qual, technology="spring_scheduler", line=self.line(node), symbol=qual))
+            self.fa.tasks.append(
+                TaskDef(name=qual, technology="spring_scheduler", line=self.line(node), symbol=qual)
+            )
         for ann, tech in _JVM_LISTENERS.items():
             if ann in anns:
                 name = (anns[ann] or [qual])[0] or qual
@@ -2276,7 +2349,9 @@ class _JavaExtractor(_JvmMixin):
                         if key in ("value", "path", "topics", "queues", "destination", "name", "cron"):
                             values += self.ann_strings(val)
                         elif key == "method" and val is not None:
-                            vs = val.named_children if val.type == "element_value_array_initializer" else [val]
+                            vs = (
+                                val.named_children if val.type == "element_value_array_initializer" else [val]
+                            )
                             methods[name] = [self.text(v).rsplit(".", 1)[-1].upper() for v in vs]
                     else:
                         values += self.ann_strings(a)
@@ -2337,11 +2412,19 @@ class _JavaExtractor(_JvmMixin):
             f = node.child_by_field_name(field_name)
             if f is not None:
                 for tl in f.named_children:
-                    bases += [self.text(c) for c in tl.named_children] if tl.type == "type_list" else [self.text(tl)]
+                    bases += (
+                        [self.text(c) for c in tl.named_children]
+                        if tl.type == "type_list"
+                        else [self.text(tl)]
+                    )
         for c in node.named_children:
             if c.type == "extends_interfaces":
                 for tl in c.named_children:
-                    bases += [self.text(x) for x in tl.named_children] if tl.type == "type_list" else [self.text(tl)]
+                    bases += (
+                        [self.text(x) for x in tl.named_children]
+                        if tl.type == "type_list"
+                        else [self.text(tl)]
+                    )
         anns, _methods, ann_names = self.ann_info(node)
         mods = self.modifiers_text(node)
         body = node.child_by_field_name("body")
@@ -2356,7 +2439,7 @@ class _JavaExtractor(_JvmMixin):
         )
         prefix, framework = self.class_routes(name, anns, node)
         entity = "Entity" in anns or "Document" in anns
-        table = (anns.get("Table") or anns.get("Document") or [None])[0]
+        table: str | None = (anns.get("Table") or anns.get("Document") or [""])[0] or None
         if "Table" in anns and not anns["Table"]:
             table = self.named_ann_value(node, "Table", "name")
         fields: list[FieldDef] = []
@@ -2454,7 +2537,9 @@ class _JavaExtractor(_JvmMixin):
         for d in member.children_by_field_name("declarator"):
             n = d.child_by_field_name("name")
             if n is not None:
-                out.append(FieldDef(name=self.text(n), type=type_text, relation=relation, attributes=list(attrs)))
+                out.append(
+                    FieldDef(name=self.text(n), type=type_text, relation=relation, attributes=list(attrs))
+                )
         return out
 
     def method(self, member: Node, cls: SymbolDef, prefix: str | None, framework: str) -> None:
@@ -2518,7 +2603,9 @@ class _KotlinExtractor(_JvmMixin):
             name = self.text(user).rsplit(".", 1)[-1]
             positional: list[Node] = []
             named: dict[str, Node] = {}
-            vargs = next((c for c in inv.named_children if c.type == "value_arguments"), None) if inv else None
+            vargs = (
+                next((c for c in inv.named_children if c.type == "value_arguments"), None) if inv else None
+            )
             for va in vargs.named_children if vargs is not None else []:
                 if va.type != "value_argument":
                     continue
@@ -2564,7 +2651,11 @@ class _KotlinExtractor(_JvmMixin):
         mods = next((c for c in node.named_children if c.type == "modifiers"), None)
         if mods is None:
             return set()
-        return {self.text(c) for c in mods.named_children if c.type in ("visibility_modifier", "function_modifier")}
+        return {
+            self.text(c)
+            for c in mods.named_children
+            if c.type in ("visibility_modifier", "function_modifier")
+        }
 
     def visit(self, node: Node) -> None:
         t = node.type
@@ -2574,7 +2665,14 @@ class _KotlinExtractor(_JvmMixin):
                 alias_n = next((c for c in node.named_children if c.type == "import_alias"), None)
                 alias = None
                 if alias_n is not None:
-                    a = next((c for c in alias_n.named_children if c.type in ("type_identifier", "simple_identifier")), None)
+                    a = next(
+                        (
+                            c
+                            for c in alias_n.named_children
+                            if c.type in ("type_identifier", "simple_identifier")
+                        ),
+                        None,
+                    )
                     alias = self.text(a) if a is not None else None
                 wildcard = any(c.type == "wildcard_import" for c in node.named_children)
                 self.jvm_import(node, self.text(ident), wildcard=wildcard, alias=alias, static=False)
@@ -2618,14 +2716,14 @@ class _KotlinExtractor(_JvmMixin):
                 prefixes.pop()
             return
         if name in _HTTP_METHODS and first is not None and first.startswith("/"):
-            self.add_route(
-                name, first, node, "ktor", handler=None, full_path=_join_path(*prefixes, first)
-            )
+            self.add_route(name, first, node, "ktor", handler=None, full_path=_join_path(*prefixes, first))
             self.add_app_object("ktor")
         self.visit_children(node)
 
     def type_decl(self, node: Node) -> None:
-        name_n = next((c for c in node.named_children if c.type in ("type_identifier", "simple_identifier")), None)
+        name_n = next(
+            (c for c in node.named_children if c.type in ("type_identifier", "simple_identifier")), None
+        )
         if name_n is None or self.fn_depth:
             self.visit_body(node, None)
             return
@@ -2663,8 +2761,14 @@ class _KotlinExtractor(_JvmMixin):
                     continue
                 p_anns, _pm, p_names = self.ann_info(param)
                 attrs = ["primary_key"] if "Id" in p_anns else []
-                relation = self.text(pt).rstrip("?") if pt is not None and _JPA_RELATIONS & set(p_names) else None
-                fields.append(FieldDef(name=self.text(pn), type=self.text(pt) or None, relation=relation, attributes=attrs))
+                relation = (
+                    self.text(pt).rstrip("?") if pt is not None and _JPA_RELATIONS & set(p_names) else None
+                )
+                fields.append(
+                    FieldDef(
+                        name=self.text(pn), type=self.text(pt) or None, relation=relation, attributes=attrs
+                    )
+                )
         self.containers.append(sym.qualname)
         self.scope.append(sym.qualname)
         try:
@@ -2941,7 +3045,12 @@ class _GoExtractor(_Extractor):
             attrs: list[str] = []
             gorm = tags.get("gorm", "").lower()
             db = tags.get("db", "") or tags.get("bun", "")
-            if "primarykey" in gorm or "primary_key" in gorm or "pk" in db.split(",") or tags.get("bson") == "_id":
+            if (
+                "primarykey" in gorm
+                or "primary_key" in gorm
+                or "pk" in db.split(",")
+                or tags.get("bson") == "_id"
+            ):
                 attrs.append("primary_key")
             if "unique" in gorm or "unique" in db:
                 attrs.append("unique")
@@ -2970,8 +3079,24 @@ class _GoExtractor(_Extractor):
     def assign(self, node: Node) -> None:
         left = node.child_by_field_name("left") or node.child_by_field_name("name")
         right = node.child_by_field_name("right") or node.child_by_field_name("value")
-        lnames = [self.text(c) for c in (left.named_children if left is not None and left.type == "expression_list" else [left] if left is not None else []) if c.type == "identifier"]
-        rvals = right.named_children if right is not None and right.type == "expression_list" else [right] if right is not None else []
+        lnames = [
+            self.text(c)
+            for c in (
+                left.named_children
+                if left is not None and left.type == "expression_list"
+                else [left]
+                if left is not None
+                else []
+            )
+            if c.type == "identifier"
+        ]
+        rvals = (
+            right.named_children
+            if right is not None and right.type == "expression_list"
+            else [right]
+            if right is not None
+            else []
+        )
         if len(lnames) >= 1 and rvals and rvals[0] is not None and rvals[0].type == "call_expression":
             self.track(lnames[0], rvals[0])
         self.visit_children(node)
@@ -2993,7 +3118,9 @@ class _GoExtractor(_Extractor):
                     fw = self.router_vars[p[0]]
                     self.router_vars[name] = fw
                     self.add_router(name, f"{fw}_group", call)
-                    self.fa.mounts.append(MountDef(parent=p[0], target=[name], prefix=prefix, line=self.line(call)))
+                    self.fa.mounts.append(
+                        MountDef(parent=p[0], target=[name], prefix=prefix, line=self.line(call))
+                    )
                 return
         if p and p[-1] == "Subrouter" and fn is not None:
             operand = fn.child_by_field_name("operand")
@@ -3005,7 +3132,9 @@ class _GoExtractor(_Extractor):
                     if prefix is not None:
                         self.router_vars[name] = self.router_vars.get(ofn[0], "gorilla_mux")
                         self.add_router(name, "gorilla_mux_subrouter", call)
-                        self.fa.mounts.append(MountDef(parent=ofn[0], target=[name], prefix=prefix, line=self.line(call)))
+                        self.fa.mounts.append(
+                            MountDef(parent=ofn[0], target=[name], prefix=prefix, line=self.line(call))
+                        )
 
     def handler(self, node: Node) -> tuple[str | None, list[str] | None]:
         if node.type == "identifier":
@@ -3053,10 +3182,19 @@ class _GoExtractor(_Extractor):
         if meth == "Mount" and len(args) == 2:
             prefix = self.string_value(args[0])
             target = args[1]
-            tp = self.parts(target.child_by_field_name("function")) if target.type == "call_expression" else self.parts(target)
+            tp = (
+                self.parts(target.child_by_field_name("function"))
+                if target.type == "call_expression"
+                else self.parts(target)
+            )
             if prefix is not None and tp:
                 self.fa.mounts.append(
-                    MountDef(parent=recv, target=tp, prefix=_join_path(*self.prefixes, prefix) if self.prefixes else prefix, line=self.line(node))
+                    MountDef(
+                        parent=recv,
+                        target=tp,
+                        prefix=_join_path(*self.prefixes, prefix) if self.prefixes else prefix,
+                        line=self.line(node),
+                    )
                 )
             return
         if not args:
@@ -3120,7 +3258,15 @@ class _RustExtractor(_Extractor):
         if node is None:
             return None
         t = node.type
-        if t in ("identifier", "field_identifier", "self", "crate", "super", "type_identifier", "metavariable"):
+        if t in (
+            "identifier",
+            "field_identifier",
+            "self",
+            "crate",
+            "super",
+            "type_identifier",
+            "metavariable",
+        ):
             return [self.text(node)]
         if t in ("scoped_identifier", "scoped_type_identifier"):
             path = node.child_by_field_name("path")
@@ -3291,7 +3437,7 @@ class _RustExtractor(_Extractor):
             m = re.fullmatch(r"(?:\w+::)*(\w+)\s*\(\s*\"([^\"]*)\"(.*)\)", a, re.DOTALL)
             if m is not None and m.group(1) in _RUST_ROUTE_ATTRS | {"route"}:
                 pkgs = self.imported_packages()
-                fw = "rocket" if "rocket" in pkgs else "actix" if "actix_web" in pkgs else "actix"
+                fw = "rocket" if "rocket" in pkgs else "actix"
                 method = m.group(1).upper() if m.group(1) != "route" else "ANY"
                 mm = re.search(r'method\s*=\s*"(\w+)"', m.group(3))
                 if mm is not None:
@@ -3321,7 +3467,9 @@ class _RustExtractor(_Extractor):
             try:
                 for m in body.named_children:
                     if m.type in ("function_item", "function_signature_item"):
-                        self.function(m, parent=sym.qualname) if m.type == "function_item" else self.add_symbol(
+                        self.function(
+                            m, parent=sym.qualname
+                        ) if m.type == "function_item" else self.add_symbol(
                             self.text(m.child_by_field_name("name")),
                             "method",
                             m,
@@ -3333,7 +3481,9 @@ class _RustExtractor(_Extractor):
                 self.containers.pop()
             return
         derives = set(re.findall(r"\b(\w+)\b", " ".join(a for a in attrs if a.startswith("derive"))))
-        if node.type == "struct_item" and (derives & _RUST_DB_DERIVES or any(a.startswith(("diesel", "sea_orm")) for a in attrs)):
+        if node.type == "struct_item" and (
+            derives & _RUST_DB_DERIVES or any(a.startswith(("diesel", "sea_orm")) for a in attrs)
+        ):
             table = None
             for a in attrs:
                 tm = re.search(r'table_name\s*=\s*"?([\w.:]+)"?', a)
@@ -3345,9 +3495,13 @@ class _RustExtractor(_Extractor):
                     continue
                 fname = fd.child_by_field_name("name")
                 ftype = fd.child_by_field_name("type")
-                fattrs = ["primary_key"] if any("primary_key" in a for a in self.attributes_before(fd)) else []
+                fattrs = (
+                    ["primary_key"] if any("primary_key" in a for a in self.attributes_before(fd)) else []
+                )
                 if fname is not None:
-                    fields.append(FieldDef(name=self.text(fname), type=self.text(ftype) or None, attributes=fattrs))
+                    fields.append(
+                        FieldDef(name=self.text(fname), type=self.text(ftype) or None, attributes=fattrs)
+                    )
             self.fa.schemas.append(
                 SchemaDef(
                     name=name,
@@ -3385,7 +3539,11 @@ class _RustExtractor(_Extractor):
         if fn is not None and fn.type == "field_expression" and "axum" in self.imported_packages():
             field = self.text(fn.child_by_field_name("field"))
             args_n = node.child_by_field_name("arguments")
-            args = [c for c in args_n.named_children if c.type not in _COMMENT_TYPES] if args_n is not None else []
+            args = (
+                [c for c in args_n.named_children if c.type not in _COMMENT_TYPES]
+                if args_n is not None
+                else []
+            )
             if field == "route" and len(args) == 2:
                 path = self.string_value(args[0])
                 if path is not None:
@@ -3404,9 +3562,15 @@ class _RustExtractor(_Extractor):
             elif field in ("nest", "nest_service") and len(args) == 2:
                 prefix = self.string_value(args[0])
                 target = args[1]
-                tp = self.parts(target.child_by_field_name("function")) if target.type == "call_expression" else self.parts(target)
+                tp = (
+                    self.parts(target.child_by_field_name("function"))
+                    if target.type == "call_expression"
+                    else self.parts(target)
+                )
                 if prefix is not None and tp:
-                    self.fa.mounts.append(MountDef(parent=None, target=tp, prefix=prefix, line=self.line(node)))
+                    self.fa.mounts.append(
+                        MountDef(parent=None, target=tp, prefix=prefix, line=self.line(node))
+                    )
         self.visit_children(node)
 
     def method_router(self, node: Node) -> list[tuple[str, Node | None]]:
@@ -3415,7 +3579,9 @@ class _RustExtractor(_Extractor):
             return []
         fn = node.child_by_field_name("function")
         args_n = node.child_by_field_name("arguments")
-        args = [c for c in args_n.named_children if c.type not in _COMMENT_TYPES] if args_n is not None else []
+        args = (
+            [c for c in args_n.named_children if c.type not in _COMMENT_TYPES] if args_n is not None else []
+        )
         if fn is None:
             return []
         if fn.type == "field_expression":
@@ -3564,7 +3730,9 @@ class _CSharpExtractor(_Extractor):
                     resolved_dir = self.index.dir_with_suffix("/".join(segs[start:]))
                     if resolved_dir is not None:
                         break
-        internal = resolved_dir is not None or (self.namespace_root is not None and segs[0] == self.namespace_root)
+        internal = resolved_dir is not None or (
+            self.namespace_root is not None and segs[0] == self.namespace_root
+        )
         self.add_import(
             module,
             node,
@@ -3602,7 +3770,8 @@ class _CSharpExtractor(_Extractor):
         )
         prefix: str | None = None
         is_ctrl = "ApiController" in attr_names or (
-            name.endswith("Controller") and any(b.split("<")[0] in ("Controller", "ControllerBase") for b in bases)
+            name.endswith("Controller")
+            and any(b.split("<")[0] in ("Controller", "ControllerBase") for b in bases)
         )
         if is_ctrl:
             controller = name[: -len("Controller")] if name.endswith("Controller") else name
@@ -3648,9 +3817,19 @@ class _CSharpExtractor(_Extractor):
                     continue
                 template = v[0] if v else (method_route or "")
                 template = template.replace("[action]", name)
-                full = "/" + template.lstrip("~/") if template.startswith(("/", "~/")) else _join_path(prefix, template)
+                full = (
+                    "/" + template.lstrip("~/")
+                    if template.startswith(("/", "~/"))
+                    else _join_path(prefix, template)
+                )
                 self.add_route(
-                    verb, template or "/", member, "aspnet", router=cls.name, handler=sym.qualname, full_path=full
+                    verb,
+                    template or "/",
+                    member,
+                    "aspnet",
+                    router=cls.name,
+                    handler=sym.qualname,
+                    full_path=full,
                 )
         self.visit_body(body, sym.qualname)
 
@@ -3687,7 +3866,9 @@ class _CSharpExtractor(_Extractor):
                 name = d.child_by_field_name("name") or next(
                     (c for c in d.named_children if c.type == "identifier"), None
                 )
-                inv = next((c for c in self.descendants(d, limit=50) if c.type == "invocation_expression"), None)
+                inv = next(
+                    (c for c in self.descendants(d, limit=50) if c.type == "invocation_expression"), None
+                )
                 if name is not None and inv is not None:
                     p = self.parts(inv.child_by_field_name("function"))
                     arglist = inv.child_by_field_name("arguments")
@@ -3702,7 +3883,10 @@ class _CSharpExtractor(_Extractor):
                             self.add_router(self.text(name), "aspnet_group", d)
                             self.fa.mounts.append(
                                 MountDef(
-                                    parent=".".join(p[:-1]), target=[self.text(name)], prefix=prefix, line=self.line(d)
+                                    parent=".".join(p[:-1]),
+                                    target=[self.text(name)],
+                                    prefix=prefix,
+                                    line=self.line(d),
                                 )
                             )
                 break
@@ -3748,7 +3932,11 @@ class _RubyExtractor(_Extractor):
             name = node.child_by_field_name("name")
             base = self.parts(scope) if scope is not None else []
             return [*base, self.text(name)] if base is not None and name is not None else None
-        if t == "call" and node.child_by_field_name("arguments") is None and node.child_by_field_name("block") is None:
+        if (
+            t == "call"
+            and node.child_by_field_name("arguments") is None
+            and node.child_by_field_name("block") is None
+        ):
             recv = node.child_by_field_name("receiver")
             meth = node.child_by_field_name("method")
             base = self.parts(recv) if recv is not None else []
@@ -3813,7 +4001,9 @@ class _RubyExtractor(_Extractor):
             if any(b in ("ApplicationRecord", "ActiveRecord::Base") for b in bases):
                 model = (name.rsplit(".", 1)[-1], [])
             if any(b in ("ApplicationJob", "ActiveJob::Base") for b in bases):
-                self.fa.tasks.append(TaskDef(name=name, technology="activejob", line=self.line(node), symbol=qual))
+                self.fa.tasks.append(
+                    TaskDef(name=name, technology="activejob", line=self.line(node), symbol=qual)
+                )
         self.containers.append(qual)
         self.scope.append(qual)
         self.model_stack.append(model)
@@ -3851,9 +4041,11 @@ class _RubyExtractor(_Extractor):
             node,
             parent=self.containers[-1] if in_class else None,
             exported=True,
-            signature=self.signature(node, None, None) if params is None else " ".join(
-                self.src[node.start_byte : params.end_byte].decode("utf-8", "replace").split()
-            )[:_MAX_SIGNATURE_CHARS],
+            signature=self.signature(node, None, None)
+            if params is None
+            else " ".join(self.src[node.start_byte : params.end_byte].decode("utf-8", "replace").split())[
+                :_MAX_SIGNATURE_CHARS
+            ],
         )
         _ = singleton
         self.visit_body(node.child_by_field_name("body") or node, sym.qualname)
@@ -3881,11 +4073,15 @@ class _RubyExtractor(_Extractor):
             if len(parts) == 2 and parts[0][:1].isupper():
                 if meth in ("perform_async", "perform_in", "perform_at"):
                     self.fa.publishes.append(
-                        PublishRef(caller=self.caller(), task=parts[0], technology="sidekiq", line=self.line(node))
+                        PublishRef(
+                            caller=self.caller(), task=parts[0], technology="sidekiq", line=self.line(node)
+                        )
                     )
                 elif meth in ("perform_later", "perform_now", "set"):
                     self.fa.publishes.append(
-                        PublishRef(caller=self.caller(), task=parts[0], technology="activejob", line=self.line(node))
+                        PublishRef(
+                            caller=self.caller(), task=parts[0], technology="activejob", line=self.line(node)
+                        )
                     )
         self.visit_children(node)
 
@@ -3909,7 +4105,11 @@ class _RubyExtractor(_Extractor):
     def handle_dsl(self, node: Node, meth: str, args: list[Node]) -> bool:
         """Receiver-less DSL calls: routes, associations, includes. True when fully handled."""
         model = self.model_stack[-1] if self.model_stack else None
-        if model is not None and meth in ("has_many", "belongs_to", "has_one", "has_and_belongs_to_many") and args:
+        if (
+            model is not None
+            and meth in ("has_many", "belongs_to", "has_one", "has_and_belongs_to_many")
+            and args
+        ):
             assoc = self.sym_value(args[0])
             if assoc:
                 opts = self.hash_opts(args[1:])
@@ -3923,9 +4123,13 @@ class _RubyExtractor(_Extractor):
             mod = self.text(args[0])
             if mod in ("Sidekiq::Worker", "Sidekiq::Job"):
                 cls = self.containers[-1]
-                self.fa.tasks.append(TaskDef(name=cls, technology="sidekiq", line=self.line(node), symbol=cls))
+                self.fa.tasks.append(
+                    TaskDef(name=cls, technology="sidekiq", line=self.line(node), symbol=cls)
+                )
             return False
-        framework = "rails" if self.is_routes_file else "sinatra" if "sinatra" in self.imported_packages() else None
+        framework = (
+            "rails" if self.is_routes_file else "sinatra" if "sinatra" in self.imported_packages() else None
+        )
         if framework is None:
             return False
         block = node.child_by_field_name("block")
@@ -3974,11 +4178,13 @@ class _RubyExtractor(_Extractor):
             to = self.string_value(args[0]) or self.string_value(self.hash_opts(args).get("to"))
             if to and "#" in to:
                 c, a = to.split("#", 1)
-                self.add_route("GET", "/", node, "rails", handler_ref=[_camelize(c) + "Controller", a], full_path="/")
+                self.add_route(
+                    "GET", "/", node, "rails", handler_ref=[_camelize(c) + "Controller", a], full_path="/"
+                )
             return True
         if meth in _RAILS_VERBS and args:
             path = self.string_value(args[0])
-            to: str | None = None
+            to = None
             if path is None and args[0].type == "pair":
                 path = self.string_value(args[0].child_by_field_name("key"))
                 to = self.string_value(args[0].child_by_field_name("value"))
@@ -3990,9 +4196,13 @@ class _RubyExtractor(_Extractor):
             if to and "#" in to:
                 c, a = to.split("#", 1)
                 ref = ["::".join([*self.ctrl_modules, _camelize(c) + "Controller"]), a]
-            verbs = [meth.upper()] if meth != "match" else [
-                v.upper() for v in (self.sym_value(c) for c in self.descendants(opts["via"])) if v
-            ] if "via" in opts else ["ANY"]
+            verbs = (
+                [meth.upper()]
+                if meth != "match"
+                else [v.upper() for v in (self.sym_value(c) for c in self.descendants(opts["via"])) if v]
+                if "via" in opts
+                else ["ANY"]
+            )
             full = _join_path(*self.route_prefix, path)
             for v in verbs or ["ANY"]:
                 self.add_route(v, path, node, framework, handler_ref=ref, full_path=full)
@@ -4085,7 +4295,12 @@ class _PhpExtractor(_Extractor):
             self.visit_children(node)
         elif t == "namespace_use_declaration":
             self.use_decl(node)
-        elif t in ("include_expression", "include_once_expression", "require_expression", "require_once_expression"):
+        elif t in (
+            "include_expression",
+            "include_once_expression",
+            "require_expression",
+            "require_once_expression",
+        ):
             self.include(node)
         elif t in ("class_declaration", "interface_declaration", "trait_declaration", "enum_declaration"):
             self.class_decl(node)
@@ -4098,10 +4313,20 @@ class _PhpExtractor(_Extractor):
                 if p == ["dispatch"]:
                     for a in self.args(node):
                         if a.type == "object_creation_expression":
-                            cp = self.parts(next((c for c in a.named_children if c.type in ("name", "qualified_name")), None))
+                            cp = self.parts(
+                                next(
+                                    (c for c in a.named_children if c.type in ("name", "qualified_name")),
+                                    None,
+                                )
+                            )
                             if cp:
                                 self.fa.publishes.append(
-                                    PublishRef(caller=self.caller(), task=cp[-1], technology="laravel_queue", line=self.line(node))
+                                    PublishRef(
+                                        caller=self.caller(),
+                                        task=cp[-1],
+                                        technology="laravel_queue",
+                                        line=self.line(node),
+                                    )
                                 )
             self.visit_children(node)
         elif t in ("member_call_expression", "nullsafe_member_call_expression"):
@@ -4123,27 +4348,44 @@ class _PhpExtractor(_Extractor):
         clauses: list[tuple[str, str | None]] = []
         if group is not None:
             prefix = self.text(prefix_n) if prefix_n is not None else ""
-            for cl in (c for c in group.named_children if c.type in ("namespace_use_clause", "namespace_use_group_clause")):
-                nm = next((c for c in cl.named_children if c.type in ("name", "qualified_name", "namespace_name")), None)
+            for cl in (
+                c
+                for c in group.named_children
+                if c.type in ("namespace_use_clause", "namespace_use_group_clause")
+            ):
+                nm = next(
+                    (c for c in cl.named_children if c.type in ("name", "qualified_name", "namespace_name")),
+                    None,
+                )
                 al = cl.child_by_field_name("alias")
                 if nm is not None:
                     clauses.append((f"{prefix}\\{self.text(nm)}", self.text(al) if al is not None else None))
         else:
             for cl in (c for c in node.named_children if c.type == "namespace_use_clause"):
-                nm = next((c for c in cl.named_children if c.type in ("qualified_name", "name", "namespace_name")), None)
+                nm = next(
+                    (c for c in cl.named_children if c.type in ("qualified_name", "name", "namespace_name")),
+                    None,
+                )
                 al = cl.child_by_field_name("alias")
                 if al is None:
                     names = [c for c in cl.named_children if c.type == "name"]
                     al = names[-1] if nm is not None and nm.type == "qualified_name" and names else None
                 if nm is not None:
-                    clauses.append((self.text(nm).lstrip("\\"), self.text(al) if al is not None and al != nm else None))
+                    clauses.append(
+                        (self.text(nm).lstrip("\\"), self.text(al) if al is not None and al != nm else None)
+                    )
         root = (self.namespace or "").split("\\")[0]
         for fqcn, alias in clauses:
             resolved = self.resolve_class(fqcn)
             segs = fqcn.split("\\")
             internal = resolved is not None or (bool(root) and segs[0] == root)
             self.add_import(
-                fqcn, node, names=[segs[-1]], alias=alias, resolved_path=resolved, external=not internal,
+                fqcn,
+                node,
+                names=[segs[-1]],
+                alias=alias,
+                resolved_path=resolved,
+                external=not internal,
                 package=segs[0],
             )
             local = alias or segs[-1]
@@ -4217,7 +4459,9 @@ class _PhpExtractor(_Extractor):
         base_names = {b.rsplit("\\", 1)[-1] for b in bases}
         is_model = bool(base_names & _ELOQUENT_BASES)
         if "ShouldQueue" in base_names:
-            self.fa.tasks.append(TaskDef(name=name, technology="laravel_queue", line=self.line(node), symbol=sym.qualname))
+            self.fa.tasks.append(
+                TaskDef(name=name, technology="laravel_queue", line=self.line(node), symbol=sym.qualname)
+            )
         fields: list[FieldDef] = []
         table: str | None = None
         self.containers.append(sym.qualname)
@@ -4232,7 +4476,9 @@ class _PhpExtractor(_Extractor):
                     for el in (c for c in member.named_children if c.type == "property_element"):
                         var = next((c for c in el.named_children if c.type == "variable_name"), None)
                         vname = self.text(var).lstrip("$") if var is not None else ""
-                        strings = [s for s in (self.string_value(d) for d in self.descendants(el)) if s is not None]
+                        strings = [
+                            s for s in (self.string_value(d) for d in self.descendants(el)) if s is not None
+                        ]
                         if vname == "fillable":
                             fields += [FieldDef(name=s) for s in strings]
                         elif vname == "table" and strings:
@@ -4276,12 +4522,19 @@ class _PhpExtractor(_Extractor):
         for a, pos, named in attrs:
             if a != "Route" or not pos:
                 continue
-            methods = [
-                v.upper() for v in (self.string_value(d) for d in self.descendants(named["methods"])) if v
-            ] if "methods" in named else ["ANY"]
+            methods = (
+                [v.upper() for v in (self.string_value(d) for d in self.descendants(named["methods"])) if v]
+                if "methods" in named
+                else ["ANY"]
+            )
             for m in methods:
                 self.add_route(
-                    m, pos[0], member, "symfony", router=cls.name, handler=sym.qualname,
+                    m,
+                    pos[0],
+                    member,
+                    "symfony",
+                    router=cls.name,
+                    handler=sym.qualname,
                     full_path=_join_path(prefix, pos[0]),
                 )
         relation: FieldDef | None = None
@@ -4297,7 +4550,9 @@ class _PhpExtractor(_Extractor):
                         elif args:
                             target = (self.string_value(args[0]) or "").rsplit("\\", 1)[-1] or None
                         relation = FieldDef(
-                            name=name, relation=target, attributes=[mn] + (["fk"] if mn == "belongsTo" else [])
+                            name=name,
+                            relation=target,
+                            attributes=[mn] + (["fk"] if mn == "belongsTo" else []),
                         )
                         break
         self.visit_body(body, sym.qualname)
@@ -4370,9 +4625,16 @@ class _PhpExtractor(_Extractor):
         if node is None:
             return None
         if node.type == "array_creation_expression":
-            items = [c.named_children[0] for c in node.named_children if c.type == "array_element_initializer" and c.named_children]
+            items = [
+                c.named_children[0]
+                for c in node.named_children
+                if c.type == "array_element_initializer" and c.named_children
+            ]
             if len(items) == 2 and items[0].type == "class_constant_access_expression":
-                return [self.text(items[0].named_children[0]).rsplit("\\", 1)[-1], self.string_value(items[1]) or ""]
+                return [
+                    self.text(items[0].named_children[0]).rsplit("\\", 1)[-1],
+                    self.string_value(items[1]) or "",
+                ]
             return None
         if node.type == "class_constant_access_expression":
             return [self.text(node.named_children[0]).rsplit("\\", 1)[-1]]
@@ -4404,7 +4666,9 @@ class _PhpExtractor(_Extractor):
             verbs = [v.upper() for v in (self.string_value(d) for d in self.descendants(args[0])) if v]
             ref = self.laravel_handler(args[2]) if len(args) > 2 else None
             for v in verbs or ["ANY"]:
-                self.add_route(v, path, node, "laravel", handler_ref=ref, full_path=_join_path(*self.route_prefix, path))
+                self.add_route(
+                    v, path, node, "laravel", handler_ref=ref, full_path=_join_path(*self.route_prefix, path)
+                )
         elif meth in ("resource", "apiResource") and len(args) >= 2:
             name = self.string_value(args[0])
             ref = self.laravel_handler(args[1])
@@ -4427,7 +4691,9 @@ class _PhpExtractor(_Extractor):
 
 # --------------------------------------------------------------------------------------------------- Prisma
 
-_PRISMA_BLOCK_RE: Final = re.compile(r"^\s*(model|enum|view|type|datasource|generator)\s+([A-Za-z_]\w*)\s*\{(.*)$")
+_PRISMA_BLOCK_RE: Final = re.compile(
+    r"^\s*(model|enum|view|type|datasource|generator)\s+([A-Za-z_]\w*)\s*\{(.*)$"
+)
 _PRISMA_ATTR_RE: Final = re.compile(r"@[\w.]+(?:\((?:[^()\"]|\"[^\"]*\"|\((?:[^()\"]|\"[^\"]*\")*\))*\))?")
 
 
@@ -4492,7 +4758,9 @@ def _analyze_prisma(text: str, fa: FileAnalysis) -> None:
     for kind, name, start, end, body in blocks:
         if kind == "enum":
             values = [FieldDef(name=s.split()[0]) for _ln, s in body if s and not s.startswith("@")]
-            fa.schemas.append(SchemaDef(name=name, schema_kind="prisma_enum", start_line=start, end_line=end, fields=values))
+            fa.schemas.append(
+                SchemaDef(name=name, schema_kind="prisma_enum", start_line=start, end_line=end, fields=values)
+            )
             continue
         if kind == "datasource":
             provider = None
@@ -4501,7 +4769,13 @@ def _analyze_prisma(text: str, fa: FileAnalysis) -> None:
                 if pm is not None:
                     provider = pm.group(1)
             fa.infra.append(
-                InfraDef(resource_kind="prisma_datasource", name=name, provider=provider, start_line=start, end_line=end)
+                InfraDef(
+                    resource_kind="prisma_datasource",
+                    name=name,
+                    provider=provider,
+                    start_line=start,
+                    end_line=end,
+                )
             )
             continue
         if kind == "generator":
@@ -4547,7 +4821,9 @@ def _analyze_prisma(text: str, fa: FileAnalysis) -> None:
                 elif an.startswith("db."):
                     attrs.append(an)
             fields.append(
-                FieldDef(name=fname, type=ftype, relation=base if base in model_names else None, attributes=attrs)
+                FieldDef(
+                    name=fname, type=ftype, relation=base if base in model_names else None, attributes=attrs
+                )
             )
         for f in fields:
             if f.name in fk_names and "fk" not in f.attributes:
@@ -4555,7 +4831,9 @@ def _analyze_prisma(text: str, fa: FileAnalysis) -> None:
             if f.name in compound_ids and "primary_key" not in f.attributes:
                 f.attributes.append("primary_key")
         fa.schemas.append(
-            SchemaDef(name=name, schema_kind="prisma", start_line=start, end_line=end, fields=fields, table=table)
+            SchemaDef(
+                name=name, schema_kind="prisma", start_line=start, end_line=end, fields=fields, table=table
+            )
         )
 
 
@@ -4622,7 +4900,9 @@ class TreeSitterAnalyzer:
                     if lines
                     else "treesitter: syntax errors"
                 )
-            extractor = _EXTRACTORS[grammar](file, src, fa, self._repo_index(ctx), self._aliases(ctx), grammar)
+            extractor = _EXTRACTORS[grammar](
+                file, src, fa, self._repo_index(ctx), self._aliases(ctx), grammar
+            )
             extractor.run(root)
         except Exception as exc:  # the analyzer contract: never raise, record and degrade
             _log.warning("treesitter_analysis_failed", path=file.path, error=type(exc).__name__)
@@ -4668,6 +4948,12 @@ class TreeSitterAnalyzer:
             if not isinstance(k, str):
                 continue
             prefix = k.rstrip("*")
-            targets = [v] if isinstance(v, str) else [t for t in v if isinstance(t, str)] if isinstance(v, Sequence) else []
+            targets = (
+                [v]
+                if isinstance(v, str)
+                else [t for t in v if isinstance(t, str)]
+                if isinstance(v, Sequence)
+                else []
+            )
             out[prefix] = [t.rstrip("*").rstrip("/") for t in targets]
         return out

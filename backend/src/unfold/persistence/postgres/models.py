@@ -257,3 +257,13 @@ class EvalRunRow(Base):
 
 
 Index("ix_analysis_jobs_status_heartbeat", AnalysisJobRow.status, AnalysisJobRow.heartbeat_at)
+
+
+class JobEventRow(Base):
+    """Durable progress log (replaces the Redis stream). `id` is the replay cursor handed to clients."""
+
+    __tablename__ = "job_events"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    project_id: Mapped[uuid.UUID] = _project_fk()
+    event: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = _now()

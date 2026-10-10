@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import io
+import secrets
 import zipfile
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 import pytest
@@ -10,6 +12,7 @@ from fastapi import FastAPI
 
 from unfold.api.main import create_app
 from unfold.core.config import Settings
+from unfold.runtime import Runtime
 
 pytestmark = pytest.mark.integration
 
@@ -115,3 +118,90 @@ async def test_touch_extends_within_cap(client: httpx.AsyncClient) -> None:
     before = (await client.get("/api/v1/sessions/current")).json()["expires_at"]
     after = (await client.post("/api/v1/sessions/current/touch")).json()["expires_at"]
     assert after >= before
+
+
+# --- audit S-1 / S-2 / S-5 / S-7 -------------------------------------------------------------------
+
+
+@asynccontextmanager
+async def _app_client(settings: Settings, peer: str) -> AsyncIterator[tuple[FastAPI, httpx.AsyncClient]]:
+    application = create_app(settings)
+    async with application.router.lifespan_context(application):
+        transport = httpx.ASGITransport(app=application, client=(peer, 5000))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+            yield application, c
+
+
+def _peer() -> str:
+    return f"198.51.{secrets.randbelow(250) + 1}.{secrets.randbelow(250) + 1}"
+
+
+async def test_session_creation_is_limited_per_ip_and_forged_xff_does_not_help(settings: Settings) -> None:
+    limited = settings.model_copy(update={"max_sessions_per_ip_per_hour": 2})
+    async with _app_client(limited, _peer()) as (_, c):
+        for i in range(2):
+            ok = await c.post("/api/v1/sessions", headers={"X-Forwarded-For": f"10.0.0.{i}"})
+            assert ok.status_code == 201
+        blocked = await c.post("/api/v1/sessions", headers={"X-Forwarded-For": "10.0.9.9"})
+        assert blocked.status_code == 429
+        assert blocked.json()["error"]["code"] == "RATE_LIMITED"
+
+
+async def test_session_creation_has_a_global_ceiling(settings: Settings) -> None:
+    limited = settings.model_copy(update={"max_sessions_per_hour": 1})
+    async with _app_client(limited, _peer()) as (app, c):
+        rt: Runtime = app.state.runtime
+        await rt.limiter.delete_prefix("sessions:global")
+        assert (await c.post("/api/v1/sessions")).status_code == 201
+        assert (await c.post("/api/v1/sessions")).status_code == 429
+        await rt.limiter.delete_prefix("sessions:global")
+
+
+async def test_project_creation_is_limited_per_ip_across_sessions(settings: Settings) -> None:
+    limited = settings.model_copy(update={"max_projects_per_ip_per_hour": 2})
+    async with _app_client(limited, _peer()) as (_, c):
+        statuses = []
+        for _ in range(3):
+            await _session(c)  # a fresh session each time: the per-session limit alone would allow all
+            resp = await c.post(
+                "/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"}
+            )
+            statuses.append(resp.status_code)
+        assert statuses == [202, 202, 429]
+
+
+async def test_header_is_not_a_session_credential(client: httpx.AsyncClient) -> None:
+    token = await _session(client)
+    bare = httpx.AsyncClient(transport=client._transport, base_url="http://test")
+    resp = await bare.get("/api/v1/sessions/current", headers={"X-Unfold-Session": token})
+    await bare.aclose()
+    assert resp.status_code == 401
+
+
+async def test_stream_cap_rejects_extra_streams(app: FastAPI, client: httpx.AsyncClient) -> None:
+    sid = (await client.post("/api/v1/sessions")).json()["session_id"]
+    pid = (
+        await client.post("/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"})
+    ).json()["project_id"]
+    caps = app.state.streams
+    taken = 0
+    while caps.acquire(sid):
+        taken += 1
+    resp = await client.get(f"/api/v1/projects/{pid}/events")
+    assert resp.status_code == 429
+    for _ in range(taken):
+        caps.release(sid)
+
+
+async def test_events_replay_from_last_event_id(app: FastAPI, client: httpx.AsyncClient) -> None:
+    await _session(client)
+    pid = (
+        await client.post("/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"})
+    ).json()["project_id"]
+    rt: Runtime = app.state.runtime
+    first = await rt.progress.publish(pid, {"type": "stage", "stage": "INVENTORY"})
+    await rt.progress.publish(pid, {"type": "ready", "stage": "READY"})
+    resp = await client.get(f"/api/v1/projects/{pid}/events", headers={"Last-Event-ID": str(first)})
+    assert resp.status_code == 200
+    assert "event: ready" in resp.text
+    assert "INVENTORY" not in resp.text

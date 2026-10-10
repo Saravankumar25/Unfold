@@ -1,4 +1,4 @@
-"""Job queue facade over arq (HLD D2). The api enqueues; the worker consumes. Queue names are fixed here."""
+"""`JobQueue` adapter over arq (HLD D2). The api enqueues; the worker consumes. Queue names are fixed here."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from arq.connections import RedisSettings
 
 from unfold.core.config import Settings
 from unfold.core.errors import ErrorCode, StoreUnavailable
+from unfold.ports import JobQueue
 
 ANALYSIS_QUEUE = "unfold:analysis"
 EXPORT_QUEUE = "unfold:export"
@@ -19,12 +20,12 @@ def redis_settings(settings: Settings) -> RedisSettings:
     return RedisSettings.from_dsn(settings.redis_url)
 
 
-class JobQueue:
+class ArqJobQueue(JobQueue):
     def __init__(self, pool: ArqRedis) -> None:
         self._pool = pool
 
     @classmethod
-    async def connect(cls, settings: Settings) -> JobQueue:
+    async def connect(cls, settings: Settings) -> ArqJobQueue:
         return cls(await create_pool(redis_settings(settings)))
 
     async def aclose(self) -> None:

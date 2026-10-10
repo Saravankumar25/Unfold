@@ -208,7 +208,8 @@ class ProviderBudget:
     ) -> Reservation | None:
         """Reserve capacity, waiting in ≤1 s steps up to the priority wait budget. None → budget exhausted.
 
-        Gives up immediately when the server hint (cooldown / daily quota / window) exceeds the remaining wait.
+        Gives up immediately when the server hint (cooldown / daily quota / window) exceeds the remaining wait;
+        a full concurrency limit is polled instead because its hint is only the lease ceiling.
         """
         budget = WAIT_BUDGET_S[priority] if max_wait_s is None else max(0.0, max_wait_s)
         deadline = time.monotonic() + budget
@@ -217,7 +218,13 @@ class ProviderBudget:
             if res is not None:
                 return res
             remaining = deadline - time.monotonic()
-            if remaining <= 0 or hint > remaining:
+            if remaining <= 0:
+                return None
+            if _reason == "concurrency":
+                # The hint is the lease expiry (a ceiling). In-flight calls normally finish far sooner, so poll.
+                await asyncio.sleep(max(0.01, min(self._step, remaining)))
+                continue
+            if hint > remaining:
                 return None
             await asyncio.sleep(max(0.01, min(self._step, hint, remaining)))
 

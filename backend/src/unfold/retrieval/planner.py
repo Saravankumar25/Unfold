@@ -486,7 +486,16 @@ _EVIDENCE_WORDS: dict[ContentType, frozenset[str]] = {
         {"deploy", "deployment", "docker", "kubernetes", "k8s", "terraform", "ci", "infra", "infrastructure"}
     ),
     ContentType.CONFIG: frozenset(
-        {"config", "configuration", "configured", "configurable", "settings", "env", "environment", "configure"}
+        {
+            "config",
+            "configuration",
+            "configured",
+            "configurable",
+            "settings",
+            "env",
+            "environment",
+            "configure",
+        }
     ),
     ContentType.TEST: frozenset({"test", "tests", "testing", "pytest", "coverage", "fixture", "fixtures"}),
     ContentType.DOCS: frozenset({"docs", "documentation", "readme", "guide", "documented"}),

@@ -231,7 +231,7 @@ Jinja2 templates render the **same structured content** (blocks, claim badges, d
 
 ## 20. HTTP API (`unfold.api`, prefix `/api/v1`)
 
-Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod) or header `X-Unfold-Session`. `require_session` → 401 `SESSION_REQUIRED`/`SESSION_EXPIRED`; ownership mismatch → 404.
+Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no header fallback. `require_session` → 401 `SESSION_REQUIRED`/`SESSION_EXPIRED`; ownership mismatch → 404.
 
 | Method & path | Result |
 |---|---|

@@ -2,7 +2,7 @@
 
 import { BookOpen, ChevronLeft, ChevronRight, Menu, MessageSquareText, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { EvidenceProvider, useEvidence } from "@/components/content/evidence-drawer";
 import { CodeView } from "@/components/content/code-view";
 import { InlineText } from "@/components/content/inline-text";
@@ -41,16 +41,16 @@ function SectionBlocks({ projectId, section, content }: { projectId: string; sec
 function GuideWorkspace() {
   const { project } = useProject();
   const guide = useResource(`guide:${project!.id}`, (signal) => api.getGuide(project!.id, signal));
-  const [sectionKey, setSectionKey] = useState<string | null>(null);
+  const [pickedKey, setSectionKey] = useState<string | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
-  const [variant, setVariant] = useState<SectionContent | null>(null);
+  const sectionKey = pickedKey ?? guide.data?.sections[0]?.key ?? null;
+  const [variantState, setVariantState] = useState<{ key: string; content: SectionContent } | null>(null);
+  const variant = variantState?.key === sectionKey ? variantState.content : null;
   const [variantBusy, setVariantBusy] = useState(false);
-  useEffect(() => { if (!sectionKey && guide.data?.sections.length) setSectionKey(guide.data.sections[0]!.key); }, [guide.data, sectionKey]);
-  useEffect(() => setVariant(null), [sectionKey]);
   const section = useResource(sectionKey ? `section:${project!.id}:${sectionKey}` : null, (signal) => api.getSection(project!.id, sectionKey!, signal));
   const sections = guide.data?.sections ?? [];
   const currentIndex = sections.findIndex((s) => s.key === sectionKey);
-  async function transform(kind: "simpler" | "deeper") { if (!sectionKey) return; setVariantBusy(true); try { const next = await api.sectionVariant(project!.id, sectionKey, kind); setVariant(next.content); } finally { setVariantBusy(false); } }
+  async function transform(kind: "simpler" | "deeper") { if (!sectionKey) return; setVariantBusy(true); try { const next = await api.sectionVariant(project!.id, sectionKey, kind); setVariantState({ key: sectionKey, content: next.content }); } finally { setVariantBusy(false); } }
   const nav = <nav aria-label="Guide chapters" className="flex h-full flex-col"><div className="border-b border-line p-5"><p className="m-0 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">Project guide</p><p className="mb-0 mt-1 font-serif text-[20px] font-medium">{guide.data?.estimated_read_minutes ?? "—"} min read</p></div><ol className="m-0 flex-1 list-none overflow-y-auto p-2">{sections.map((s, i) => <li key={s.key}><button type="button" onClick={() => { setSectionKey(s.key); setMobileNav(false); }} className={cn("flex w-full cursor-pointer items-start gap-3 rounded-s px-3 py-2.5 text-left", s.key === sectionKey ? "bg-paper-dim text-blueprint" : "text-ink-soft hover:bg-paper-dim")}><span className="mt-0.5 font-mono text-[10px] text-ink-faint">{String(i + 1).padStart(2, "0")}</span><span className="text-[13px] font-medium leading-snug">{s.title}</span></button></li>)}</ol></nav>;
   return <EvidenceProvider projectId={project!.id}>
     <ProjectTopbar project={project!} current="guide" leading={<Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chapters" onClick={() => setMobileNav((v) => !v)}><Menu size={17} /></Button>} actions={<ExportButton start={() => api.exportGuide(project!.id)} filename={`${project!.name || "unfold"}-guide.pdf`} size="sm" />} />

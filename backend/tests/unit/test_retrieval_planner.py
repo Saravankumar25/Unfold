@@ -26,7 +26,9 @@ PROV = Provenance(analyzer="test")
 
 
 def _file(path: str, **kw: Any) -> FileIR:
-    return FileIR(id=entity_id(PID, "file", path), name=path.rsplit("/", 1)[-1], path=path, provenance=PROV, **kw)
+    return FileIR(
+        id=entity_id(PID, "file", path), name=path.rsplit("/", 1)[-1], path=path, provenance=PROV, **kw
+    )
 
 
 def _sym(path: str, qualname: str, kind: str = "function") -> SymbolIR:
@@ -121,7 +123,9 @@ def test_extracts_code_identifiers() -> None:
 
 
 def test_extracts_dotted_calls_backticks_paths_routes() -> None:
-    ex = extract("What does `auth/service.py` do in Service.run() and pkg.mod.func when POST /api/upload runs?")
+    ex = extract(
+        "What does `auth/service.py` do in Service.run() and pkg.mod.func when POST /api/upload runs?"
+    )
     assert "auth/service.py" in ex.paths
     assert "Service.run" in ex.identifiers
     assert "pkg.mod.func" in ex.identifiers
@@ -175,7 +179,14 @@ def test_identifiers_do_not_trigger_intent_keywords() -> None:
 
 
 def test_expansion_table_is_bounded_and_intent_specific() -> None:
-    assert expansions_for(["authentication"], ()) == ["login", "token", "jwt", "session", "password", "authenticate"]
+    assert expansions_for(["authentication"], ()) == [
+        "login",
+        "token",
+        "jwt",
+        "session",
+        "password",
+        "authenticate",
+    ]
     db = expansions_for(["database"], ())
     assert {"model", "schema", "migration"} <= set(db)
     assert len(expansions_for(["auth", "db", "cache", "queue", "api"], ())) <= 12

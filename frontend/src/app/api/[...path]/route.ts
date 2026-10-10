@@ -9,6 +9,7 @@
  * - Hop-by-hop headers are dropped; `Set-Cookie` headers are forwarded individually (first-party cookie).
  */
 import type { NextRequest } from "next/server";
+import { clientAddress } from "@/lib/client-address";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,8 +53,10 @@ async function proxy(request: NextRequest): Promise<Response> {
   headers.set("accept-encoding", "identity");
   headers.set("x-forwarded-host", incoming.host);
   headers.set("x-forwarded-proto", incoming.protocol.replace(":", ""));
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) headers.set("x-forwarded-for", forwardedFor);
+  headers.delete("x-forwarded-for");
+  headers.delete("x-real-ip");
+  const clientIp = clientAddress(request);
+  if (clientIp) headers.set("x-forwarded-for", clientIp);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD" && request.body !== null;
   const init: RequestInit & { duplex?: "half" } = {

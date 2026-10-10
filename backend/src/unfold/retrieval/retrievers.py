@@ -27,7 +27,7 @@ from unfold.indexing.lexical import LexicalIndexCache
 from unfold.indexing.models import Chunk
 from unfold.indexing.store import ChunkRepository
 from unfold.indexing.tokenize import tokenize_query
-from unfold.persistence.object_store import ObjectStore
+from unfold.ports import BlobStore
 from unfold.project_ir.schema import Entity, ProjectIR
 from unfold.retrieval.config import (
     CHUNKABLE_LABELS,
@@ -81,7 +81,7 @@ class LexicalRetriever:
     def __init__(
         self,
         cache: LexicalIndexCache,
-        objects: ObjectStore,
+        objects: BlobStore,
         key: str,
         config: RetrievalConfig = DEFAULT_CONFIG,
     ) -> None:

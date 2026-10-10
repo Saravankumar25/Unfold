@@ -15,8 +15,6 @@ from unfold.core.ids import token_hash
 from unfold.persistence.postgres.models import ChatSessionRow, ProjectRow, SessionRow
 from unfold.runtime import Runtime
 
-SESSION_HEADER = "X-Unfold-Session"
-
 
 def get_runtime(request: Request) -> Runtime:
     rt: Runtime = request.app.state.runtime
@@ -34,7 +32,13 @@ class CurrentSession:
 
 
 def session_token_from(request: Request, cookie_name: str) -> str | None:
-    return request.cookies.get(cookie_name) or request.headers.get(SESSION_HEADER)
+    """Cookie only: a header fallback would widen where the token can leak (audit S-7)."""
+    return request.cookies.get(cookie_name)
+
+
+def client_ip(request: Request) -> str:
+    """Peer address as rewritten by the trusted-proxy middleware; a forged X-Forwarded-For is never honoured."""
+    return request.client.host if request.client else "unknown"
 
 
 async def require_session(request: Request, rt: RuntimeDep) -> CurrentSession:
@@ -85,5 +89,15 @@ async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tupl
 async def enforce_rate_limit(
     rt: Runtime, session: CurrentSession, bucket: str, limit: int, window_s: int
 ) -> None:
-    if not await rt.redis.hit_rate_limit(f"{bucket}:{session.id}", limit, window_s):
+    if not await rt.limiter.hit(f"{bucket}:{session.id}", limit, window_s):
         raise RateLimited(f"Too many requests; limit is {limit} per {window_s // 60 or 1} minute(s).")
+
+
+async def enforce_ip_limits(
+    rt: Runtime, request: Request, bucket: str, per_ip: int, global_limit: int, window_s: int = 3600
+) -> None:
+    """Per-IP and process-wide ceilings for unauthenticated or session-bypassing creation (audit S-1)."""
+    if not await rt.limiter.hit(f"{bucket}:ip:{client_ip(request)}", per_ip, window_s):
+        raise RateLimited("Too many requests from your network; try again later.")
+    if not await rt.limiter.hit(f"{bucket}:global", global_limit, window_s):
+        raise RateLimited("The service is busy; try again later.")

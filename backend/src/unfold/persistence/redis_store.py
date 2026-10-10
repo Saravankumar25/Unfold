@@ -1,4 +1,4 @@
-"""Redis adapter (ESD §4.5): ephemeral state only — queues, progress streams, rate limits, caches, locks."""
+"""Redis adapter (ESD §4.5): ephemeral state only — rate limits, caches, LLM coordination. No durable data."""
 
 from __future__ import annotations
 
@@ -8,10 +8,14 @@ import orjson
 from redis.asyncio import Redis
 
 from unfold.core.config import Settings
+from unfold.ports import RateLimiter
 
-
-def events_key(project_id: str) -> str:
-    return f"events:{project_id}"
+# INCR + EXPIRE as one atomic step; also repairs a counter left without a TTL by an older crash (audit S-4).
+_HIT = """
+local c = redis.call('INCR', KEYS[1])
+if c == 1 or redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+return c
+"""
 
 
 class RedisStore:
@@ -32,36 +36,26 @@ class RedisStore:
     async def set_json(self, key: str, value: Any, ttl_seconds: int) -> None:
         await self.client.set(key, orjson.dumps(value), ex=ttl_seconds)
 
-    # --- progress event streams (replayable SSE, HLD D10) ----------------------------------------
-    async def publish_event(self, project_id: str, event: dict[str, Any], *, maxlen: int = 500) -> str:
-        entry_id = await self.client.xadd(
-            events_key(project_id), {"data": orjson.dumps(event)}, maxlen=maxlen, approximate=True
-        )
-        await self.client.expire(events_key(project_id), 7 * 86_400)
-        return entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
-
-    async def read_events(
-        self, project_id: str, after: str = "0-0", *, block_ms: int = 15_000, count: int = 100
-    ) -> list[tuple[str, dict[str, Any]]]:
-        resp = await self.client.xread({events_key(project_id): after}, block=block_ms, count=count)
-        out: list[tuple[str, dict[str, Any]]] = []
-        for _stream, entries in resp or []:
-            for entry_id, fields in entries:
-                eid = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
-                out.append((eid, orjson.loads(fields[b"data"])))
-        return out
-
-    # --- fixed-window rate limit ------------------------------------------------------------------
-    async def hit_rate_limit(self, key: str, limit: int, window_seconds: int) -> bool:
-        """Return True when the call is allowed (counter within limit for the current window)."""
-        full = f"rl:{key}"
-        count = await self.client.incr(full)
-        if count == 1:
-            await self.client.expire(full, window_seconds)
-        return int(count) <= limit
-
     async def delete_prefix(self, prefix: str) -> int:
         deleted = 0
         async for key in self.client.scan_iter(match=f"{prefix}*", count=500):
             deleted += int(await self.client.delete(key))
         return deleted
+
+
+class RedisRateLimiter(RateLimiter):
+    """Fixed-window limiter. Phase 4 swaps in a DynamoDB (TTL items) implementation of the same port."""
+
+    def __init__(self, store: RedisStore) -> None:
+        self._store = store
+        self._hit = store.client.register_script(_HIT)
+
+    async def hit(self, key: str, limit: int, window_seconds: int) -> bool:
+        count = await self._hit(keys=[f"rl:{key}"], args=[window_seconds])
+        return int(count) <= limit
+
+    async def delete_prefix(self, prefix: str) -> int:
+        return await self._store.delete_prefix(f"rl:{prefix}")
+
+    async def ping(self) -> None:
+        await self._store.ping()

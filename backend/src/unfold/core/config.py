@@ -6,7 +6,7 @@ import json
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Conservative free-tier defaults. Override with LLM_MODEL_LIMITS (JSON) when providers change quotas.
@@ -20,6 +20,9 @@ DEFAULT_MODEL_LIMITS: dict[str, dict[str, int]] = {
     "openai/gpt-oss-120b": {"rpm": 30, "tpm": 8_000, "rpd": 1000, "concurrency": 2},
     "*": {"rpm": 5, "tpm": 200_000, "rpd": 100, "concurrency": 2},
 }
+
+_DEV_NEO4J_PASSWORD = "unfold-neo4j-pass"  # noqa: S105 - documented local-dev default, rejected in production
+_DEV_OBJECT_STORE_SECRET = "unfold-minio-secret"  # noqa: S105
 
 _SECRET_FIELDS = (
     "gemini_api_key_1",
@@ -50,12 +53,12 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_username: str = "neo4j"
-    neo4j_password: SecretStr = SecretStr("unfold-neo4j-pass")
+    neo4j_password: SecretStr = SecretStr(_DEV_NEO4J_PASSWORD)
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_prefix: str = "unfold_chunks"
     object_store_endpoint: str = "localhost:9000"
     object_store_access_key: str = "unfold"
-    object_store_secret_key: SecretStr = SecretStr("unfold-minio-secret")
+    object_store_secret_key: SecretStr = SecretStr(_DEV_OBJECT_STORE_SECRET)
     object_store_bucket: str = "unfold"
     object_store_secure: bool = False
 
@@ -95,6 +98,14 @@ class Settings(BaseSettings):
     max_repo_archive_bytes: int = 100 * 1024 * 1024
     max_projects_per_hour: int = 10
     max_chat_messages_per_minute: int = 30
+    max_sessions_per_ip_per_hour: int = 20
+    max_sessions_per_hour: int = 500
+    max_projects_per_ip_per_hour: int = 30
+    max_projects_per_hour_global: int = 200
+    max_streams_per_session: int = 3
+
+    # network trust: only these peers may set X-Forwarded-For (comma separated IPs/CIDRs; never "*")
+    trusted_proxy_ips: str = "127.0.0.1"
 
     # misc
     github_token: SecretStr | None = None
@@ -108,6 +119,30 @@ class Settings(BaseSettings):
     @classmethod
     def _blank_is_none(cls, v: object) -> object:
         return None if v in ("", None) else v
+
+    @model_validator(mode="after")
+    def _production_guard(self) -> Settings:
+        """Refuse to start in production with dev defaults (audit S-3)."""
+        if self.app_env != "production":
+            return self
+        problems: list[str] = []
+        if not self.cookie_secure:
+            problems.append("COOKIE_SECURE must be true")
+        if self.neo4j_password.get_secret_value() == _DEV_NEO4J_PASSWORD:
+            problems.append("NEO4J_PASSWORD is the development default")
+        if self.object_store_secret_key.get_secret_value() == _DEV_OBJECT_STORE_SECRET:
+            problems.append("OBJECT_STORE_SECRET_KEY is the development default")
+        if "unfold:unfold@" in self.database_url:
+            problems.append("DATABASE_URL uses the development credentials")
+        if "*" in self.trusted_proxy_ips:
+            problems.append("TRUSTED_PROXY_IPS must not contain '*'")
+        if problems:
+            raise ValueError("Unsafe production configuration: " + "; ".join(problems))
+        return self
+
+    @property
+    def trusted_proxies(self) -> list[str]:
+        return [p.strip() for p in self.trusted_proxy_ips.split(",") if p.strip()]
 
     @property
     def gemini_keys(self) -> list[SecretStr]:

@@ -80,3 +80,26 @@ def test_no_subprocess_or_eval_of_repository_content() -> None:
                 and node.func.id in {"eval", "exec"}
             ):
                 raise AssertionError(f"{path} calls {node.func.id}")
+
+
+# Redis-backed LLM coordination (Lua scripts for budget, circuit breaker, key pool) is pending a phase-4
+# decision; until then it is the only non-adapter code allowed to talk to Redis directly.
+_REDIS_COORDINATION = {
+    "unfold.llm._redis",
+    "unfold.llm.budget",
+    "unfold.llm.circuit",
+    "unfold.llm.key_pool",
+}
+_ADAPTER_SDKS = {
+    "redis": {"unfold.persistence.redis_store", *_REDIS_COORDINATION},
+    "arq": {"unfold.worker.queue"},
+    "minio": {"unfold.persistence.object_store"},
+}
+
+
+def test_infrastructure_sdks_only_in_adapters() -> None:
+    for mod, imports in MODULES.items():
+        for imp in imports:
+            root = imp.split(".")[0]
+            if root in _ADAPTER_SDKS:
+                assert mod in _ADAPTER_SDKS[root], f"{mod} imports {imp}; go through unfold.ports"

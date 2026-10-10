@@ -1,4 +1,4 @@
-"""S3-compatible object store (ESD §4.6). MinIO locally; any S3 API in production. Sync SDK → worker threads."""
+"""`BlobStore` adapter over the MinIO SDK (ESD §4.6). Sync SDK → worker threads. The S3 adapter replaces it in phase 4."""
 
 from __future__ import annotations
 
@@ -12,13 +12,12 @@ from minio.error import S3Error
 
 from unfold.core.config import Settings
 from unfold.core.errors import NotFound, StoreUnavailable
+from unfold.ports import BlobStore, project_prefix
+
+__all__ = ["MinioBlobStore", "project_prefix"]
 
 
-def project_prefix(project_id: str) -> str:
-    return f"projects/{project_id}/"
-
-
-class ObjectStore:
+class MinioBlobStore(BlobStore):
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.object_store_bucket
         self._client = Minio(

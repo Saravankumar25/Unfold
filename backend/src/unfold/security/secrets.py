@@ -38,6 +38,8 @@ _ASSIGNMENT = re.compile(
     (?P<q>["']?)(?P<val>[^\s"'`,;]{8,})(?P=q)
     """
 )
+# A quoted literal assigned to one of these keys is a credential however guessable it is ('hunter2hunter2').
+_STRONG_KEY = re.compile(r"(?i)secret|passwd|password|pwd")
 _PLACEHOLDER_HINTS = (
     "example",
     "changeme",
@@ -106,7 +108,8 @@ def redact(text: str) -> Redaction:
 
     for m in _ASSIGNMENT.finditer(text):
         val = m.group("val")
-        if _looks_like_placeholder(val) or shannon_entropy(val) < 3.0:
+        quoted_credential = bool(m.group("q")) and _STRONG_KEY.search(m.group("key")) is not None
+        if _looks_like_placeholder(val) or (shannon_entropy(val) < 3.0 and not quoted_credential):
             continue
         start, end = m.span("val")
         spans.append((start, end, len(_PATTERNS), "assignment"))

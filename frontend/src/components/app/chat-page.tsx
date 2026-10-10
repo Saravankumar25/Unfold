@@ -35,7 +35,13 @@ function Conversation() {
     setSelected(id);
     chats.mutate((current) => [{ id, project_id: project!.id, title: null, message_count: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...(current ?? [])]);
   });
-  useEffect(() => { if (selected === null && chats.data?.length) { setSelected(chats.data[0]!.id); thread.selectChat(chats.data[0]!.id); } }, [chats.data, selected, thread]);
+  const [autoSelected, setAutoSelected] = useState(false);
+  if (!autoSelected && selected === null && chats.data?.length) {
+    const first = chats.data[0]!.id;
+    setAutoSelected(true);
+    setSelected(first);
+    thread.selectChat(first);
+  }
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [thread.state.items]);
   async function submit(event?: FormEvent) { event?.preventDefault(); const value = text.trim(); if (!value || thread.streaming) return; setText(""); await thread.send(value, mode, sectionKey); }
   function chooseChat(id: string | null) { setSelected(id); thread.selectChat(id); setSideOpen(false); }

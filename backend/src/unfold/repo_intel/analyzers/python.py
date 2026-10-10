@@ -912,8 +912,8 @@ class _Extractor:
                 if inferred is not None:
                     scope.types[target.id] = inferred
         if isinstance(value, ast.Call):
-            for target in targets:
-                var = ".".join(dotted(target) or [])
+            for tgt in targets:
+                var = ".".join(dotted(tgt) or [])
                 if var:
                     self._maybe_router(var, value, stmt.lineno)
             callee = dotted(value.func)
@@ -1662,13 +1662,13 @@ class _Extractor:
         if not session_like and len(parts) >= 3 and parts[0] == "self":
             attr_type = self.attr_types.get(scope.class_qualname or "", {}).get(parts[1])
             session_like = bool(attr_type and attr_type[-1].endswith("Session"))
-        if session_like and last == "query" and first is not None:
-            add(self._model_arg(first, scope), "read", self._orm_name())
-        elif (
+        if (
             session_like
-            and last in ("get", "get_one", "scalar", "scalars")
             and first is not None
-            and _is_classlike(dotted(first))
+            and (
+                last == "query"
+                or (last in ("get", "get_one", "scalar", "scalars") and _is_classlike(dotted(first)))
+            )
         ):
             add(self._model_arg(first, scope), "read", self._orm_name())
         elif session_like and last in _SESSION_WRITE and first is not None:

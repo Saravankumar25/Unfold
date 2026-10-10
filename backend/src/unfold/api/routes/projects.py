@@ -6,6 +6,7 @@ Creation commits project + job first, then enqueues (outbox-equivalent: the stal
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import tempfile
 import uuid
@@ -20,17 +21,25 @@ from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
 
 from unfold import ANALYSIS_VERSION
-from unfold.api.deps import CurrentSession, RuntimeDep, SessionDep, enforce_rate_limit, owned_project
+from unfold.api.deps import (
+    CurrentSession,
+    RuntimeDep,
+    SessionDep,
+    enforce_ip_limits,
+    enforce_rate_limit,
+    owned_project,
+)
 from unfold.api.schemas import CreateGithubProject, JobOut, ProjectCreated, ProjectOut
-from unfold.core.errors import ErrorCode, InputError, UnfoldError
+from unfold.api.streams import StreamCap
+from unfold.core.errors import ErrorCode, InputError, RateLimited, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import InputType, JobStage, JobStatus, TechnicalLevel
 from unfold.ingestion.archive import ZIP_MAGIC
 from unfold.ingestion.github import parse_github_url
 from unfold.orchestration.progress import STAGE_TOTAL, stage_event
 from unfold.persistence.postgres.models import AnalysisJobRow, ProjectRow, SessionRow
+from unfold.ports import JobQueue
 from unfold.runtime import Runtime
-from unfold.worker.queue import JobQueue
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 log = get_logger(__name__)
@@ -67,6 +76,14 @@ async def latest_job(rt: Runtime, project_id: uuid.UUID) -> AnalysisJobRow:
             )
         ).scalar_one()
     return job
+
+
+async def _enforce_creation_limits(request: Request, rt: Runtime, session: CurrentSession) -> None:
+    cfg = rt.settings
+    await enforce_rate_limit(rt, session, "projects", cfg.max_projects_per_hour, 3600)
+    await enforce_ip_limits(
+        rt, request, "projects", cfg.max_projects_per_ip_per_hour, cfg.max_projects_per_hour_global
+    )
 
 
 async def _create(
@@ -119,7 +136,7 @@ async def _create(
     except UnfoldError as exc:
         # Committed but not enqueued: keep it `queued`; the sweeper re-enqueues within minutes.
         log.warning("project.enqueue_failed", project_id=str(project_id), code=exc.code.value)
-    await rt.redis.publish_event(str(project_id), stage_event("stage", JobStage.RECEIVED))
+    await rt.progress.publish(str(project_id), stage_event("stage", JobStage.RECEIVED))
     log.info("project.created", project_id=str(project_id), input_type=input_type.value)
     return ProjectCreated(project_id=str(project_id), job_id=str(job.id))
 
@@ -129,7 +146,7 @@ async def create_github_project(
     body: CreateGithubProject, request: Request, rt: RuntimeDep, session: SessionDep
 ) -> ProjectCreated:
     ref = parse_github_url(body.url)  # syntax only; publicness is checked by the worker (no network here)
-    await enforce_rate_limit(rt, session, "projects", rt.settings.max_projects_per_hour, 3600)
+    await _enforce_creation_limits(request, rt, session)
     fingerprint = f"github:{ref.owner.lower()}/{ref.repo.lower()}@{ref.ref or ''}"
     return await _create(
         request,
@@ -153,7 +170,7 @@ async def create_zip_project(
     technical_level: Annotated[TechnicalLevel, Form()] = TechnicalLevel.INTERMEDIATE,
     instruction: Annotated[str | None, Form(max_length=1000)] = None,
 ) -> ProjectCreated:
-    await enforce_rate_limit(rt, session, "projects", rt.settings.max_projects_per_hour, 3600)
+    await _enforce_creation_limits(request, rt, session)
     limit = rt.settings.max_zip_bytes
     with tempfile.TemporaryDirectory(prefix="unfold-upload-") as tmp:
         dest = Path(tmp) / "upload.zip"
@@ -225,50 +242,65 @@ async def delete_project(
 async def project_events(
     project_id: str, request: Request, rt: RuntimeDep, session: SessionDep
 ) -> EventSourceResponse:
-    """Replayable SSE (HLD D10): replays the Redis stream from `Last-Event-ID` (or the start), then tails it.
+    """Replayable SSE (HLD D10): replays the durable progress log after `Last-Event-ID`, then tails it.
 
-    If the stream expired, the current durable job state is emitted first so a client always converges.
+    Superseded by short-poll `GET /projects/{id}/progress` in phase 2; capped per session until then (S-5).
     """
     project = await owned_project(rt, session, project_id)
     pid = str(project.id)
-    last_id = request.headers.get("Last-Event-ID") or request.query_params.get("last_event_id") or "0-0"
+    caps: StreamCap = request.app.state.streams
+    cap_key = str(session.id)
+    if not caps.acquire(cap_key):
+        raise RateLimited("Too many open progress streams for this session.")
+    raw_cursor = request.headers.get("Last-Event-ID") or request.query_params.get("last_event_id") or "0"
+    start = int(raw_cursor) if raw_cursor.isdigit() else 0
 
     async def gen() -> AsyncIterator[dict[str, Any]]:
-        cursor = last_id
-        if cursor == "0-0":
-            job = await latest_job(rt, project.id)
-            stage = JobStage(job.current_stage)
-            if job.status == JobStatus.SUCCEEDED.value:
-                yield {"event": "ready", "data": _dump(stage_event("ready", JobStage.READY))}
-                return
-            if job.status == JobStatus.FAILED.value:
-                err = UnfoldError(
-                    str((job.error_detail or {}).get("message", stage.user_label)),
-                    code=ErrorCode(job.error_code or ErrorCode.INTERNAL_ERROR.value),
-                    retryable=job.retryable,
-                )
-                yield {"event": "failed", "data": _dump(stage_event("failed", stage, error=err))}
-                return
-        idle = 0
-        while not await request.is_disconnected():
-            events = await rt.redis.read_events(pid, cursor, block_ms=10_000)
-            if not events:
-                idle += 1
-                yield {
-                    "event": "heartbeat",
-                    "data": _dump(
-                        {**stage_event("heartbeat", JobStage.RECEIVED), "stage": "", "label": "", "index": -1}
-                    ),
-                }
-                if idle > 360:  # an hour without progress: let the client reconnect
+        try:
+            cursor = start
+            if cursor == 0:
+                job = await latest_job(rt, project.id)
+                stage = JobStage(job.current_stage)
+                if job.status == JobStatus.SUCCEEDED.value:
+                    yield {"event": "ready", "data": _dump(stage_event("ready", JobStage.READY))}
                     return
-                continue
+                if job.status == JobStatus.FAILED.value:
+                    err = UnfoldError(
+                        str((job.error_detail or {}).get("message", stage.user_label)),
+                        code=ErrorCode(job.error_code or ErrorCode.INTERNAL_ERROR.value),
+                        retryable=job.retryable,
+                    )
+                    yield {"event": "failed", "data": _dump(stage_event("failed", stage, error=err))}
+                    return
             idle = 0
-            for eid, event in events:
-                cursor = eid
-                yield {"event": event["type"], "id": eid, "data": _dump(event)}
-                if event["type"] in ("ready", "failed"):
-                    return
+            while not await request.is_disconnected():
+                events = await rt.progress.read_after(pid, cursor)
+                if not events:
+                    idle += 1
+                    if idle % 10 == 0:
+                        yield {
+                            "event": "heartbeat",
+                            "data": _dump(
+                                {
+                                    **stage_event("heartbeat", JobStage.RECEIVED),
+                                    "stage": "",
+                                    "label": "",
+                                    "index": -1,
+                                }
+                            ),
+                        }
+                    if idle > 3600:  # an hour without progress: let the client reconnect
+                        return
+                    await asyncio.sleep(1)
+                    continue
+                idle = 0
+                for seq, event in events:
+                    cursor = seq
+                    yield {"event": event["type"], "id": str(seq), "data": _dump(event)}
+                    if event["type"] in ("ready", "failed"):
+                        return
+        finally:
+            caps.release(cap_key)
 
     return EventSourceResponse(
         gen(), ping=15, headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}

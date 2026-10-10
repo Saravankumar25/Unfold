@@ -9,15 +9,17 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from unfold import __version__
 from unfold.api.errors import install_error_handling
 from unfold.api.routes import projects, sessions
+from unfold.api.streams import StreamCap
 from unfold.core.config import Settings, get_settings
 from unfold.core.logging import configure_logging, get_logger
 from unfold.observability.tracing import configure_tracing
 from unfold.runtime import Runtime
-from unfold.worker.queue import JobQueue
+from unfold.worker.queue import ArqJobQueue
 
 log = get_logger(__name__)
 API_PREFIX = "/api/v1"
@@ -32,7 +34,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rt = Runtime.create(settings)
         app.state.runtime = rt
-        app.state.queue = await JobQueue.connect(settings)
+        app.state.queue = await ArqJobQueue.connect(settings)
+        app.state.streams = StreamCap(settings.max_streams_per_session)
         await rt.objects.ensure_bucket()
         log.info("api.started", version=__version__, env=settings.app_env)
         try:
@@ -61,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rt: Runtime = app.state.runtime
         checks: dict[str, Any] = {
             "postgres": rt.db.ping(),
-            "redis": rt.redis.ping(),
+            "redis": rt.limiter.ping(),
             "neo4j": rt.neo4j.ping(),
             "qdrant": rt.qdrant.ping(),
             "object_store": rt.objects.ping(),
@@ -88,7 +91,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    install_proxy_trust(app, settings)  # last, so it runs first
     return app
+
+
+def install_proxy_trust(app: FastAPI, settings: Settings) -> None:
+    """Only trusted proxy peers may set the client address via X-Forwarded-For (audit S-2)."""
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxies)  # type: ignore[arg-type]
 
 
 def run() -> None:
@@ -99,6 +108,5 @@ def run() -> None:
         factory=True,
         host="0.0.0.0",  # noqa: S104 - container entrypoint binds all interfaces
         port=8000,
-        proxy_headers=True,
-        forwarded_allow_ips="*",
+        proxy_headers=False,  # create_app installs ProxyHeadersMiddleware with TRUSTED_PROXY_IPS
     )

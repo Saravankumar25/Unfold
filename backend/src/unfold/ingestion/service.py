@@ -12,7 +12,7 @@ from unfold.core.config import Settings
 from unfold.core.errors import ErrorCode, InputError
 from unfold.ingestion.archive import ExtractionLimits, ExtractionReport, safe_extract
 from unfold.ingestion.github import GitHubClient, parse_github_url
-from unfold.persistence.object_store import ObjectStore
+from unfold.ports import BlobStore
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ async def acquire_github(settings: Settings, locator: str, workdir: Path) -> Acq
 
 
 async def acquire_zip(
-    settings: Settings, objects: ObjectStore, upload_key: str | None, name: str, workdir: Path
+    settings: Settings, objects: BlobStore, upload_key: str | None, name: str, workdir: Path
 ) -> AcquiredSource:
     if not upload_key:
         raise InputError("The uploaded archive is missing.", code=ErrorCode.ZIP_INVALID)

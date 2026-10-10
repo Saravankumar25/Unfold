@@ -47,9 +47,12 @@ Action = Any
 class FakeProvider:
     """Scripted `Provider`: per-model queues of actions; records every call it receives."""
 
-    def __init__(self, name: str, tiers: dict[str, str | None], *, keys: int = 2) -> None:
+    def __init__(
+        self, name: str, tiers: dict[str, str | None], *, keys: int = 2, long_context: bool = True
+    ) -> None:
         self.name = name
         self._tiers = tiers
+        self._long_context = long_context
         self._keys = keys
         self.script: dict[str, list[Action]] = defaultdict(list)
         self.json_script: dict[str, list[Action]] = defaultdict(list)
@@ -61,6 +64,8 @@ class FakeProvider:
         return self._keys
 
     def models_for(self, capability: ModelCapability) -> list[str]:
+        if capability is ModelCapability.LONG_CONTEXT and not self._long_context:
+            return []  # mirrors GroqProvider: small windows, no long-context tier
         return tier_models(self._tiers, capability)
 
     def models_called(self) -> list[str]:
@@ -96,7 +101,10 @@ class FakeProvider:
             raise action
         data = action if isinstance(action, dict) else {"answer": f"from {model}", "score": 3}
         resp = LLMResponse(
-            text=json.dumps(data), provider=self.name, model=model, usage=Usage(input_tokens=5, output_tokens=5)
+            text=json.dumps(data),
+            provider=self.name,
+            model=model,
+            usage=Usage(input_tokens=5, output_tokens=5),
         )
         return data, resp
 
@@ -117,7 +125,9 @@ def _gemini() -> FakeProvider:
 
 
 def _groq() -> FakeProvider:
-    return FakeProvider("groq", {"fast": "q-fast", "balanced": "q-bal", "reasoning": "q-bal"})
+    return FakeProvider(
+        "groq", {"fast": "q-fast", "balanced": "q-bal", "reasoning": "q-bal"}, long_context=False
+    )
 
 
 def _req(capability: ModelCapability = ModelCapability.FAST, **kw: Any) -> LLMRequest:
@@ -496,7 +506,7 @@ async def test_budget_tpm_commit_replaces_estimate_and_frees_slot(h: Harness) ->
     budget = ProviderBudget(settings, h.runtime.redis.client, prefix=h.prefix)
     r1, _, _ = await budget.try_reserve("m1", 900)
     assert r1 is not None
-    blocked, _, reason = await budget.try_reserve("m1", 10)
+    blocked, _, reason = await budget.try_reserve("m1", 200)  # 900 + 200 > 1000
     assert blocked is None and reason == "tpm"
     await budget.commit(r1, 50)  # actual usage was far below the estimate; slot freed
     snap = await budget.snapshot("m1")

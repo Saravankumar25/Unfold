@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from sqlalchemy import select
 
-from unfold.api.deps import RuntimeDep, SessionDep
+from unfold.api.deps import RuntimeDep, SessionDep, enforce_ip_limits
 from unfold.api.schemas import ProjectSummary, SessionCurrentOut, SessionOut
 from unfold.core.config import Settings
 from unfold.core.ids import new_session_token, token_hash
@@ -29,7 +29,11 @@ def _set_cookie(response: Response, settings: Settings, token: str, expires_at: 
 
 
 @router.post("", status_code=201, response_model=SessionOut)
-async def create_session(response: Response, rt: RuntimeDep) -> SessionOut:
+async def create_session(request: Request, response: Response, rt: RuntimeDep) -> SessionOut:
+    cfg = rt.settings
+    await enforce_ip_limits(
+        rt, request, "sessions", cfg.max_sessions_per_ip_per_hour, cfg.max_sessions_per_hour
+    )
     token = new_session_token()
     now = datetime.now(UTC)
     row = SessionRow(

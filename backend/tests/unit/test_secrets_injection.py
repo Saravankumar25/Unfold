@@ -26,6 +26,14 @@ def test_redacts_high_entropy_assignment_keeps_key_name() -> None:
     assert REDACTED in r.text
 
 
+def test_redacts_quoted_low_entropy_password_literal() -> None:
+    r = redact("config: password = 'hunter2hunter2' and more")
+    assert "hunter2hunter2" not in r.text
+    assert r.text.startswith("config: password")
+    # Unquoted low-entropy values stay (they are usually identifiers, not literals).
+    assert redact("password = aaaabbbbcccc").text == "password = aaaabbbbcccc"
+
+
 def test_does_not_redact_placeholders_or_env_lookups() -> None:
     for text in (
         'API_KEY = os.environ["API_KEY"]',

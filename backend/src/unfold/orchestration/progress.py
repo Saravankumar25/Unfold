@@ -1,4 +1,4 @@
-"""Job progress: durable stage in Postgres first, then a replayable event in Redis (LLD §5, HLD D10).
+"""Job progress: durable stage on the job row, then an ordered replayable event in the ProgressStore (LLD §5, HLD D10).
 
 Progress reflects real stages only (PRD §7.2). A stage is published after its predecessor's writes committed.
 """
@@ -18,7 +18,7 @@ from unfold.domain.enums import PIPELINE, JobStage, JobStatus, check_transition
 from unfold.observability.tracing import tracer
 from unfold.persistence.postgres.db import Database
 from unfold.persistence.postgres.models import AnalysisJobRow
-from unfold.persistence.redis_store import RedisStore
+from unfold.ports import ProgressStore
 
 log = get_logger(__name__)
 STAGE_TOTAL = len(PIPELINE)
@@ -43,9 +43,9 @@ def stage_event(
 
 
 class ProgressReporter:
-    def __init__(self, db: Database, redis: RedisStore, project_id: str, job_id: str) -> None:
+    def __init__(self, db: Database, progress: ProgressStore, project_id: str, job_id: str) -> None:
         self.db = db
-        self.redis = redis
+        self.progress = progress
         self.project_id = project_id
         self.job_id = uuid.UUID(job_id)
 
@@ -79,7 +79,7 @@ class ProgressReporter:
                 progress["detail"] = detail
             row.stage_progress = progress
             row.heartbeat_at = datetime.now(UTC)
-        await self.redis.publish_event(self.project_id, stage_event("stage", stage, detail=detail))
+        await self.progress.publish(self.project_id, stage_event("stage", stage, detail=detail))
         span = tracer.start_span(
             "job.stage", attributes={"stage": stage.value, "project_id": self.project_id}
         )
@@ -108,7 +108,7 @@ class ProgressReporter:
             row.status = JobStatus.SUCCEEDED.value
             row.completed_at = datetime.now(UTC)
             row.retryable = False
-        await self.redis.publish_event(self.project_id, stage_event("ready", JobStage.READY))
+        await self.progress.publish(self.project_id, stage_event("ready", JobStage.READY))
         log.info("job.ready")
 
     async def fail(self, error: UnfoldError, *, will_retry: bool) -> None:
@@ -126,5 +126,5 @@ class ProgressReporter:
                 row.current_stage = failure.value
                 row.completed_at = datetime.now(UTC)
         if not will_retry:
-            await self.redis.publish_event(self.project_id, stage_event("failed", failure, error=error))
+            await self.progress.publish(self.project_id, stage_event("failed", failure, error=error))
         log.warning("job.failed", code=error.code.value, will_retry=will_retry, stage=failure.value)

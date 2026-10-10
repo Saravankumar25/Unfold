@@ -71,6 +71,11 @@ def settings(migrated_database: str) -> Settings:
         redis_url=TEST_REDIS_URL,
         object_store_bucket="unfold-test",
         qdrant_collection_prefix="unfold_test",
+        # One shared test client IP would trip the real ceilings; the limit tests build their own app.
+        max_sessions_per_ip_per_hour=100_000,
+        max_sessions_per_hour=100_000,
+        max_projects_per_ip_per_hour=100_000,
+        max_projects_per_hour_global=100_000,
     )
 
 

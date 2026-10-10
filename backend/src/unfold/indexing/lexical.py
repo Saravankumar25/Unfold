@@ -23,7 +23,7 @@ from unfold.core.logging import get_logger
 from unfold.indexing.errors import LexicalIndexError
 from unfold.indexing.models import CHUNKER_VERSION, Chunk
 from unfold.indexing.tokenize import tokenize, tokenize_query
-from unfold.persistence.object_store import ObjectStore
+from unfold.ports import BlobStore
 
 log = get_logger(__name__)
 
@@ -97,7 +97,7 @@ class LexicalArtifact:
             raise LexicalIndexError(f"Lexical index artifact is unreadable: {type(exc).__name__}") from exc
         return cls(retriever, chunk_ids, meta)
 
-    async def save(self, objects: ObjectStore, project_id: str, version: str) -> str:
+    async def save(self, objects: BlobStore, project_id: str, version: str) -> str:
         key = lexical_key(project_id, version)
         data = await asyncio.to_thread(self.to_bytes)
         await objects.put_bytes(key, data, content_type="application/zip")
@@ -146,7 +146,7 @@ class LexicalIndexCache:
     def invalidate(self, key: str) -> None:
         self._items.pop(key, None)
 
-    async def get(self, objects: ObjectStore, key: str) -> LexicalArtifact:
+    async def get(self, objects: BlobStore, key: str) -> LexicalArtifact:
         hit = self._items.get(key)
         if hit is not None:
             self._items.move_to_end(key)
@@ -160,8 +160,6 @@ class LexicalIndexCache:
             self.put(key, artifact)
             return artifact
 
-    async def search(
-        self, objects: ObjectStore, key: str, query: str, k: int = 40
-    ) -> list[tuple[str, float]]:
+    async def search(self, objects: BlobStore, key: str, query: str, k: int = 40) -> list[tuple[str, float]]:
         artifact = await self.get(objects, key)
         return artifact.search(query, k)

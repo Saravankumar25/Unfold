@@ -38,9 +38,3 @@ class Database:
 
     async def dispose(self) -> None:
         await self.engine.dispose()
-
-    @property
-    def psycopg_dsn(self) -> str:
-        """DSN for LangGraph's psycopg-based checkpointer."""
-        url = self.engine.url.set(drivername="postgresql")
-        return url.render_as_string(hide_password=False)

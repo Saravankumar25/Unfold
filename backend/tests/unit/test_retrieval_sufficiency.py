@@ -26,7 +26,9 @@ def _chunk(path: str, text: str, *, start: int = 1, ctype: ContentType = Content
     )
 
 
-def _item(chunk: Chunk, *, rerank: float | None = 3.0, fused: float = 0.05, expansion: bool = False) -> RetrievedItem:
+def _item(
+    chunk: Chunk, *, rerank: float | None = 3.0, fused: float = 0.05, expansion: bool = False
+) -> RetrievedItem:
     return RetrievedItem(
         chunk=chunk,
         score=rerank if rerank is not None else fused,
@@ -38,7 +40,9 @@ def _item(chunk: Chunk, *, rerank: float | None = 3.0, fused: float = 0.05, expa
 
 
 def _result(plan: RetrievalPlan, items: list[RetrievedItem]) -> RetrievalResult:
-    return RetrievalResult(plan=plan, items=items, trace=RetrievalTrace(config_version=RETRIEVAL_CONFIG_VERSION))
+    return RetrievalResult(
+        plan=plan, items=items, trace=RetrievalTrace(config_version=RETRIEVAL_CONFIG_VERSION)
+    )
 
 
 def test_sufficient_when_identifier_terms_and_types_are_covered() -> None:

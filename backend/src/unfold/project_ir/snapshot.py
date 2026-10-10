@@ -23,7 +23,7 @@ from unfold.core.logging import get_logger
 from unfold.project_ir.schema import IR_SCHEMA_VERSION, ProjectIR
 
 if TYPE_CHECKING:
-    from unfold.persistence.object_store import ObjectStore
+    from unfold.ports import BlobStore
 
 __all__ = [
     "IRCache",
@@ -122,12 +122,12 @@ def clear_ir_cache() -> None:
     _CACHE.clear()
 
 
-def evict_project(objects: ObjectStore, project_id: str, *, cache: IRCache | None = None) -> None:
+def evict_project(objects: BlobStore, project_id: str, *, cache: IRCache | None = None) -> None:
     """Drop a project's cached snapshots (call when the project is deleted / expires)."""
     (cache if cache is not None else _CACHE).discard_prefix(objects.bucket, f"projects/{project_id}/")
 
 
-async def save_ir(objects: ObjectStore, ir: ProjectIR) -> str:
+async def save_ir(objects: BlobStore, ir: ProjectIR) -> str:
     """Persist `ir` under its versioned key and return the key.
 
     The cache is filled on load only: the caller keeps (and may still mutate) the instance it saved.
@@ -139,7 +139,7 @@ async def save_ir(objects: ObjectStore, ir: ProjectIR) -> str:
     return key
 
 
-async def load_ir(objects: ObjectStore, key: str, *, cache: IRCache | None = None) -> ProjectIR:
+async def load_ir(objects: BlobStore, key: str, *, cache: IRCache | None = None) -> ProjectIR:
     """Load a snapshot (LRU-cached). Raises `NotFound` when absent, `UnfoldError` when corrupt."""
     lru = cache if cache is not None else _CACHE
     hit = lru.get(objects.bucket, key)
