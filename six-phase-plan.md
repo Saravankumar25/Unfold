@@ -35,7 +35,7 @@ Source inputs: `PROJECT_AUDIT.md` (repo state) and the AWS scale-to-zero plan (t
 | Phase | Name | Merged | Pushed | Worktree/branch deleted |
 |---|---|---|---|---|
 | 1 | Foundation: green gates, CI, security, ports | [x] | [x] | [x] |
-| 2 | Core pipeline end to end (local) | [ ] | [ ] | [ ] |
+| 2 | Core pipeline end to end (local) | [x] | [x] | [x] |
 | 3 | Chat, exports, cleanup, evals, frontend contract | [ ] | [ ] | [ ] |
 | 4 | AWS-native adapters + Terraform | [ ] | [ ] | [ ] |
 | 5 | Hardening and full verification | [ ] | [ ] | [ ] |

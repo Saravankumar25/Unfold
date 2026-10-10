@@ -1,17 +1,17 @@
 # Graph Report - unfold  (2026-10-10)
 
 ## Corpus Check
-- 308 files · ~228,925 words
+- 321 files · ~239,571 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 22 file(s) not represented in the graph (top: (none) 8, .example 3, .j2 3)
 
 ## Summary
-- 6977 nodes · 21205 edges · 282 communities (227 shown, 55 thin omitted)
-- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 2960 edges (avg confidence: 0.88)
+- 7164 nodes · 22165 edges · 279 communities (220 shown, 59 thin omitted)
+- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 3147 edges (avg confidence: 0.89)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1a75c36f`
+- Built from commit: `199654b6`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,13 +20,13 @@
 - yct
 - t
 - push
-- UnfoldError
+- core/errors.py
 - gZe
 - gemini.py
 - i
 - hybrid.py
 - builders.py
-- Settings
+- cli.py
 - GraphQueries
 - InventoryFile
 - consume
@@ -38,29 +38,29 @@
 - indexing/chunking.py
 - AI_infrastructure.md
 - api/types.ts
-- LLMRequest
+- gateway.py
 - analyzers/base.py
-- BlobStore
+- Unfold — Low-Level Design (LLD)
 - concat
-- Chunk
-- uze
+- enums.py
+- secrets.py
 - peekChar
 - .toString
-- h
+- d
 - subrule
 - Node
 - .constructor
 - langchain_core_callbacks
-- integration/conftest.py
+- ModelCapability
 - rgb
-- upload_document
-- setAttribute
+- LLMRequest
+- lineTo
 - Cc
 - guide-page.tsx
-- api/schemas.py
+- env.py
 - compiler.py
-- treesitter.py
-- test_retrieval_planner.py
+- ingestion.py
+- api/errors.py
 - render.py
 - uN
 - Store
@@ -76,8 +76,8 @@
 - communities.py
 - Embedder
 - inventory.py
-- planner.py
-- ingestion.py
+- plan_query
+- IngestionService
 - _Extractor
 - node
 - edge
@@ -95,51 +95,51 @@
 - setData
 - Do
 - constructor
-- Unfold — Low-Level Design (LLD)
+- ProgressReporter
 - _JsExtractor
 - nodes
 - manyInternal
-- postgres/models.py
+- UnfoldError
 - use-chat-thread.ts
 - test_llm_gateway_policy.py
 - test_security_hardening.py
 - ProviderBudget
-- InputError
-- gateway.py
+- TokenBudget
+- pipeline.py
 - documents.py
-- enums.py
-- lex
-- is
-- rules.py
+- domain/models.py
+- text
+- landing-page.tsx
+- detect.py
 - README_original.md
 - ref_react
 - devDependencies
 - diagram-layout.ts
-- register
-- safe_extract
-- plan_query
-- api/main.py
-- guide/models.py
-- _Extractor
+- indexOf
+- setAttribute
+- assess
+- test_api_sessions_projects.py
+- generate.py
+- .data_access
 - complexity.py
 - CircuitBreaker
-- Unfold — High-Level Design (HLD)
+- Settings
 - route.ts
 - use-project-progress.ts
 - pdf.py
-- rrf_fuse
+- dataclasses
 - extend
 - bn
 - DenseIndex
 - 4.1 PostgreSQL — operational system of record
 - express_ts_prisma/package.json
 - authService.ts
-- WorkerSettings
+- to_provider_schema
 - Jg
 - LA
 - agents/models.py
-- sufficiency.py
-- export-button.tsx
+- retrievers.py
+- qqe
 - Unfold — Product Requirements Document (PRD)
 - app.ts
 - postService.ts
@@ -148,39 +148,39 @@
 - addDetails
 - e7t
 - a7t
-- sessions.py
+- Unfold
 - children
 - vercel.json
 - dependencies
 - Zk
-- Runtime
+- BlobStore
 - test_architecture.py
 - destructEndLink
-- hasNode
+- hT
 - match
 - recursiveReduce
-- atLeastOneInternal
-- optionInternal
-- .write
+- .__init__
+- .__init__
+- GraphBuilder
 - Technology Stack
 - compilerOptions
 - split_text
-- PROJECT_AUDIT.md — Unfold, Phase 0
+- Runtime
 - Le
-- bezierCurveTo
+- sse_starlette_sse
 - 3. Product Principles
 - 8. Project Guide Requirements
 - devDependencies
 - count
 - calculateHorizontalSpace
-- initialized
+- starlette_background
 - HLD.md
 - 46. Guide Evaluation
 - 33. Key Architectural Decisions
 - dependencies
 - compilerOptions
-- retriever.py
-- inline-text.tsx
+- HybridRetriever
+- evidence-drawer.tsx
 - cje
 - successors
 - ADR 0001: Drop LangGraph, Deep Agents and the LangChain adapter
@@ -195,7 +195,6 @@
 - gje
 - fve
 - jYe
-- Ult
 - i0
 - VYe
 - setup.ts
@@ -209,7 +208,6 @@
 - langchain_core_outputs
 - cn
 - a1e
-- C4
 - langchain_core_runnables
 - linkNode
 - langchain_core_tools
@@ -250,7 +248,6 @@
 - vitest.config.ts
 - collectValues
 - indexNodes2
-- GH
 - Nj
 - 20. Hierarchical Summarization
 - 21. Retrieval Planner
@@ -287,23 +284,23 @@
 ## Surprising Connections (you probably didn't know these)
 - `4. End-to-end analysis flow` --references--> `JobStage`  [INFERRED]
   docs/HLD.md → backend/src/unfold/domain/enums.py
-- `5. Key design decisions (as built)` --references--> `ast()`  [INFERRED]
-  docs/HLD.md → backend/src/unfold/exports/static/mermaid.min.js
 - `Python` --references--> `ast()`  [INFERRED]
   docs/specs/ESD.md → backend/src/unfold/exports/static/mermaid.min.js
 - `11. Git worktree, RAM, disk and workspace plan` --references--> `node()`  [INFERRED]
   PROJECT_AUDIT.md → backend/src/unfold/exports/static/mermaid.min.js
 - `6. Ingestion & security (`unfold.ingestion`, `unfold.security`)` --references--> `safe_extract()`  [INFERRED]
   docs/LLD.md → backend/src/unfold/ingestion/archive.py
+- `17. LLM Gateway` --references--> `LLMRequest`  [INFERRED]
+  docs/specs/ESD.md → backend/src/unfold/llm/schemas.py
 
 ## Import Cycles
 - 1-file cycle: `backend/src/unfold/exports/render.py -> backend/src/unfold/exports/render.py`
 
-## Communities (282 total, 55 thin omitted)
+## Communities (279 total, 59 thin omitted)
 
 ### Community 0 - "mermaid.min.js"
 Cohesion: 0.00
-Nodes (307): _2(), addAll(), addAttributes(), addCssStyles(), addEdge(), addEntity(), addNamespace(), addPipelineComponent() (+299 more)
+Nodes (312): _2(), activationCount(), addAll(), addAttributes(), addCssStyles(), addEdge(), addEntity(), addEntry() (+304 more)
 
 ### Community 1 - "yct"
 Cohesion: 0.33
@@ -311,75 +308,75 @@ Nodes (5): e2e(), Jbe(), Kf(), yct(), 8. Testing and production readiness
 
 ### Community 2 - "t"
 Cohesion: 0.01
-Nodes (302): $2e(), i(), a6t(), ACTION(), addAnnotation(), aDe(), adt(), aEe() (+294 more)
+Nodes (273): $2e(), i(), a$e(), aa(), ACTION(), addAnnotation(), aDe(), adt() (+265 more)
 
 ### Community 3 - "push"
 Cohesion: 0.02
-Nodes (206): $7(), A2(), a5(), a8(), a9e(), add(), addActor(), addClass() (+198 more)
+Nodes (212): $7(), A2(), a5(), a9e(), add(), addActor(), addBox(), addHiddenNodes() (+204 more)
 
-### Community 4 - "UnfoldError"
-Cohesion: 0.04
-Nodes (44): Conflict, GenerationError, NotFound, ProviderCapacityError, Any, Exception, Unified error model (ESD §25). Every failure that reaches a user carries an…, Base error. `http_status` is used by the API; `failure_stage` by the job runner. (+36 more)
+### Community 4 - "core/errors.py"
+Cohesion: 0.13
+Nodes (9): Unified error model (ESD §25). Every failure that reaches a user carries an…, StoreUnavailable, MinioBlobStore, Path, T, `BlobStore` adapter over the MinIO SDK (ESD §4.6). Sync SDK → worker threads.…, Typed retrieval errors (ESD §25)., minio (+1 more)
 
 ### Community 5 - "gZe"
 Cohesion: 0.07
-Nodes (94): b(), c1e(), DL(), g1e(), gte(), gZe(), b(), Be() (+86 more)
+Nodes (74): beginGroup(), ek(), endGroup(), endGroups(), g1e(), gZe(), b(), Be() (+66 more)
 
 ### Community 6 - "gemini.py"
-Cohesion: 0.05
-Nodes (62): APIError, ModelCapability, _convert(), Any, JSON-Schema normalisation for provider structured output / tool parameters (LLD…, Return a self-contained (no `$ref`) schema restricted to the portable keyword…, _resolve_ref(), to_provider_schema() (+54 more)
+Cohesion: 0.06
+Nodes (52): APIError, AuthError, BadRequest, InvalidOutput, parse_json_object(), ProviderCallError, Exception, RateLimited (+44 more)
 
 ### Community 7 - "i"
-Cohesion: 0.03
-Nodes (140): aa(), addLink(), addNode(), addRelationship(), f(), aLe(), _at(), aUe() (+132 more)
+Cohesion: 0.02
+Nodes (146): Ab(), accept(), addLink(), addNode(), addRelationship(), f(), AS(), _at() (+138 more)
 
 ### Community 8 - "hybrid.py"
-Cohesion: 0.11
-Nodes (30): Every first-stage retriever failed — there is no honest evidence to return., RetrievalFailed, HybridRetriever, _ms(), _node_ref(), BaseException, Hybrid retrieval orchestration (LLD §11, ESD §12, AI infra §15-§24). ``` plan…, Run the applicable retrievers concurrently; returns (attempted, failed). (+22 more)
+Cohesion: 0.10
+Nodes (31): RetrievalMode, Process-wide reranker singleton kept in `Runtime.extras`., reranker_for(), RetrievalConfig, Every first-stage retriever failed — there is no honest evidence to return., RetrievalFailed, FusedCandidate, HybridRetriever (+23 more)
 
 ### Community 9 - "builders.py"
 Cohesion: 0.07
-Nodes (62): _agg_label(), ai_pipeline(), architecture(), build_all(), data_model(), deployment(), _EdgeAgg, _field_line() (+54 more)
+Nodes (64): diagram_id(), _agg_label(), ai_pipeline(), architecture(), build_all(), data_model(), deployment(), _EdgeAgg (+56 more)
 
-### Community 10 - "Settings"
-Cohesion: 0.05
-Nodes (34): BaseSettings, SecretStr, Refuse to start in production with dev defaults (audit S-3)., Settings, _trusts_everyone(), cmd_models(), describe(), main() (+26 more)
+### Community 10 - "cli.py"
+Cohesion: 0.12
+Nodes (18): cmd_models(), describe(), main(), _out(), _ping(), Operator CLI (LLD §13): `python -m unfold.llm.cli models|ping`. `models` prints…, Configuration summary without secrets (also used by tests)., build_gateway() (+10 more)
 
 ### Community 11 - "GraphQueries"
-Cohesion: 0.08
-Nodes (39): _batches(), GraphBuilder, T, Subsystem/Concept nodes + PART_OF (etc.) edges. Never overwrites deterministic…, Set `subsystem_id` on entity nodes (entity uid → subsystem id)., check_label(), check_rel_type(), DegreeNode (+31 more)
+Cohesion: 0.12
+Nodes (29): check_rel_type(), DegreeNode, EndpointFlow, GraphEdge, GraphNode, GraphOverview, GraphValidationError, ModuleDependency (+21 more)
 
 ### Community 12 - "InventoryFile"
-Cohesion: 0.08
-Nodes (22): LanguageAnalyzer, Protocol, One analyzer: decides which inventory files it handles and extracts facts from…, PythonAnalyzer, `LanguageAnalyzer` for `.py`/`.pyi` files., _grammar_for(), _installed_grammars(), _is_prisma() (+14 more)
+Cohesion: 0.05
+Nodes (70): LanguageAnalyzer, Protocol, One analyzer: decides which inventory files it handles and extracts facts from…, ConfigAnalyzer, add(), _images_of(), _kind(), _line_of() (+62 more)
 
 ### Community 13 - "consume"
 Cohesion: 0.09
 Nodes (46): callFunction(), consume(), consumeArg(), consumeArgs(), consumeSpaces(), countExpansion(), expandAfterFuture(), expandMacro() (+38 more)
 
 ### Community 14 - "ProjectIR"
-Cohesion: 0.13
-Nodes (36): build_ir(), Normalize one repository's inventory + analysis into a `ProjectIR` (pure,…, Referential-integrity problems of an IR (empty list = valid). Used by tests and…, validate_ir(), ProjectIR, All entities by id (files, symbols, modules, endpoints, ...). Built on demand;…, _build(), _fid() (+28 more)
+Cohesion: 0.07
+Nodes (54): build_ir(), Normalize one repository's inventory + analysis into a `ProjectIR` (pure,…, Referential-integrity problems of an IR (empty list = valid). Used by tests and…, validate_ir(), Project IR (LLD §8): schema, pure builder, complexity profile and object-store…, ProjectIdentity, ProjectIR, clear_ir_cache() (+46 more)
 
 ### Community 15 - "_Builder"
-Cohesion: 0.11
-Nodes (18): _basename(), _Builder, _canon_tech(), _dirname(), _is_code(), _is_dockerfile(), _join(), _norm_name() (+10 more)
+Cohesion: 0.10
+Nodes (21): _basename(), _Builder, _canon_tech(), _dirname(), _is_code(), _is_dockerfile(), _join(), _norm_name() (+13 more)
 
 ### Community 16 - "project_ir/builder.py"
-Cohesion: 0.13
-Nodes (37): Provenance, Where a fact came from. Deterministic facts outrank inferred ones everywhere…, _image_rule(), _join_route(), normalize_route(), Project IR builder (LLD §8, ESD §9): `Inventory` + `RepositoryAnalysis` →…, `/api//users/` → `/api/users`; empty → `/`. Path parameters are kept as written., AIComponentIR (+29 more)
+Cohesion: 0.14
+Nodes (26): Provenance, Where a fact came from. Deterministic facts outrank inferred ones everywhere…, _image_rule(), _join_route(), normalize_route(), Project IR builder (LLD §8, ESD §9): `Inventory` + `RepositoryAnalysis` →…, `/api//users/` → `/api/users`; empty → `/`. Path parameters are kept as written., AIComponentIR (+18 more)
 
 ### Community 17 - "projects.py"
-Cohesion: 0.07
-Nodes (59): client_ip(), CurrentSession, enforce_ip_limits(), enforce_rate_limit(), get_runtime(), owned_chat(), owned_project(), parse_uuid() (+51 more)
+Cohesion: 0.04
+Nodes (103): client_ip(), CurrentSession, enforce_ip_limits(), enforce_rate_limit(), get_runtime(), owned_chat(), parse_uuid(), Request (+95 more)
 
 ### Community 18 - "ErrorCode"
-Cohesion: 0.17
-Nodes (26): ErrorCode, StrEnum, SecurityRejection, _Budget, _common_root(), _copy_limited(), detect_format(), _extract_tar() (+18 more)
+Cohesion: 0.06
+Nodes (72): ErrorCode, IngestionError, InputError, StrEnum, SecurityRejection, _Budget, _common_root(), _copy_limited() (+64 more)
 
 ### Community 19 - "indexing/chunking.py"
-Cohesion: 0.14
-Nodes (32): content_hash(), chunk_file(), _config_units(), content_type_for(), _dockerfile_units(), _ext(), _fan_in(), _gap_units() (+24 more)
+Cohesion: 0.21
+Nodes (24): content_hash(), chunk_file(), _config_units(), content_type_for(), _dockerfile_units(), _ext(), _fan_in(), _gap_units() (+16 more)
 
 ### Community 20 - "AI_infrastructure.md"
 Cohesion: 0.04
@@ -387,103 +384,103 @@ Nodes (53): 11. Local Embeddings, 12. Qdrant Vector Layer, 13. Native Lexical Re
 
 ### Community 21 - "api/types.ts"
 Cohesion: 0.04
-Nodes (57): ProjectContextValue, SessionContext, SessionContextValue, ArchitectureOut, ArtifactKind, ArtifactStatus, Block, BlockType (+49 more)
+Nodes (63): ProjectContextValue, SessionContext, SessionContextValue, streamPaths, ArchitectureOut, ArtifactKind, ArtifactOut, ArtifactStatus (+55 more)
 
-### Community 22 - "LLMRequest"
-Cohesion: 0.05
-Nodes (45): Architecture rules (enforced by `tests/unit/test_architecture.py`), backend/ — agent operating manual, Commands (run from `backend/`), Non-negotiables, ProviderError, cache_key(), Any, ResponseCache (+37 more)
+### Community 22 - "gateway.py"
+Cohesion: 0.11
+Nodes (32): ProviderCapacityError, ProviderError, _aclose(), _CallState, estimate_tokens(), LLMGateway, invoke(), invoke() (+24 more)
 
 ### Community 23 - "analyzers/base.py"
 Cohesion: 0.07
-Nodes (27): AnalysisContext, build_context(), _directories(), find_line(), _go_modules(), _is_under(), line_of(), load_jsonc() (+19 more)
+Nodes (26): AnalysisContext, build_context(), _directories(), find_line(), _go_modules(), _is_under(), line_of(), load_jsonc() (+18 more)
 
-### Community 24 - "BlobStore"
-Cohesion: 0.05
-Nodes (24): embedder_for(), Process-wide embedder singleton kept in `Runtime.extras`., BM25Index, lexical_key(), LexicalArtifact, LexicalIndexCache, Any, Builder for `LexicalArtifact`s (tokenizer: `indexing.tokenize`). (+16 more)
+### Community 24 - "Unfold — Low-Level Design (LLD)"
+Cohesion: 0.06
+Nodes (23): BM25Index, LexicalArtifact, LexicalIndexCache, Any, Builder for `LexicalArtifact`s (tokenizer: `indexing.tokenize`)., In-process LRU of loaded artifacts keyed by object key (8 by default)., A built / loaded BM25 index plus the chunk id of every document (same order)., 10. Indexing (`unfold.indexing`) (+15 more)
 
 ### Community 25 - "concat"
-Cohesion: 0.03
-Nodes (88): accept(), AS(), b5e(), buildEmptyAlternationError(), buildEmptyRepetitionError(), buildKeywordPattern(), buildKeywordToken(), buildLeftRecursionError() (+80 more)
+Cohesion: 0.04
+Nodes (67): b5e(), buildKeywordPattern(), buildKeywordToken(), buildLeftRecursionError(), checkIsTarget(), concat(), Cse(), Dv() (+59 more)
 
-### Community 26 - "Chunk"
-Cohesion: 0.15
-Nodes (16): ContentType, Chunk, BaseModel, Chunk = the unit of retrieval and of evidence (LLD §10). Persisted in `chunks`,…, ChunkRepository, _from_row(), _pid(), Any (+8 more)
+### Community 26 - "enums.py"
+Cohesion: 0.12
+Nodes (20): ArtifactKind, ArtifactStatus, ContentType, StrEnum, Domain enumerations shared by every layer (LLD §5, §11, §13, §16)., SectionStatus, Chunk, BaseModel (+12 more)
 
-### Community 27 - "uze"
-Cohesion: 0.50
-Nodes (4): cze(), lze(), oze(), uze()
+### Community 27 - "secrets.py"
+Cohesion: 0.11
+Nodes (24): Untrusted-data fencing for prompts (LLD §6). Repository text is data, never…, Wrap repository content; neutralise any embedded fence tags so data cannot…, untrusted(), InjectionSignal, Rule-based prompt-injection scanner (LLD §6, AI infra §40). Signals label…, `untrusted_source` for all repository data; `suspicious` when injection-like…, scan(), trust_label() (+16 more)
 
 ### Community 28 - "peekChar"
-Cohesion: 0.11
-Nodes (47): ake(), alternative(), assertion(), atom(), atomEscape(), characterClass(), characterClassEscape(), classAtom() (+39 more)
+Cohesion: 0.12
+Nodes (45): alternative(), assertion(), atom(), atomEscape(), characterClass(), characterClassEscape(), classAtom(), classEscape() (+37 more)
 
 ### Community 29 - ".toString"
 Cohesion: 0.03
-Nodes (97): _5t(), activationCount(), addBox(), addDocument(), addExportedSymbol(), addLocalSymbol(), addMessage(), addSignal() (+89 more)
+Nodes (97): _5t(), addDocument(), addExportedSymbol(), addLocalSymbol(), aXe(), build(), buildDocuments(), buildKeywordTokens() (+89 more)
 
-### Community 30 - "h"
+### Community 30 - "d"
 Cohesion: 0.06
-Nodes (82): Ab(), aE(), d(), an(), arc(), Ba(), blt(), calculateSpace() (+74 more)
+Nodes (137): _5e(), an(), arc(), b(), Ba(), ble(), blt(), c1e() (+129 more)
 
 ### Community 31 - "subrule"
-Cohesion: 0.07
-Nodes (34): after(), before(), computeRuleType(), construct(), constructInfix(), cstPostNonTerminal(), Cv(), DEFINE_RULE() (+26 more)
+Cohesion: 0.12
+Nodes (21): after(), before(), computeRuleType(), construct(), constructInfix(), Cv(), DEFINE_RULE(), doParse() (+13 more)
 
 ### Community 32 - "Node"
-Cohesion: 0.07
-Nodes (17): _camelize(), _JavaExtractor, _join_path(), _JvmMixin, _KotlinExtractor, _PhpExtractor, Route/entity helpers shared by the Java and Kotlin extractors (annotation-…, (prefix or None when not a controller, framework). (+9 more)
+Cohesion: 0.06
+Nodes (28): add(), _CSharpExtractor, _Extractor, emit(), _GoExtractor, _JavaExtractor, _join_path(), _JvmMixin (+20 more)
 
 ### Community 33 - ".constructor"
 Cohesion: 0.05
 Nodes (38): _4e(), bh(), brt(), copy(), d4e(), finalize(), g4e(), Grt() (+30 more)
 
-### Community 35 - "integration/conftest.py"
-Cohesion: 0.11
-Nodes (21): argparse, asyncpg, Tests, _ensure_database(), migrated_database(), project_id(), fixture, Integration fixtures: real data stores from `docker compose up -d` (ports from… (+13 more)
+### Community 35 - "ModelCapability"
+Cohesion: 0.12
+Nodes (9): ModelCapability, Provider, Any, Protocol, Resolve `CAPABILITY_TIERS[capability]` through a provider's tier→model map…, One vendor. `key_index` selects the credential (0-based); keys themselves never…, tier_models(), ModelRouter (+1 more)
 
 ### Community 36 - "rgb"
 Cohesion: 0.07
 Nodes (41): Alt(), b8(), Bee(), brighter(), clamp(), D8(), darker(), displayable() (+33 more)
 
-### Community 37 - "upload_document"
-Cohesion: 0.15
-Nodes (14): delete_document(), get_document(), list_documents(), ArqRedis, AsyncSession, delete, get, post (+6 more)
+### Community 37 - "LLMRequest"
+Cohesion: 0.14
+Nodes (9): cache_key(), Any, LLM response cache (LLD §13, AI_infrastructure §53). Only for `req.cacheable`…, ResponseCache, LLMRequest, T, FakeProvider, Scripted `Provider`: per-model queues of actions; records every call it… (+1 more)
 
-### Community 38 - "setAttribute"
-Cohesion: 0.11
-Nodes (33): arcTo(), closePath(), _drawToContext(), fillSketch(), _He(), iHe(), Kpt(), lineTo() (+25 more)
+### Community 38 - "lineTo"
+Cohesion: 0.17
+Nodes (23): arcTo(), closePath(), _drawToContext(), Kpt(), lineTo(), measureText(), moveTo(), omt() (+15 more)
 
 ### Community 39 - "Cc"
 Cohesion: 0.06
-Nodes (37): bv(), Cc(), createDescription(), createDescriptions(), createInfoDescriptions(), createScope(), documentationLinkRenderer(), documentationTagRenderer() (+29 more)
+Nodes (43): addAstNodeRegionWithAssignmentsTo(), assign(), assignWithoutOverride(), bv(), Cc(), createDescription(), createDescriptions(), createInfoDescriptions() (+35 more)
 
 ### Community 40 - "guide-page.tsx"
 Cohesion: 0.06
-Nodes (55): ArchitecturePage(), ArchitectureWorkspace(), ChatPage(), ChatWorkspace(), Conversation(), prompts, ErrorPanel(), GuidePage() (+47 more)
+Nodes (51): ArchitecturePage(), ArchitectureWorkspace(), ChatPage(), ChatWorkspace(), Conversation(), prompts, ErrorPanel(), ExportButton() (+43 more)
 
-### Community 41 - "api/schemas.py"
-Cohesion: 0.12
-Nodes (32): ArchitectureOut, ArtifactOut, ChatDetailOut, ChatEvent, ChatMessageOut, ChatSessionOut, CreateGithubProject, DiagramOut (+24 more)
+### Community 41 - "env.py"
+Cohesion: 0.11
+Nodes (10): alembic, do_run_migrations(), include_object(), Alembic async environment. URL comes from unfold Settings (DATABASE_URL), never…, run_async_migrations(), run_migrations_offline(), run_migrations_online(), Connection (+2 more)
 
 ### Community 42 - "compiler.py"
-Cohesion: 0.07
-Nodes (52): estimate_tokens(), Token estimation + budgeting for compiled contexts (LLD §12). Tokens ≈…, Cut `text` at a line boundary so that result (incl. marker) fits `max_tokens`.…, A running token allowance. `take` succeeds only when the item fits entirely., Account for mandatory content (objective) even if it overflows., TokenBudget, truncate_to_tokens(), _clean_summary() (+44 more)
+Cohesion: 0.10
+Nodes (43): estimate_tokens(), _clean_summary(), compile_context(), _Compiler, _drop_lowest(), _finalize(), _hash(), _notes() (+35 more)
 
-### Community 43 - "treesitter.py"
-Cohesion: 0.12
-Nodes (35): Python analyzer on the stdlib `ast` (LLD §7, ESD §8.2). Parses text only —…, _analyze_prisma(), _clean_comment(), Tree-sitter analyzer for non-Python source languages (LLD §7, ESD §8.1–§8.2).…, _strip_prisma_comment(), AIHint, Binding, CallRef (+27 more)
+### Community 43 - "ingestion.py"
+Cohesion: 0.13
+Nodes (16): embed_query(), embed_texts(), _model(), Local sentence-transformer embeddings., Embed a batch of texts into normalized dense vectors., Embed a single query., extract_text(), Document ingestion: persist uploads, extract text, chunk, embed and index. (+8 more)
 
-### Community 44 - "test_retrieval_planner.py"
-Cohesion: 0.12
-Nodes (26): chunk_id(), diagram_id(), _digest(), entity_id(), new_uuid(), UUID, Stable, content/context-derived identifiers (LLD §3)., Deterministic id for an IR/graph entity: recomputation yields the same id… (+18 more)
+### Community 44 - "api/errors.py"
+Cohesion: 0.21
+Nodes (13): _envelope(), install_error_handling(), http_error(), unfold_error(), unhandled(), validation_error(), FastAPI, Request (+5 more)
 
 ### Community 45 - "render.py"
 Cohesion: 0.11
-Nodes (31): DiagramExport, ExportChatMessage, ExportProject, BaseModel, Inputs for the export templates (LLD §19). The worker maps persisted rows onto…, _claim_rows(), _clean(), _code_caption() (+23 more)
+Nodes (33): DiagramExport, ExportChatMessage, ExportProject, BaseModel, Inputs for the export templates (LLD §19). The worker maps persisted rows onto…, _claim_rows(), _clean(), _code_caption() (+25 more)
 
 ### Community 46 - "uN"
 Cohesion: 0.06
-Nodes (23): Ane(), bje(), Dne(), Ene(), FYe(), Ine(), kne(), Lne() (+15 more)
+Nodes (22): Ane(), bje(), Dne(), Ene(), FYe(), Ine(), kne(), Lne() (+14 more)
 
 ### Community 47 - "Store"
 Cohesion: 0.08
@@ -491,95 +488,95 @@ Nodes (26): New(), Connect(), Store, newCode(), main(), TestHealth(), go_pkg_con
 
 ### Community 48 - "edges"
 Cohesion: 0.16
-Nodes (23): Bge(), Bot(), C0e(), Dge(), E9(), edges(), fT(), Gge() (+15 more)
+Nodes (25): b0e(), Bge(), Bot(), C0e(), Dge(), E9(), edges(), fT() (+17 more)
 
 ### Community 49 - "sd"
-Cohesion: 0.16
-Nodes (29): aD(), Ax(), bd(), cH(), d_e(), eD(), eGe(), f_e() (+21 more)
+Cohesion: 0.13
+Nodes (31): aD(), aGe(), Ax(), bd(), d_e(), eD(), eGe(), f_e() (+23 more)
 
 ### Community 50 - "validateDocument"
-Cohesion: 0.07
-Nodes (32): buildLeafNode(), cancelWrite(), dequeue(), enqueue(), getSource(), handleException(), Ige(), MH() (+24 more)
+Cohesion: 0.06
+Nodes (38): buildLeafNode(), cancelWrite(), dequeue(), enqueue(), g6(), getNameNode(), getSource(), handleException() (+30 more)
 
 ### Community 51 - "VectorStore"
 Cohesion: 0.14
 Nodes (7): AsyncSession, AsyncSession, Create the collection if it does not exist., Insert or replace chunk vectors., Return (chunk id, score) pairs for the nearest vectors., Stores and searches chunk embeddings in a Qdrant collection., VectorStore
 
 ### Community 52 - "join"
-Cohesion: 0.06
-Nodes (117): _5e(), A4(), a$e(), ac(), alternatives(), Ar(), b4(), beginGroup() (+109 more)
+Cohesion: 0.05
+Nodes (98): A4(), ac(), Ar(), b4(), blockquote(), boe(), bP(), bse() (+90 more)
 
 ### Community 53 - "architecture.md"
-Cohesion: 0.05
-Nodes (36): 10. Retrieval Architecture, 11.1 Guide mode, 11.2 Chat mode, 11.3 Deep investigation mode, 11. Retrieval Modes, 12.1 Token budgeting, 12. Context Engineering Architecture, 13. LangGraph HLD (+28 more)
+Cohesion: 0.06
+Nodes (35): 10. Retrieval Architecture, 11.1 Guide mode, 11.2 Chat mode, 11.3 Deep investigation mode, 11. Retrieval Modes, 12.1 Token budgeting, 12. Context Engineering Architecture, 13. LangGraph HLD (+27 more)
 
 ### Community 54 - "frontend/package.json"
 Cohesion: 0.06
-Nodes (33): engines, node, react, react-dom, @types/react, @types/react-dom, typescript, @vitejs/plugin-react (+25 more)
+Nodes (32): engines, node, react, react-dom, @types/react, @types/react-dom, typescript, @vitejs/plugin-react (+24 more)
 
 ### Community 55 - "g3"
-Cohesion: 0.19
-Nodes (21): aot(), e0e(), Fge(), filterNodes(), a(), fot(), g3(), isMultigraph() (+13 more)
+Cohesion: 0.12
+Nodes (31): e0e(), Fge(), filterNodes(), a(), fot(), g3(), hasNode(), isMultigraph() (+23 more)
 
 ### Community 56 - "ESD.md"
 Cohesion: 0.05
 Nodes (42): 10. Graph Builder, 11.1 Code-aware chunks, 11.2 Hierarchical summaries, 11. Chunking and Indexing, 12. Native Hybrid RAG, 13. Query Planner, 14. Context Compiler, 15. LangGraph Orchestration (+34 more)
 
 ### Community 57 - "communities.py"
-Cohesion: 0.14
-Nodes (24): _add_weight(), _build_graph(), detect(), _dir(), entity_subsystems(), fan_in(), _label_hint(), _merge_small() (+16 more)
+Cohesion: 0.13
+Nodes (25): _add_weight(), _build_graph(), detect(), _dir(), entity_subsystems(), fan_in(), _label_hint(), _merge_small() (+17 more)
 
 ### Community 58 - "Embedder"
-Cohesion: 0.13
-Nodes (12): Embedder, Any, NDArray, ModelUnavailable, A local model (embedder / cross-encoder) could not be loaded or failed at…, CrossEncoderReranker, Any, Relevance logits aligned with `texts` (higher = more relevant). (+4 more)
+Cohesion: 0.12
+Nodes (11): Embedder, Any, NDArray, ModelUnavailable, A local model (embedder / cross-encoder) could not be loaded or failed at…, CrossEncoderReranker, Any, Relevance logits aligned with `texts` (higher = more relevant). (+3 more)
 
 ### Community 59 - "inventory.py"
-Cohesion: 0.14
-Nodes (25): build_inventory(), decode_text(), _describe(), _ext(), _is_build_output_dir(), _is_entrypoint(), _is_text(), language_for() (+17 more)
+Cohesion: 0.13
+Nodes (27): build_inventory(), decode_text(), _describe(), _ext(), _is_build_output_dir(), _is_entrypoint(), _is_text(), language_for() (+19 more)
 
-### Community 60 - "planner.py"
-Cohesion: 0.07
-Nodes (38): RetrievalIntent, RetrievalMode, default_breadth(), Breadth, Versioned retrieval configuration (LLD §11, ESD §12 "Reciprocal Rank Fusion",…, RetrievalConfig, SourceWeights, SubsystemLike (+30 more)
+### Community 60 - "plan_query"
+Cohesion: 0.08
+Nodes (55): chunk_id(), _digest(), entity_id(), Deterministic id for an IR/graph entity: recomputation yields the same id…, RetrievalIntent, SubsystemCandidate, Same transformation as documents, de-duplicated in first-seen order., tokenize_query() (+47 more)
 
-### Community 61 - "ingestion.py"
-Cohesion: 0.09
-Nodes (23): datetime, Base, Document, DeclarativeBase, QueryLog, SQLAlchemy ORM models (PostgreSQL)., An uploaded source document., Audit trail of questions asked. (+15 more)
+### Community 61 - "IngestionService"
+Cohesion: 0.24
+Nodes (7): 14. Orchestration (`unfold.orchestration`), Document, An uploaded source document., IngestionService, Owns the document lifecycle in PostgreSQL and Qdrant., Create a pending document row holding the extracted text., Chunk, embed and index a pending document. Returns the number of chunks.
 
 ### Community 62 - "_Extractor"
 Cohesion: 0.08
-Nodes (31): AnnAssign, Assign, AST, AsyncFunctionDef, AugAssign, _annotation_type(), _class_assign(), _const_str() (+23 more)
+Nodes (34): AnnAssign, Assign, AST, AsyncFunctionDef, AugAssign, _annotation_type(), _class_assign(), _const_str() (+26 more)
 
 ### Community 63 - "node"
 Cohesion: 0.13
-Nodes (25): i(), n(), c8(), e8(), got(), iot(), n(), k9() (+17 more)
+Nodes (25): aot(), i(), n(), c8(), e8(), got(), n(), k9() (+17 more)
 
 ### Community 64 - "edge"
 Cohesion: 0.10
-Nodes (29): ast(), b9(), cot(), d(), h(), u(), cT(), d0e() (+21 more)
+Nodes (31): ast(), b9(), cot(), d(), h(), u(), cT(), d0e() (+23 more)
 
 ### Community 65 - "KeyPool"
-Cohesion: 0.20
-Nodes (9): KeyPool, Any, Redis, Per-key health (index only, never key material)., Least-recently-used healthy key index, or None when every key is disabled or…, Mark a 429. `cooldown_s` is applied to this key only when quotas are per key., Credential rejected: take it out of rotation (auto re-enabled after…, T (+1 more)
+Cohesion: 0.15
+Nodes (12): KeyPool, Any, Redis, Credential pool per provider (LLD §13, ESD §18). Keys are credentials, not…, Per-key health (index only, never key material)., Least-recently-used healthy key index, or None when every key is disabled or…, Mark a 429. `cooldown_s` is applied to this key only when quotas are per key., Credential rejected: take it out of rotation (auto re-enabled after… (+4 more)
 
 ### Community 66 - "web/package.json"
 Cohesion: 0.08
 Nodes (24): dependencies, react, react-dom, devDependencies, @types/react, @types/react-dom, typescript, vite (+16 more)
 
 ### Community 67 - "link"
-Cohesion: 0.07
-Nodes (35): allElements(), u(), code(), codespan(), del(), dR(), eu(), flat() (+27 more)
+Cohesion: 0.06
+Nodes (42): allElements(), u(), buildEmptyAlternationError(), checkbox(), code(), codespan(), computeContentAssist(), del() (+34 more)
 
 ### Community 68 - "lib/api/client.ts"
-Cohesion: 0.10
-Nodes (20): API_PREFIX, apiClient, ApiClientOptions, ApiError, FetchLike, isErrorEnvelope(), networkError(), RequestOptions (+12 more)
+Cohesion: 0.15
+Nodes (13): API_PREFIX, apiClient, ApiClientOptions, ApiError, FetchLike, isErrorEnvelope(), networkError(), RequestOptions (+5 more)
 
 ### Community 69 - "test_indexing_chunking.py"
 Cohesion: 0.38
 Nodes (12): chunk_project(), Chunks for every indexable file of the IR whose text is available (`path →…, _by(), _file(), _ir(), _sym(), test_compose_services_split(), test_deterministic_ids_and_hashes() (+4 more)
 
 ### Community 70 - "addRelation"
-Cohesion: 0.08
-Nodes (37): addClassesToNamespace(), addDescription(), addInterface(), addRelation(), addRelationObjs(), addSingleLink(), addState(), addStyleClass() (+29 more)
+Cohesion: 0.07
+Nodes (44): addClass(), addClassesToNamespace(), addDescription(), addInterface(), addMember(), addMembers(), addRelation(), addRelationObjs() (+36 more)
 
 ### Community 71 - "enableRecording"
 Cohesion: 0.11
@@ -611,71 +608,71 @@ Nodes (15): Bit(), bX(), Do(), fX(), HBe(), hIt(), i_e(), mIt() (+7 more)
 
 ### Community 78 - "constructor"
 Cohesion: 0.03
-Nodes (71): a5e(), aAe(), addElement(), addRequirement(), a(), awaitBuilderState(), awaitDocumentState(), buildNamespaceConflictError() (+63 more)
+Nodes (85): a5e(), aAe(), addElement(), addRequirement(), a(), awaitBuilderState(), awaitDocumentState(), bezierCurveTo() (+77 more)
 
-### Community 79 - "Unfold — Low-Level Design (LLD)"
+### Community 79 - "ProgressReporter"
 Cohesion: 0.08
-Nodes (28): _dump(), gen(), Any, current(), ProgressReporter, Any, AsyncSession, Record a failure. When the runner will retry, the job stays `queued` at its… (+20 more)
+Nodes (26): Non-negotiables, check_transition(), InvalidTransition, JobStage, ValueError, Forward-only pipeline; re-entering the current stage (resume) is allowed;…, current(), _heartbeat() (+18 more)
 
 ### Community 80 - "_JsExtractor"
 Cohesion: 0.11
-Nodes (7): add(), _JsExtractor, _npm_package(), (resolved repository path, external, npm package) for a module specifier., Handle `require("x")` / `import("x")`; returns True when `call` was an import., The function node of `fn`, `memo(fn)`, `React.forwardRef(fn)`, ... (None when…, For `router.route('/x').get(h).post(h2)` return ("router", "/x").
+Nodes (8): _go_local_name(), _go_package(), _JsExtractor, _npm_package(), (resolved repository path, external, npm package) for a module specifier., Handle `require("x")` / `import("x")`; returns True when `call` was an import., The function node of `fn`, `memo(fn)`, `React.forwardRef(fn)`, ... (None when…, For `router.route('/x').get(h).post(h2)` return ("router", "/x").
 
 ### Community 81 - "nodes"
 Cohesion: 0.11
-Nodes (21): $9(), A9(), dot(), F9(), jTe(), Kmt(), Lf(), lot() (+13 more)
+Nodes (23): $9(), A9(), dot(), F9(), iot(), jTe(), Kmt(), Lf() (+15 more)
 
 ### Community 82 - "manyInternal"
-Cohesion: 0.06
-Nodes (34): _8(), cM(), cq(), Cte(), Eb(), eUe(), fke(), getRule() (+26 more)
+Cohesion: 0.05
+Nodes (38): _8(), cM(), convert(), Cte(), Eb(), eUe(), fke(), getRule() (+30 more)
 
-### Community 83 - "postgres/models.py"
-Cohesion: 0.15
-Nodes (23): AnalysisJobRow, ArtifactRow, Base, ChatMessageRow, ChatSessionRow, DiagramRow, EvalRunRow, FindingRow (+15 more)
+### Community 83 - "UnfoldError"
+Cohesion: 0.06
+Nodes (60): owned_project(), 404 (not 403) on foreign ids so project ids are not enumerable., _diagram_out(), get_architecture(), get_diagram(), get_evidence(), get_guide(), get_section() (+52 more)
 
 ### Community 84 - "use-chat-thread.ts"
-Cohesion: 0.14
-Nodes (26): EvidenceItem, parseJSON(), ChatEvent, ChatMessageOut, ChatMode, EvidenceRef, PostChatMessage, ActivityKind (+18 more)
+Cohesion: 0.11
+Nodes (29): backoffDelay(), parseJSON(), postEventStream(), readEventStream(), SSEMessage, SSEParser, subscribeEventStream(), Subscription (+21 more)
 
 ### Community 85 - "test_llm_gateway_policy.py"
-Cohesion: 0.10
-Nodes (45): Priority, _all_text(), FakeProvider, _gemini(), _groq(), h(), Harness, _limits() (+37 more)
+Cohesion: 0.12
+Nodes (42): Priority, _all_text(), _gemini(), _groq(), h(), Harness, _limits(), Any (+34 more)
 
 ### Community 86 - "test_security_hardening.py"
-Cohesion: 0.09
-Nodes (23): lifespan(), Cap on concurrent progress streams per session and overall (audit S-5). In-…, One open stream. `release` is idempotent, so it can be wired to several cleanup…, StreamCap, StreamLease, redis_settings(), _get_ip(), _ip_app() (+15 more)
+Cohesion: 0.21
+Nodes (14): _get_ip(), _ip_app(), FastAPI, parametrize, Audit S-2, S-3, S-5, S-7 — behaviour that needs no data store., _settings(), test_client_ip_is_normalised(), ip() (+6 more)
 
 ### Community 87 - "ProviderBudget"
 Cohesion: 0.19
 Nodes (8): ProviderBudget, Redis, One atomic attempt. Returns (reservation, wait_hint_seconds, reason)., Reserve capacity, waiting in ≤1 s steps up to the priority wait budget. None →…, The call reached the provider: keep the request counted, replace the token…, The call never reached the provider: undo the reservation entirely., Current usage for diagnostics/tests (does not prune expired entries)., Reservation
 
-### Community 88 - "InputError"
+### Community 88 - "TokenBudget"
 Cohesion: 0.14
-Nodes (18): IngestionError, InputError, ExtractionLimits, FetchedRepo, GitHubClient, GitHubRef, _guard_host(), parse_github_url() (+10 more)
+Nodes (7): Token estimation + budgeting for compiled contexts (LLD §12). Tokens ≈…, Cut `text` at a line boundary so that result (incl. marker) fits `max_tokens`.…, A running token allowance. `take` succeeds only when the item fits entirely., Account for mandatory content (objective) even if it overflows., TokenBudget, truncate_to_tokens(), math
 
-### Community 89 - "gateway.py"
-Cohesion: 0.06
-Nodes (50): asyncio, do_run_migrations(), include_object(), Alembic async environment. URL comes from unfold Settings (DATABASE_URL), never…, run_async_migrations(), run_migrations_offline(), run_migrations_online(), Typed, environment-driven settings (LLD §2). One instance per process via… (+42 more)
+### Community 89 - "pipeline.py"
+Cohesion: 0.04
+Nodes (87): argparse, asyncio, asyncpg, FastAPI composition root (HLD §2 `api`). Builds one Runtime per process; never…, Project cleanup (LLD §19): remove a project from every store. Idempotent; safe…, get_settings(), Typed, environment-driven settings (LLD §2). One instance per process via…, configure_logging() (+79 more)
 
 ### Community 90 - "documents.py"
-Cohesion: 0.11
-Nodes (24): arq, arq_connections, get_db(), get_queue(), ArqRedis, AsyncSession, Shared FastAPI dependencies., Yield a database session per request. (+16 more)
+Cohesion: 0.07
+Nodes (37): arq, arq_connections, get_db(), get_queue(), ArqRedis, AsyncSession, Shared FastAPI dependencies., Yield a database session per request. (+29 more)
 
-### Community 91 - "enums.py"
-Cohesion: 0.14
-Nodes (19): ArtifactKind, ArtifactStatus, check_transition(), ClaimKind, ClaimStatus, InputType, InvalidTransition, JobStage (+11 more)
+### Community 91 - "domain/models.py"
+Cohesion: 0.16
+Nodes (24): ClaimKind, ClaimStatus, ClaimRecord, Shared domain value objects (LLD §8, §16, §21). Pure pydantic; no I/O. Imported…, _contains_word(), grade_claims(), _identifiers(), Grade every claim against the stored text of the chunks it cites.… (+16 more)
 
-### Community 92 - "lex"
-Cohesion: 0.14
-Nodes (13): bE(), blockTokens(), _getExpansion(), gT(), iE(), inlineTokens(), jM(), lex() (+5 more)
+### Community 92 - "text"
+Cohesion: 0.19
+Nodes (15): a6t(), BI(), dP(), e(), fP(), getMaxDimension(), HNe(), nKe() (+7 more)
 
-### Community 93 - "is"
-Cohesion: 0.20
-Nodes (12): br(), a(), o(), is(), I(), "../../node_modules/.pnpm/vscode-languageserver-protocol@3.17.5/node_modules/vscode-languageserver-protocol/lib/common/connection.js"(), r(), "../../node_modules/.pnpm/vscode-languageserver-protocol@3.17.5/node_modules/vscode-languageserver-protocol/lib/common/protocol.notebook.js"() (+4 more)
+### Community 93 - "landing-page.tsx"
+Cohesion: 0.22
+Nodes (10): LandingPage(), submit(), stages, GithubRef, MAX_INSTRUCTION_CHARS, MAX_ZIP_BYTES, validateGithubUrl(), validateZipFile() (+2 more)
 
-### Community 94 - "rules.py"
-Cohesion: 0.14
-Nodes (16): AIRule, canonical_dep_name(), dep_matches(), image_repository(), match_ai_import(), module_matches(), _r(), Versioned technology-detection rules (LLD §7). Pure data + tiny matchers;… (+8 more)
+### Community 94 - "detect.py"
+Cohesion: 0.12
+Nodes (26): detect(), ai_hit(), hit(), _Hit, _import_candidates(), Technology and project-category detection (LLD §7). Pure: file analyses in,…, Every prefix of `module` that ends on a `.` or `/` boundary, plus the module…, _score_categories() (+18 more)
 
 ### Community 95 - "README_original.md"
 Cohesion: 0.07
@@ -693,69 +690,65 @@ Nodes (17): devDependencies, eslint, eslint-config-next, @eslint/eslintrc, jsdom
 Cohesion: 0.12
 Nodes (21): DiagramCanvas(), KIND_ACCENT, nodeTypes, UnfoldNode(), DiagramCanvas, DiagramEdge, DiagramKind, DiagramNode (+13 more)
 
-### Community 99 - "register"
-Cohesion: 0.27
-Nodes (16): a(), addEntry(), $d(), Fv(), gv(), _M(), register(), UDe() (+8 more)
+### Community 99 - "indexOf"
+Cohesion: 0.10
+Nodes (25): a(), a8(), $d(), Fv(), h(), indexOf(), jQ(), _k() (+17 more)
 
-### Community 100 - "safe_extract"
-Cohesion: 0.22
-Nodes (23): Extract `archive` into `dest` (must be empty/new). Raises…, safe_extract(), _add(), parametrize, Path, _tar(), test_depth_limit(), test_empty_zip() (+15 more)
+### Community 100 - "setAttribute"
+Cohesion: 0.18
+Nodes (13): eYe(), getAttribute(), hVe(), LWe(), mP(), d(), setAttribute(), sHe() (+5 more)
 
-### Community 101 - "plan_query"
-Cohesion: 0.27
-Nodes (24): plan_query(), Breadth, Deterministic retrieval plan. `intent` overrides classification (guide sections…, assess(), follow_up_plan(), Any, query_keys(), Narrow plan targeting the gaps found by `assess`, or None when there is nothing… (+16 more)
+### Community 101 - "assess"
+Cohesion: 0.21
+Nodes (26): assess(), follow_up_plan(), _identifiers(), _paths(), Any, query_keys(), Deterministic context-sufficiency check + bounded follow-up planning (LLD §11,…, Narrow plan targeting the gaps found by `assess`, or None when there is nothing… (+18 more)
 
-### Community 102 - "api/main.py"
-Cohesion: 0.07
-Nodes (49): _envelope(), install_error_handling(), http_error(), unfold_error(), unhandled(), validation_error(), FastAPI, Request (+41 more)
+### Community 102 - "test_api_sessions_projects.py"
+Cohesion: 0.17
+Nodes (21): app(), _app_client(), client(), _peer(), AsyncClient, FastAPI, fixture, Test double for the `JobQueue` port: records enqueues instead of starting… (+13 more)
 
-### Community 103 - "guide/models.py"
-Cohesion: 0.19
-Nodes (18): BulletsBlock, CalloutBlock, CodeBlock, DiagramBlock, DraftClaim, GlossaryBlock, GlossaryItem, GuidePlan (+10 more)
-
-### Community 104 - "_Extractor"
-Cohesion: 0.09
-Nodes (13): _CSharpExtractor, _Extractor, emit(), emit(), _go_local_name(), _go_package(), _GoExtractor, _is_pascal() (+5 more)
+### Community 103 - "generate.py"
+Cohesion: 0.12
+Nodes (33): GenerationError, _clip(), normalise_plan(), plan_guide(), Guide planning, section writing and claim verification (LLD §15, §16). All…, One line, bounded: repository-derived names must not smuggle newlines or…, slugify(), _strip_diagrams() (+25 more)
 
 ### Community 105 - "complexity.py"
-Cohesion: 0.19
-Nodes (16): AgentBudget, ComplexityProfile, ComplexitySignals, _investigators(), _lin(), _log_ratio(), BaseModel, Deterministic project complexity profile (LLD §8, AI infrastructure §31–§32).… (+8 more)
+Cohesion: 0.17
+Nodes (24): AgentBudget, ComplexityProfile, ComplexitySignals, _investigators(), _lin(), _log_ratio(), BaseModel, Deterministic project complexity profile (LLD §8, AI infrastructure §31–§32).… (+16 more)
 
 ### Community 106 - "CircuitBreaker"
-Cohesion: 0.19
-Nodes (9): CircuitBreaker, CircuitState, Any, Redis, StrEnum, Circuit breaker per `provider:model`, shared across workers through Redis (LLD…, _text(), 13. LLM Gateway (`unfold.llm`) (+1 more)
+Cohesion: 0.14
+Nodes (12): CircuitBreaker, CircuitState, Any, Redis, StrEnum, Circuit breaker per `provider:model`, shared across workers through Redis (LLD…, _text(), Exception (+4 more)
 
-### Community 107 - "Unfold — High-Level Design (HLD)"
-Cohesion: 0.25
-Nodes (8): 1. What the system does, 2. Deployable units (modular monolith + workers), 3. Logical modules (Python package `unfold`), 4. End-to-end analysis flow, 5. Key design decisions (as built), 6. Quality attributes → mechanisms, 7. Out of scope for this phase, Unfold — High-Level Design (HLD)
+### Community 107 - "Settings"
+Cohesion: 0.04
+Nodes (42): Architecture rules (enforced by `tests/unit/test_architecture.py`), backend/ — agent operating manual, Commands (run from `backend/`), Tests, create_app(), lifespan(), install_proxy_trust(), FastAPI (+34 more)
 
 ### Community 108 - "route.ts"
-Cohesion: 0.12
-Nodes (17): DELETE, dynamic, envelope(), GET, HEAD, HOP_BY_HOP, OPTIONS, PATCH (+9 more)
+Cohesion: 0.13
+Nodes (16): DELETE, dynamic, envelope(), GET, HEAD, HOP_BY_HOP, OPTIONS, PATCH (+8 more)
 
 ### Community 109 - "use-project-progress.ts"
-Cohesion: 0.15
-Nodes (16): ProgressContent(), ProjectProgressPage(), streamPaths, JobOut, ProgressEvent, Action, reducer(), useProjectProgress() (+8 more)
+Cohesion: 0.13
+Nodes (20): JobOut, ProgressEvent, ProgressItem, ProgressPage, Action, finalEvent(), MAX_BACKOFF_MS, nextPollDelay() (+12 more)
 
 ### Community 110 - "pdf.py"
-Cohesion: 0.07
-Nodes (32): ExportError, _block_network(), _csp(), _mermaid_source(), PdfRenderer, PdfResult, HTML → PDF with headless Chromium (LLD §19). Runs in the worker `export` queue.…, One Chromium per process, launched lazily on first use; each render gets a… (+24 more)
+Cohesion: 0.16
+Nodes (14): ExportError, _block_network(), _csp(), _mermaid_source(), PdfRenderer, PdfResult, HTML → PDF with headless Chromium (LLD §19). Runs in the worker `export` queue.…, One Chromium per process, launched lazily on first use; each render gets a… (+6 more)
 
-### Community 111 - "rrf_fuse"
-Cohesion: 0.17
-Nodes (17): FusedCandidate, max_fused_score(), merge_variants(), Weighted Reciprocal Rank Fusion (LLD §11, ESD §12). Pure and deterministic.…, Fuse ranked chunk-id lists. A ranking with weight ≤ 0 (or missing from…, Merge the rankings of several query variants run against one retriever into a…, Best achievable fused score (rank 1 in every positively weighted ranking)., rrf_fuse() (+9 more)
+### Community 111 - "dataclasses"
+Cohesion: 0.12
+Nodes (20): Versioned retrieval configuration (LLD §11, ESD §12 "Reciprocal Rank Fusion",…, SourceWeights, max_fused_score(), merge_variants(), Weighted Reciprocal Rank Fusion (LLD §11, ESD §12). Pure and deterministic.…, Fuse ranked chunk-id lists. A ranking with weight ≤ 0 (or missing from…, Merge the rankings of several query variants run against one retriever into a…, Best achievable fused score (rank 1 in every positively weighted ranking). (+12 more)
 
 ### Community 112 - "extend"
 Cohesion: 0.18
 Nodes (11): extend(), havingBaseSizing(), havingBaseStyle(), havingSize(), i(), withColor(), withFont(), withPhantom() (+3 more)
 
 ### Community 113 - "bn"
-Cohesion: 0.11
-Nodes (18): bn(), dje(), fje(), hje(), kje(), lje(), mje(), nE() (+10 more)
+Cohesion: 0.12
+Nodes (16): bn(), dje(), fje(), hje(), kje(), lje(), mje(), oje() (+8 more)
 
 ### Community 114 - "DenseIndex"
-Cohesion: 0.16
-Nodes (10): chunk_payload(), DenseIndex, embedding_cache_key(), point_id(), _project_filter(), Any, ndarray, Update `subsystem_id` payloads (chunk id → subsystem id) after subsystem… (+2 more)
+Cohesion: 0.14
+Nodes (13): chunk_payload(), DenseIndex, embedding_cache_key(), point_id(), _project_filter(), Any, ndarray, Update `subsystem_id` payloads (chunk id → subsystem id) after subsystem… (+5 more)
 
 ### Community 115 - "4.1 PostgreSQL — operational system of record"
 Cohesion: 0.14
@@ -769,29 +762,29 @@ Nodes (13): description, typescript, main, name, private, version, jest, prisma 
 Cohesion: 0.21
 Nodes (11): HttpError, credentials, loginHandler(), registerHandler(), router, login(), register(), signToken() (+3 more)
 
-### Community 118 - "WorkerSettings"
-Cohesion: 0.50
-Nodes (4): arq worker configuration., WorkerSettings, 12. Prioritized implementation roadmap, Not verified in this audit
+### Community 118 - "to_provider_schema"
+Cohesion: 0.39
+Nodes (7): _convert(), Any, JSON-Schema normalisation for provider structured output / tool parameters (LLD…, Return a self-contained (no `$ref`) schema restricted to the portable keyword…, _resolve_ref(), to_provider_schema(), copy
 
 ### Community 119 - "Jg"
-Cohesion: 0.04
-Nodes (60): a6(), addAstNodeRegionWithAssignmentsTo(), assign(), assignWithoutOverride(), c6(), convert(), createDehyrationContext(), createGrammarElementIdMap() (+52 more)
+Cohesion: 0.06
+Nodes (40): a6(), c6(), createDehyrationContext(), createGrammarElementIdMap(), createHydrationContext(), CW(), dehydrate(), dehydrateAstNode() (+32 more)
 
 ### Community 120 - "LA"
-Cohesion: 0.03
-Nodes (110): addToResyncTokens(), AT_LEAST_ONE_SEP(), AT_LEAST_ONE_SEP1(), AT_LEAST_ONE_SEP2(), AT_LEAST_ONE_SEP3(), AT_LEAST_ONE_SEP4(), AT_LEAST_ONE_SEP5(), AT_LEAST_ONE_SEP6() (+102 more)
+Cohesion: 0.02
+Nodes (158): addToResyncTokens(), AT_LEAST_ONE(), AT_LEAST_ONE1(), AT_LEAST_ONE2(), AT_LEAST_ONE3(), AT_LEAST_ONE4(), AT_LEAST_ONE5(), AT_LEAST_ONE6() (+150 more)
 
 ### Community 121 - "agents/models.py"
 Cohesion: 0.33
 Nodes (8): ComponentFinding, FindingFact, InvestigationFinding, BaseModel, Deep Agent output contracts (LLD §15). Findings feed the guide planner, section…, WorkflowFinding, WorkflowStep, 17. Diagrams (`unfold.diagrams`)
 
-### Community 122 - "sufficiency.py"
-Cohesion: 0.16
-Nodes (18): _keep(), Code-aware tokenizer shared by BM25 indexing and querying (LLD §10, AI infra…, Tokens with repetition preserved (term frequency matters for documents)., Same transformation as documents, de-duplicated in first-seen order., _segment_tokens(), tokenize(), tokenize_query(), _identifiers() (+10 more)
+### Community 122 - "retrievers.py"
+Cohesion: 0.11
+Nodes (21): _keep(), Code-aware tokenizer shared by BM25 indexing and querying (LLD §10, AI infra…, Tokens with repetition preserved (term frequency matters for documents)., _segment_tokens(), tokenize(), _entity_text(), _interleave(), _norm_route() (+13 more)
 
-### Community 123 - "export-button.tsx"
-Cohesion: 0.17
-Nodes (15): ExportButton(), ButtonProps, Size, sizes, Variant, variants, useToast(), isApiError() (+7 more)
+### Community 123 - "qqe"
+Cohesion: 0.29
+Nodes (7): AI(), ay(), Eie(), kI(), mb(), qqe(), zqe()
 
 ### Community 124 - "Unfold — Product Requirements Document (PRD)"
 Cohesion: 0.15
@@ -825,13 +818,13 @@ Nodes (7): b7t(), e7t(), eX(), i7t(), k7t(), l7t(), p7t()
 Cohesion: 0.33
 Nodes (6): a7t(), d7t(), h7t(), n7t(), s7t(), u7t()
 
-### Community 132 - "sessions.py"
-Cohesion: 0.19
-Nodes (15): create_session(), current_session(), get, post, Request, Response, RuntimeDep, SessionDep (+7 more)
+### Community 132 - "Unfold"
+Cohesion: 0.33
+Nodes (4): Commands, graphify, Unfold, Working rules
 
 ### Community 133 - "children"
-Cohesion: 0.15
-Nodes (14): b0e(), cA(), children(), Hge(), hst(), r(), not(), n() (+6 more)
+Cohesion: 0.19
+Nodes (9): cA(), children(), Hge(), hst(), r(), not(), n(), Uge() (+1 more)
 
 ### Community 134 - "vercel.json"
 Cohesion: 0.40
@@ -841,37 +834,29 @@ Nodes (4): buildCommand, framework, installCommand, $schema
 Cohesion: 0.12
 Nodes (16): dependencies, clsx, @dagrejs/dagre, dompurify, lucide-react, mermaid, motion, next (+8 more)
 
-### Community 137 - "Runtime"
+### Community 137 - "BlobStore"
 Cohesion: 0.04
-Nodes (44): alembic, Job progress: durable stage on the job row, then an ordered replayable event in…, Neo4jStore, Any, Run a parameterised query and return records as dicts (reads and small writes)., Database, AsyncSession, Async engine + session factory (one per process). (+36 more)
+Nodes (28): lexical_key(), Database, AsyncSession, PostgresProgressStore, Any, Best effort: a deleted project or an unstorable payload must not fail the job…, Fixed-window limiter. Phase 4 swaps in a DynamoDB (TTL items) implementation of…, RedisRateLimiter (+20 more)
 
 ### Community 138 - "test_architecture.py"
-Cohesion: 0.24
-Nodes (8): _modules(), _pkg(), Architecture rules from HLD §3 / backend/CLAUDE.md, enforced on the import…, module dotted name -> set of imported absolute module names., Analysis must never execute repository code (PRD §19)., test_core_and_domain_are_leaf_layers(), test_no_subprocess_or_eval_of_repository_content(), test_only_composition_roots_import_api_or_worker_entrypoints()
+Cohesion: 0.22
+Nodes (9): _modules(), _pkg(), Architecture rules from HLD §3 / backend/CLAUDE.md, enforced on the import…, module dotted name -> set of imported absolute module names., Analysis must never execute repository code (PRD §19)., test_core_and_domain_are_leaf_layers(), test_infrastructure_sdks_only_in_adapters(), test_no_subprocess_or_eval_of_repository_content() (+1 more)
 
 ### Community 139 - "destructEndLink"
 Cohesion: 0.50
 Nodes (4): countChar(), destructEndLink(), destructLink(), destructStartLink()
 
-### Community 140 - "hasNode"
-Cohesion: 0.16
-Nodes (15): G9(), hasNode(), hT(), r(), jst(), KFe(), Mst(), r() (+7 more)
+### Community 140 - "hT"
+Cohesion: 0.40
+Nodes (5): G9(), hT(), r(), qst(), sources()
 
 ### Community 141 - "match"
 Cohesion: 0.07
 Nodes (32): bqe(), buildUnableToPopLexerModeMessage(), buildUnexpectedCharactersMessage(), computeNewColumn(), Cqe(), createIndentationTokenInstance(), dedentMatcher(), EJ() (+24 more)
 
-### Community 143 - "atLeastOneInternal"
-Cohesion: 0.15
-Nodes (13): AT_LEAST_ONE(), AT_LEAST_ONE1(), AT_LEAST_ONE2(), AT_LEAST_ONE3(), AT_LEAST_ONE4(), AT_LEAST_ONE5(), AT_LEAST_ONE6(), AT_LEAST_ONE7() (+5 more)
-
-### Community 144 - "optionInternal"
-Cohesion: 0.17
-Nodes (12): option(), OPTION1(), OPTION2(), OPTION3(), OPTION4(), OPTION5(), OPTION6(), OPTION7() (+4 more)
-
-### Community 145 - ".write"
-Cohesion: 0.29
-Nodes (10): _derived_relationships(), _ir_nodes(), add(), _node_props(), project_uid(), Any, (label, uid, props) for every IR entity that becomes a graph node., Structural edges implied by IR fields (containment, handler, schema symbol) —… (+2 more)
+### Community 145 - "GraphBuilder"
+Cohesion: 0.13
+Nodes (20): _batches(), _derived_relationships(), GraphBuilder, _ir_nodes(), add(), _node_props(), project_uid(), Any (+12 more)
 
 ### Community 146 - "Technology Stack"
 Cohesion: 0.18
@@ -885,17 +870,13 @@ Nodes (10): compilerOptions, baseUrl, esModuleInterop, module, outDir, paths, ro
 Cohesion: 0.29
 Nodes (9): _make_chunk(), Split document text into overlapping chunks., Split text on paragraph boundaries into chunks of roughly `chunk_size`…, split_text(), TextChunk, Fuse several ranked id lists: score(d) = sum(1 / (k + rank))., reciprocal_rank_fusion(), test_rrf_prefers_items_ranked_by_both() (+1 more)
 
-### Community 149 - "PROJECT_AUDIT.md — Unfold, Phase 0"
-Cohesion: 0.18
-Nodes (10): 10. Context-rot prevention strategy, 11. Git worktree, RAM, disk and workspace plan, 1. Project overview and actual architecture, 2. Feature matrix, 3. Functional and API audit, 5. AI, agents and RAG assessment, 6. Infrastructure and cloud-cost assessment, 7. Frontend and UX assessment (+2 more)
+### Community 149 - "Runtime"
+Cohesion: 0.08
+Nodes (48): cleanup_project(), Remove blobs, vectors, graph nodes, progress and every database row of one…, Run (or resume) one analysis job. Never raises for job-level failures: they are…, run_analysis(), RunOutcome, AnalysisJobRow, ChunkRow, Runtime (+40 more)
 
 ### Community 150 - "Le"
-Cohesion: 0.19
-Nodes (16): aq(), i6(), iq(), jh(), Kh(), Ks(), l6(), Le() (+8 more)
-
-### Community 151 - "bezierCurveTo"
-Cohesion: 0.22
-Nodes (9): bezierCurveTo(), Ey(), ky(), M_t(), N_t(), NL(), P_t(), qb() (+1 more)
+Cohesion: 0.12
+Nodes (20): aLe(), aq(), cKe(), i6(), iq(), Kh(), Ks(), l6() (+12 more)
 
 ### Community 152 - "3. Product Principles"
 Cohesion: 0.20
@@ -917,10 +898,6 @@ Nodes (6): count(), HYe(), ije(), oB(), qYe(), tje()
 Cohesion: 0.18
 Nodes (18): calculateHorizontalSpace(), calculateOffsetByRotation(), calculateSpaceIfDrawnHorizontally(), calculateSpaceIfDrawnVertical(), calculateVerticalSpace(), getDrawableElementsForBottomAxis(), getDrawableElementsForLeftAxis(), getDrawableElementsForTopAxis() (+10 more)
 
-### Community 157 - "initialized"
-Cohesion: 0.33
-Nodes (6): getConfiguration(), initialized(), initializeWorkspace(), toSectionName(), updateConfiguration(), updateSectionConfiguration()
-
 ### Community 158 - "HLD.md"
 Cohesion: 0.33
 Nodes (3): 25. Guiding Product Test, Prepare your project., Unfold
@@ -941,13 +918,13 @@ Nodes (9): dependencies, bcryptjs, cors, dotenv, express, helmet, jsonwebtoken, 
 Cohesion: 0.22
 Nodes (8): compilerOptions, baseUrl, jsx, module, moduleResolution, strict, target, include
 
-### Community 163 - "retriever.py"
-Cohesion: 0.18
-Nodes (11): Chunk, A retrievable slice of a document., embed_query(), Embed a single query., HybridRetriever, Hybrid retrieval: BM25 lexical + dense vector search fused with Reciprocal Rank…, Combines BM25 over chunk text with Qdrant vector search., Rank chunks with BM25. (+3 more)
+### Community 163 - "HybridRetriever"
+Cohesion: 0.16
+Nodes (13): Base, Chunk, DeclarativeBase, QueryLog, SQLAlchemy ORM models (PostgreSQL)., A retrievable slice of a document., Audit trail of questions asked., HybridRetriever (+5 more)
 
-### Community 164 - "inline-text.tsx"
-Cohesion: 0.15
-Nodes (16): CiteHandler, InlineText(), renderNodes(), MarkdownView(), MermaidView(), CitationResolver, citationLabels(), findEmClose() (+8 more)
+### Community 164 - "evidence-drawer.tsx"
+Cohesion: 0.08
+Nodes (33): DrawerState, EvidenceContext, EvidenceContextValue, EvidenceDetail(), EvidenceItem, EvidenceProvider(), CiteChip(), CiteHandler (+25 more)
 
 ### Community 165 - "cje"
 Cohesion: 0.40
@@ -990,12 +967,12 @@ Cohesion: 0.25
 Nodes (8): 24. API Surface, Chat, Export, Graph/visuals, Guide, Progress streaming, Projects, Sessions
 
 ### Community 177 - "fve"
-Cohesion: 0.15
-Nodes (12): act(), cct(), dve(), fve(), Hct(), ict(), Kht(), oct() (+4 more)
+Cohesion: 0.18
+Nodes (11): act(), cct(), dve(), fve(), Hct(), ict(), oct(), sct() (+3 more)
 
 ### Community 180 - "i0"
-Cohesion: 0.25
-Nodes (11): AW(), Fu(), gke(), i0(), IW(), LW(), mke(), pke() (+3 more)
+Cohesion: 0.23
+Nodes (12): AW(), Fu(), gke(), i0(), IW(), LW(), mke(), pke() (+4 more)
 
 ### Community 184 - "28. Scalability Strategy"
 Cohesion: 0.29
@@ -1019,15 +996,11 @@ Nodes (7): scripts, build, dev, lint, prisma:migrate, start, test
 
 ### Community 191 - "cn"
 Cohesion: 0.09
-Nodes (28): ProjectNav(), ProjectSection, SECTIONS, Skeleton(), apply(), LABEL, listeners, NEXT (+20 more)
+Nodes (31): ProjectNav(), ProjectSection, ProjectTopbar(), SECTIONS, Skeleton(), apply(), LABEL, listeners (+23 more)
 
 ### Community 192 - "a1e"
 Cohesion: 0.47
 Nodes (6): a1e(), $lt(), n1e(), Olt(), r1e(), t1e()
-
-### Community 193 - "C4"
-Cohesion: 0.40
-Nodes (5): C4(), LP(), TP(), wKe(), x4()
 
 ### Community 195 - "linkNode"
 Cohesion: 0.33
@@ -1078,8 +1051,8 @@ Cohesion: 0.33
 Nodes (5): Architecture, Configuration, DocQA — retrieval-augmented question answering over your documents, Notes for automated tools, Running locally
 
 ### Community 209 - "expiry-notice.tsx"
-Cohesion: 0.11
-Nodes (26): EXPIRY_COPY, EXPIRY_WARNING_MS, ExpiryBanner(), ExpiryChip(), useRemaining(), LandingPage(), submit(), stages (+18 more)
+Cohesion: 0.18
+Nodes (17): EXPIRY_COPY, EXPIRY_WARNING_MS, ExpiryBanner(), ExpiryChip(), useRemaining(), useSession(), useToast(), Tooltip() (+9 more)
 
 ### Community 216 - "10. Request Priority"
 Cohesion: 0.40
@@ -1155,7 +1128,7 @@ Nodes (4): 22. Success Metrics, Product, Quality, Reliability
 
 ### Community 250 - "get_settings"
 Cohesion: 0.10
-Nodes (24): get_settings(), BaseSettings, Application settings loaded from the environment., Runtime configuration for the API and the worker., Return the cached settings instance., Settings, configure_logging(), Configure structured-ish logging to stdout. (+16 more)
+Nodes (23): get_settings(), BaseSettings, Application settings loaded from the environment., Runtime configuration for the API and the worker., Return the cached settings instance., Settings, configure_logging(), Configure structured-ish logging to stdout. (+15 more)
 
 ### Community 251 - "shortlink-platform"
 Cohesion: 0.50
@@ -1176,10 +1149,6 @@ Nodes (3): all(), collectValues(), findAll()
 ### Community 261 - "indexNodes2"
 Cohesion: 0.67
 Nodes (3): getPosForId(), indexNodes(), indexNodes2()
-
-### Community 262 - "GH"
-Cohesion: 1.00
-Nodes (3): GH(), oDe(), zH()
 
 ### Community 266 - "Nj"
 Cohesion: 0.67
@@ -1210,19 +1179,19 @@ Cohesion: 0.10
 Nodes (17): csp, nextConfig, frontend_src_app_globals, metadata, mono, sans, serif, AppProviders() (+9 more)
 
 ## Knowledge Gaps
-- **689 isolated node(s):** `unfold`, `name`, `version`, `private`, `description` (+684 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1965 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **55 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **691 isolated node(s):** `unfold`, `name`, `version`, `private`, `description` (+686 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2012 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **59 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `20. HTTP API (`unfold.api`, prefix `/api/v1`)` connect `Unfold — Low-Level Design (LLD)` to `guide-page.tsx`, `projects.py`, `ErrorCode`?**
-  _High betweenness centrality (0.152) - this node is a cross-community bridge._
-- **Why does `4. PostgreSQL schema (`unfold.persistence.postgres.models`, Alembic `migrations/`)` connect `compiler.py` to `Node`, `integration/conftest.py`, `sessions.py`, `UnfoldError`, `_Builder`, `_JsExtractor`, `Unfold — Low-Level Design (LLD)`, `indexing/chunking.py`, `join`, `planner.py`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
-- **Why does `current()` connect `Unfold — Low-Level Design (LLD)` to `mermaid.min.js`?**
-  _High betweenness centrality (0.136) - this node is a cross-community bridge._
+- **Why does `4. PostgreSQL schema (`unfold.persistence.postgres.models`, Alembic `migrations/`)` connect `compiler.py` to `Node`, `hybrid.py`, `builders.py`, `Settings`, `ProjectIR`, `_Builder`, `projects.py`, `indexing/chunking.py`, `join`, `Unfold — Low-Level Design (LLD)`?**
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
+- **Why does `20. HTTP API (`unfold.api`, prefix `/api/v1`)` connect `ProgressReporter` to `guide-page.tsx`, `projects.py`, `ErrorCode`, `Unfold — Low-Level Design (LLD)`?**
+  _High betweenness centrality (0.130) - this node is a cross-community bridge._
+- **Why does `Api` connect `guide-page.tsx` to `evidence-drawer.tsx`, `BlobStore`, `Settings`, `use-project-progress.ts`, `ProgressReporter`, `use-chat-thread.ts`, `api/types.ts`, `Runtime`, `landing-page.tsx`?**
+  _High betweenness centrality (0.117) - this node is a cross-community bridge._
 - **Are the 147 inferred relationships involving `t()` (e.g. with `ACTION()` and `aDe()`) actually correct?**
   _`t()` has 147 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 175 inferred relationships involving `r()` (e.g. with `mermaid.min.js` and `ACTION()`) actually correct?**
