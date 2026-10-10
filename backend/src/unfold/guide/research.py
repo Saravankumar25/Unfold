@@ -21,7 +21,7 @@ from unfold.core.config import Settings
 from unfold.core.errors import ErrorCode, GenerationError, NotFound
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ModelCapability, Priority, Proof, RetrievalMode
-from unfold.guide.models import ChapterPlan, Finding, ResearchBrief, ResearchSpent
+from unfold.guide.models import ChapterPlan, EdgeRef, Finding, ResearchBrief, ResearchSpent
 from unfold.indexing.models import Chunk
 from unfold.indexing.store import ChunkRepository
 from unfold.indexing.tokenize import tokenize, tokenize_query
@@ -167,12 +167,12 @@ class Investigator:
 
     # --- evidence -> statement ----------------------------------------------------------------------------
 
-    def _describe(self, c: Chunk) -> tuple[str, Proof]:
+    def _describe(self, c: Chunk) -> tuple[str, Proof, list[EdgeRef]]:
         loc = f"{c.path}:{c.start_line}-{c.end_line}"
         sym = self._sym.get(c.symbol_id or "")
         if sym is None:
             what = c.symbol_name or c.content_type.value
-            return f"`{_clip(what, 80)}` ({c.kind}) at {loc}", Proof.STATIC
+            return f"`{_clip(what, 80)}` ({c.kind}) at {loc}", Proof.STATIC, []
         parts = [f"`{_clip(sym.qualname, 80)}` ({sym.kind}) at {loc}"]
         if sym.signature:
             parts.append(f"signature `{_clip(sym.signature, 120)}`")
@@ -181,16 +181,17 @@ class Investigator:
         if label := self.rm.entry_label(sym.id):
             parts.append(f"entry point: {label}")
         proof = Proof.STATIC
-        calls: list[str] = []
+        calls: dict[str, EdgeRef] = {}
         for e in self.rm.out_edges(sym.id):
             ref = self.rm.ref(e.dst)
             if e.rel == "CALLS" and e.proof != Proof.INFERRED and ref and ref.name not in calls:
-                calls.append(ref.name)
+                calls[ref.name] = EdgeRef(src=sym.id, dst=ref.id, src_name=sym.qualname, dst_name=ref.name)
                 if _RANK[e.proof] > _RANK[proof]:
                     proof = e.proof
-        if calls:
-            parts.append("calls " + ", ".join(f"`{_clip(n, 60)}`" for n in calls[:4]))
-        return "; ".join(parts), proof
+        shown = list(calls)[:4]
+        if shown:
+            parts.append("calls " + ", ".join(f"`{_clip(n, 60)}`" for n in shown))
+        return "; ".join(parts), proof, [calls[n] for n in shown]
 
     # --- one question -------------------------------------------------------------------------------------
 
@@ -220,23 +221,23 @@ class Investigator:
         if retrieved is not None:
             pool += [(i.chunk, False) for i in retrieved.items if not i.via_expansion]
             pool += [(i.chunk, False) for i in retrieved.items if i.via_expansion]
-        scored: list[tuple[int, int, int, str, Chunk, Proof]] = []
+        scored: list[tuple[int, int, int, str, Chunk, Proof, list[EdgeRef]]] = []
         seen: set[str] = set()
         for order, (c, from_lookup) in enumerate(pool):
             if c.id in seen:
                 continue
             seen.add(c.id)
             overlap = len(qt & set(tokenize(f"{c.path} {c.symbol_name or ''} {c.text[:1500]}")))
-            statement, statement_proof = self._describe(c)
+            statement, statement_proof, edges = self._describe(c)
             if from_lookup and named:
                 proof = statement_proof
             else:
                 proof = Proof.HEURISTIC if overlap >= need else Proof.INFERRED
-            scored.append((_RANK[proof], -overlap, order, statement, c, proof))
+            scored.append((_RANK[proof], -overlap, order, statement, c, proof, edges))
         scored.sort(key=lambda t: t[:3])
         findings = [
-            Finding(question_id=qid, statement=statement, evidence=[c.id], proof=proof)
-            for _, _, _, statement, c, proof in scored[:FINDINGS_PER_QUESTION]
+            Finding(question_id=qid, statement=statement, evidence=[c.id], proof=proof, edges=edges)
+            for _, _, _, statement, c, proof, edges in scored[:FINDINGS_PER_QUESTION]
         ]
         solid = [f for f in findings if f.proof is not Proof.INFERRED]
         sufficient = retrieved is None or retrieved.sufficient

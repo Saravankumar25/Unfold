@@ -55,11 +55,21 @@ class GuidePlan(BaseModel):
 # ---- research ---------------------------------------------------------------------------------------------
 
 
+class EdgeRef(BaseModel):
+    """A call edge a finding or flow states, by entity id (what an edge claim's `graph_node_ids` carry)."""
+
+    src: str
+    dst: str
+    src_name: str
+    dst_name: str
+
+
 class Finding(BaseModel):
     question_id: int  # index into `ResearchBrief.questions`
     statement: str  # built deterministically from retrieved chunks / IR / flows, never model prose
     evidence: list[str]  # chunk ids
     proof: Proof
+    edges: list[EdgeRef] = Field(default_factory=list)  # the call edges named in `statement`
 
 
 class ResearchSpent(BaseModel):

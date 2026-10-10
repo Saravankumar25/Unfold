@@ -8,6 +8,7 @@ frontend already consume.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -15,32 +16,45 @@ from unfold.context.budget import estimate_tokens
 from unfold.context.compiler import compile_context
 from unfold.context.models import safe_header_field
 from unfold.core.errors import ErrorCode, GenerationError
+from unfold.core.logging import get_logger
 from unfold.domain.enums import ClaimKind, ModelCapability, Priority, Proof, RetrievalMode
 from unfold.domain.models import ClaimRecord, SessionProfile
 from unfold.guide.models import (
     Block,
     ChapterPlan,
+    CodeBlock,
     DiagramBlock,
+    EdgeRef,
     ResearchBrief,
     SectionContent,
     SectionDraft,
 )
 from unfold.guide.research import render_brief
+from unfold.indexing.models import Chunk
 from unfold.indexing.store import ChunkRepository
 from unfold.llm.schemas import LLMClient, LLMRequest, Message
 from unfold.retrieval.models import RetrievalPlan, RetrievalResult, RetrievalTrace, RetrievedItem
 from unfold.security.fence import UNTRUSTED_POLICY, untrusted
 from unfold.security.secrets import redact_text
 
+log = get_logger(__name__)
+
 SECTION_CONTEXT_TOKENS = 9_000  # brief + excerpts + facts
 MIN_EXCERPT_TOKENS = 2_000
-WRITER_PROMPT_VERSION = "2"
+WRITER_PROMPT_VERSION = "3"
+_RELATION = re.compile(
+    r"\b(calls?|invokes?|imports?|reads?|writes?|queries|uses?|depends on|delegates? to|hands|forwards?|"
+    r"enqueues?|publishes?|consumes?|passes)\b",
+    re.I,
+)
 
 _WRITER_SYSTEM = (
     "You write one chapter of a reading guide that teaches a software repository. You are given a research brief "
     "(what was found for each question, with the evidence labels that support it, traced flows, tests, and "
     "questions that were NOT established) and the evidence excerpts. Use ONLY the brief, the excerpts and the "
-    "verified facts. Cite evidence inline with its label, e.g. [E3], in paragraph/bullet text. For every claim "
+    "verified facts. Every paragraph, bullet and callout that states a fact about the code ends with an evidence "
+    "label, e.g. [E3], or a `path:L12-L40` location. Every code block quotes the excerpt verbatim (no ellipses) "
+    "and sets `path` and `start_line` (the file line of its first line). For every claim "
     "about the project add an entry to `claims` with the labels that support it in `evidence`; use kind "
     "'project_fact' for things the code shows, 'inference' for reasoned conclusions, 'improvement' for "
     "suggestions. Where the brief lists a question as not established, or the evidence does not cover something, "
@@ -74,6 +88,81 @@ class WrittenSection:
 def _strip_diagrams(content: SectionContent) -> SectionContent:
     blocks: list[Block] = [b for b in content.blocks if not isinstance(b, DiagramBlock)]
     return SectionContent(summary=content.summary, blocks=blocks)
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _locate(code: str, chunks: Sequence[Chunk], prefer: str | None) -> tuple[str, int] | None:
+    """(path, file line of the first quoted line) when every non-blank quoted line appears, in order and
+    adjacent, in the body of one shown chunk (whitespace-normalised). Chunk text is `header\nbody`."""
+    quoted = [_norm(x) for x in code.splitlines() if x.strip()]
+    if not quoted:
+        return None
+    for c in sorted(chunks, key=lambda c: c.path != prefer):
+        body = c.text.split("\n", 1)[1] if "\n" in c.text else ""
+        rows = [(i, _norm(x)) for i, x in enumerate(body.splitlines()) if x.strip()]
+        norms = [n for _, n in rows]
+        for k in range(len(norms) - len(quoted) + 1):
+            if norms[k : k + len(quoted)] == quoted:
+                return c.path, c.start_line + rows[k][0]
+    return None
+
+
+def _anchor_code(content: SectionContent, shown: Sequence[Chunk]) -> SectionContent:
+    """Every code block gets the `path` and `start_line` of the excerpt it quotes. A block that quotes nothing
+    in the evidence shown (and names no location itself) is dropped: it would be unverifiable code."""
+    blocks: list[Block] = []
+    dropped = 0
+    for b in content.blocks:
+        if isinstance(b, CodeBlock):
+            hit = _locate(b.code, shown, b.path)
+            if hit is not None:
+                b = b.model_copy(update={"path": hit[0], "start_line": hit[1]})
+            elif not (b.path and b.start_line):
+                dropped += 1
+                continue
+        blocks.append(b)
+    if dropped:
+        log.warning("guide.code_block_dropped", count=dropped)
+    return SectionContent(summary=content.summary, blocks=blocks)
+
+
+def _edges(brief: ResearchBrief) -> list[EdgeRef]:
+    """Call edges the brief states: those of its findings and every proof-bearing step of its flows."""
+    out: dict[tuple[str, str], EdgeRef] = {}
+    for f in brief.findings:
+        for e in f.edges:
+            out.setdefault((e.src, e.dst), e)
+    for flow in brief.flows:
+        name = {s.symbol.id: s.symbol.name for s in flow.steps}
+        for step in flow.steps:
+            via = step.via
+            if via is not None and via.src in name and via.rel == "CALLS":
+                out.setdefault(
+                    (via.src, via.dst),
+                    EdgeRef(src=via.src, dst=via.dst, src_name=name[via.src], dst_name=step.symbol.name),
+                )
+    return list(out.values())
+
+
+def _word_at(text: str, name: str) -> int | None:
+    short = name.rsplit(".", 1)[-1]
+    m = re.search(rf"(?<![A-Za-z0-9_]){re.escape(short)}(?![A-Za-z0-9_])", text) if short else None
+    return m.start() if m else None
+
+
+def _edge_ids(text: str, edges: Sequence[EdgeRef]) -> list[str]:
+    """[source, target] of the brief's edge a claim states ("A calls B"): both names, source first, and a
+    relation verb. Otherwise []: only claims about an edge the research found are checked as edges."""
+    if not _RELATION.search(text):
+        return []
+    for e in edges:
+        a, b = _word_at(text, e.src_name), _word_at(text, e.dst_name)
+        if e.src != e.dst and a is not None and b is not None and a < b:
+            return [e.src, e.dst]
+    return []
 
 
 async def write_chapter(
@@ -144,10 +233,17 @@ async def write_chapter(
         project_id=project_id,
     )
     draft = await llm.generate_structured(req, SectionDraft)
+    edges = _edges(brief)
     claims = [
-        ClaimRecord(text=c.text, kind=ClaimKind(c.kind), evidence_ids=ctx.resolve_labels(c.evidence))
+        ClaimRecord(
+            text=c.text,
+            kind=ClaimKind(c.kind),
+            evidence_ids=ctx.resolve_labels(c.evidence),
+            graph_node_ids=_edge_ids(c.text, edges) if c.kind == "project_fact" else [],
+        )
         for c in draft.claims
     ]
+    shown_ids = {e.chunk_id for e in ctx.evidence}
     evidence: dict[str, dict[str, object]] = {
         e.label: {
             "chunk_id": e.chunk_id,
@@ -158,6 +254,5 @@ async def write_chapter(
         }
         for e in ctx.evidence
     }
-    return WrittenSection(
-        _strip_diagrams(draft.content), claims, evidence, ctx.token_count_estimate + brief_tokens
-    )
+    content = _anchor_code(_strip_diagrams(draft.content), [c for c in found if c.id in shown_ids])
+    return WrittenSection(content, claims, evidence, ctx.token_count_estimate + brief_tokens)
