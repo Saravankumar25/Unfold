@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
+from unfold.core.logging import get_logger
 from unfold.graph.builder import FULLTEXT_INDEX
 from unfold.graph.models import (
     REL_TYPES,
@@ -26,6 +27,11 @@ from unfold.graph.models import (
 )
 from unfold.persistence.neo4j_store import Neo4jStore
 
+if TYPE_CHECKING:
+    from unfold.project_ir.schema import ProjectIR
+    from unfold.runtime import Runtime
+
+log = get_logger(__name__)
 MAX_DEPTH = 3
 MAX_PATH_HOPS = 6
 MAX_LIMIT = 500
@@ -75,7 +81,72 @@ def escape_lucene(text: str) -> str:
     return _LUCENE_SPECIAL.sub(r"\\\1", text)
 
 
-class GraphQueries:
+class GraphQueries(Protocol):
+    """The read side retrieval and the guide use. `Neo4jGraphQueries` is the default and the parity oracle."""
+
+    async def get_node(self, project_id: str, uid: str) -> GraphNode | None: ...
+
+    async def find_entities(
+        self, project_id: str, names: Sequence[str], limit: int = 20
+    ) -> list[GraphNode]: ...
+
+    async def neighbors(
+        self,
+        project_id: str,
+        uid: str,
+        depth: int = 1,
+        rel_types: Sequence[str] | None = None,
+        limit: int = 50,
+    ) -> Neighborhood: ...
+
+    async def callers(
+        self, project_id: str, uid: str, depth: int = 1, limit: int = 50
+    ) -> list[GraphNode]: ...
+
+    async def callees(
+        self, project_id: str, uid: str, depth: int = 1, limit: int = 50
+    ) -> list[GraphNode]: ...
+
+    async def path_between(
+        self,
+        project_id: str,
+        a_uid: str,
+        b_uid: str,
+        max_hops: int = 4,
+        rel_types: Sequence[str] | None = None,
+    ) -> PathResult | None: ...
+
+    async def subsystem_members(
+        self, project_id: str, subsystem_id: str, limit: int = 200
+    ) -> list[GraphNode]: ...
+
+    async def endpoint_flows(self, project_id: str, limit: int = 20) -> list[EndpointFlow]: ...
+
+    async def overview(self, project_id: str, top_k: int = 15) -> GraphOverview: ...
+
+    async def module_dependencies(self, project_id: str, limit: int = 200) -> list[ModuleDependency]: ...
+
+
+def graph_queries_for(rt: Runtime, ir: ProjectIR | None) -> GraphQueries | None:
+    """The configured read side (`GRAPH_BACKEND`); None = graph retrieval off (the recorded degradation path)."""
+    backend = rt.settings.graph_backend
+    if backend == "neo4j":
+        return Neo4jGraphQueries(rt.neo4j)
+    if backend == "memory" and ir is not None:
+        from unfold.graph.memory import memory_graph_for
+
+        return memory_graph_for(rt, ir)
+    if backend == "memory":
+        log.warning("graph.memory_without_ir")  # retrieval runs without the graph; the trace records it
+    return None
+
+
+def evict_memory_graph(rt: Runtime, project_id: str) -> None:
+    """Drop the process-cached in-memory graph of a project (`graph.memory.memory_graph_for` fills it)."""
+    rt.extras.get("memory_graphs", {}).pop(project_id, None)
+
+
+class Neo4jGraphQueries:
     def __init__(self, neo4j: Neo4jStore) -> None:
         self.neo4j = neo4j
 

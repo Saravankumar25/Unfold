@@ -9,18 +9,21 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 from qdrant_client import models as qm
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from unfold.core.logging import get_logger
-from unfold.indexing.embeddings import Embedder
+from unfold.indexing.embeddings import Embedder, embedder_for
 from unfold.indexing.errors import ModelUnavailable
 from unfold.indexing.models import CHUNKER_VERSION, Chunk
 from unfold.persistence.qdrant_store import QdrantStore
 from unfold.persistence.redis_store import RedisStore
+
+if TYPE_CHECKING:
+    from unfold.runtime import Runtime
 
 log = get_logger(__name__)
 
@@ -70,6 +73,34 @@ def _project_filter(
     if subsystem_ids:
         must.append(qm.FieldCondition(key="subsystem_id", match=qm.MatchAny(any=list(subsystem_ids))))
     return qm.Filter(must=must)
+
+
+class DenseStore(Protocol):
+    """What retrieval and the pipeline need from a dense index; `DenseIndex` (Qdrant) is the default."""
+
+    async def upsert(self, chunks: Sequence[Chunk]) -> int: ...
+
+    async def search(
+        self,
+        project_id: str,
+        query: str,
+        k: int = 40,
+        content_types: Sequence[str] | None = None,
+        subsystem_ids: Sequence[str] | None = None,
+    ) -> list[tuple[str, float]]: ...
+
+    async def set_subsystems(self, project_id: str, mapping: dict[str, str]) -> int: ...
+
+    async def delete_project(self, project_id: str) -> None: ...
+
+
+def dense_store_for(rt: Runtime) -> DenseStore:
+    """The configured dense store (`DENSE_BACKEND`): Qdrant (default, the parity oracle) or the S3 artifact."""
+    if rt.settings.dense_backend == "artifact":
+        from unfold.indexing.dense_artifact import artifact_store_for
+
+        return artifact_store_for(rt)
+    return DenseIndex(rt.qdrant, embedder_for(rt), rt.redis)
 
 
 class DenseIndex:

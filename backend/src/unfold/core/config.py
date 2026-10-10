@@ -133,6 +133,11 @@ class Settings(BaseSettings):
     otel_service_name: str = "unfold"
     work_dir: str = ""
 
+    # --- phase 4 retrieval backends (appended block; the first value is the default and the parity oracle)
+    dense_backend: Literal["qdrant", "artifact"] = "qdrant"
+    graph_backend: Literal["neo4j", "memory", "off"] = "neo4j"
+    # --- end phase 4 retrieval backends
+
     @field_validator(*_SECRET_FIELDS, mode="before")
     @classmethod
     def _blank_is_none(cls, v: object) -> object:

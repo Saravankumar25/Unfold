@@ -41,8 +41,7 @@ from unfold.guide.generate import (
 )
 from unfold.guide.models import PLANNER_VERSION, DiagramBlock, GuidePlan, SectionContent
 from unfold.indexing.chunking import chunk_project
-from unfold.indexing.dense import DenseIndex
-from unfold.indexing.embeddings import embedder_for
+from unfold.indexing.dense import dense_store_for
 from unfold.indexing.lexical import BM25Index
 from unfold.indexing.store import ChunkRepository
 from unfold.ingestion.service import AcquiredSource, acquire_github, acquire_zip
@@ -298,6 +297,11 @@ class _Run:
 
     async def _graph(self) -> None:
         await self.reporter.stage(JobStage.BUILDING_GRAPH)
+        backend = self.rt.settings.graph_backend
+        if backend != "neo4j":  # memory: derived from the IR at query time; off: the recorded degradation
+            if backend == "off":
+                await self.reporter.degraded("graph")
+            return
         ir = await self._load_ir()
 
         async def work() -> None:
@@ -322,7 +326,7 @@ class _Run:
         chunks = await self.chunks.list_project(self.pid)
 
         async def work() -> None:
-            index = DenseIndex(self.rt.qdrant, embedder_for(self.rt), self.rt.redis)
+            index = dense_store_for(self.rt)
             await index.upsert(chunks)
 
         await self._optional("dense", work)
@@ -373,11 +377,9 @@ class _Run:
             await GraphBuilder(self.rt.neo4j).set_subsystem(self.pid, entity_subsystems(ir, candidates))
 
         async def dense_work() -> None:
-            await DenseIndex(self.rt.qdrant, embedder_for(self.rt), self.rt.redis).set_subsystems(
-                self.pid, chunk_map
-            )
+            await dense_store_for(self.rt).set_subsystems(self.pid, chunk_map)
 
-        if "graph" not in await self._degraded():
+        if self.rt.settings.graph_backend == "neo4j" and "graph" not in await self._degraded():
             await self._optional("graph", graph_work)
         if "dense" not in await self._degraded():
             await self._optional("dense", dense_work)

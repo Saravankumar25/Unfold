@@ -4,7 +4,7 @@ Each returns `SourceHits`: a ranked list of `(chunk_id, score)` for one source. 
 cosine, graph proximity, structural overlap) and only used for tracing — fusion is rank-based.
 
 - lexical     BM25 artifact via `LexicalIndexCache` (every lexical query variant, merged by inner RRF)
-- dense       Qdrant via `DenseIndex.search` (semantic variants; optional subsystem / content-type filters)
+- dense       dense store (`DenseStore.search`) (semantic variants; optional subsystem / content-type filters)
 - graph       seed names → `GraphQueries.find_entities` → `neighbors` → chunks by symbol id / file
 - structural  Project IR lookups: target symbols, routes → handlers, named files, endpoints / schemas /
               services / infra / data stores / queues / AI components matching the plan
@@ -22,7 +22,7 @@ from typing import Any
 
 from unfold.graph.models import GraphNode
 from unfold.graph.queries import GraphQueries
-from unfold.indexing.dense import DenseIndex
+from unfold.indexing.dense import DenseStore
 from unfold.indexing.lexical import LexicalIndexCache
 from unfold.indexing.models import Chunk
 from unfold.indexing.store import ChunkRepository
@@ -105,7 +105,7 @@ class LexicalRetriever:
 
 
 class DenseRetriever:
-    def __init__(self, dense: DenseIndex, config: RetrievalConfig = DEFAULT_CONFIG) -> None:
+    def __init__(self, dense: DenseStore, config: RetrievalConfig = DEFAULT_CONFIG) -> None:
         self.dense = dense
         self.config = config
 

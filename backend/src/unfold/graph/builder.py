@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from unfold.core.logging import get_logger
@@ -215,6 +216,78 @@ def _derived_relationships(ir: ProjectIR, node_ids: set[str]) -> list[tuple[str,
     return out
 
 
+@dataclass
+class IRGraph:
+    """What the IR contributes to the graph, before any store: shared by the Neo4j writer and `graph.memory`."""
+
+    by_label: dict[str, list[dict[str, Any]]]  # label -> [{uid, props}]
+    node_ids: set[str]
+    det: dict[tuple[str, str, str], dict[str, Any]]  # (type, source, target) -> props
+    inferred: dict[tuple[str, str, str], dict[str, Any]]
+    skipped: int  # relationships dropped: endpoint missing or type not allow-listed
+
+
+def ir_graph(ir: ProjectIR) -> IRGraph:
+    pid, ver = ir.project.project_id, ir.analysis_version
+    by_label: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_label["Project"].append(
+        {
+            "uid": project_uid(pid),
+            "props": {
+                "project_id": pid,
+                "name": ir.project.name,
+                "kind": "project",
+                "source": "deterministic",
+                "analyzer": "graph_builder",
+                "analysis_version": ver,
+                "input_type": ir.project.input_type,
+            },
+        }
+    )
+    for label, uid, props in _ir_nodes(ir):
+        by_label[label].append({"uid": uid, "props": props})
+    node_ids = {row["uid"] for rows in by_label.values() for row in rows}
+
+    skipped = 0
+    # Relationships: IR deterministic ones win over derived ones for the same (type, source, target).
+    det: dict[tuple[str, str, str], dict[str, Any]] = {}
+    inferred: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for t, s, d in _derived_relationships(ir, node_ids):
+        det.setdefault(
+            (t, s, d),
+            {
+                "source": "deterministic",
+                "confidence": 1.0,
+                "analyzer": "graph_builder",
+                "analysis_version": ver,
+                "evidence_ids": [],
+            },
+        )
+    for r in ir.relationships:
+        if r.type not in REL_TYPES or r.source_id not in node_ids or r.target_id not in node_ids:
+            skipped += 1
+            continue
+        rprops: dict[str, Any] = {
+            "source": r.provenance.source,
+            "confidence": r.provenance.confidence,
+            "analyzer": r.provenance.analyzer,
+            "analysis_version": ver,
+            "evidence_ids": list(r.provenance.evidence_ids)[:50],
+        }
+        for k, v in r.properties.items():
+            scalar = _scalar(v)
+            if scalar is not None and k not in rprops:
+                rprops[k] = scalar
+        rkey: tuple[str, str, str] = (r.type, r.source_id, r.target_id)
+        (inferred if r.provenance.source == "inferred" else det)[rkey] = rprops
+
+    for key in list(det):
+        if key[1] not in node_ids or key[2] not in node_ids:
+            del det[key]
+            skipped += 1
+    return IRGraph(by_label, node_ids, det, inferred, skipped)
+
+
 class GraphBuilder:
     def __init__(self, neo4j: Neo4jStore) -> None:
         self.neo4j = neo4j
@@ -233,69 +306,15 @@ class GraphBuilder:
     # --- deterministic write --------------------------------------------------------------------------------
 
     async def write(self, ir: ProjectIR) -> GraphWriteStats:
-        pid, ver = ir.project.project_id, ir.analysis_version
-        stats = GraphWriteStats()
+        pid = ir.project.project_id
+        g = ir_graph(ir)
+        stats = GraphWriteStats(skipped_relationships=g.skipped)
+        det, inferred = g.det, g.inferred
 
-        by_label: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        by_label["Project"].append(
-            {
-                "uid": project_uid(pid),
-                "props": {
-                    "project_id": pid,
-                    "name": ir.project.name,
-                    "kind": "project",
-                    "source": "deterministic",
-                    "analyzer": "graph_builder",
-                    "analysis_version": ver,
-                    "input_type": ir.project.input_type,
-                },
-            }
-        )
-        for label, uid, props in _ir_nodes(ir):
-            by_label[label].append({"uid": uid, "props": props})
-        node_ids = {row["uid"] for rows in by_label.values() for row in rows}
-
-        for label in sorted(by_label):
-            n = await self._merge_nodes(label, by_label[label])
+        for label in sorted(g.by_label):
+            n = await self._merge_nodes(label, g.by_label[label])
             stats.nodes_by_label[label] = n
             stats.nodes += n
-
-        # Relationships: IR deterministic ones win over derived ones for the same (type, source, target).
-        det: dict[tuple[str, str, str], dict[str, Any]] = {}
-        inferred: dict[tuple[str, str, str], dict[str, Any]] = {}
-        for t, s, d in _derived_relationships(ir, node_ids):
-            det.setdefault(
-                (t, s, d),
-                {
-                    "source": "deterministic",
-                    "confidence": 1.0,
-                    "analyzer": "graph_builder",
-                    "analysis_version": ver,
-                    "evidence_ids": [],
-                },
-            )
-        for r in ir.relationships:
-            if r.type not in REL_TYPES or r.source_id not in node_ids or r.target_id not in node_ids:
-                stats.skipped_relationships += 1
-                continue
-            rprops: dict[str, Any] = {
-                "source": r.provenance.source,
-                "confidence": r.provenance.confidence,
-                "analyzer": r.provenance.analyzer,
-                "analysis_version": ver,
-                "evidence_ids": list(r.provenance.evidence_ids)[:50],
-            }
-            for k, v in r.properties.items():
-                scalar = _scalar(v)
-                if scalar is not None and k not in rprops:
-                    rprops[k] = scalar
-            rkey: tuple[str, str, str] = (r.type, r.source_id, r.target_id)
-            (inferred if r.provenance.source == "inferred" else det)[rkey] = rprops
-
-        for key in list(det):
-            if key[1] not in node_ids or key[2] not in node_ids:
-                del det[key]
-                stats.skipped_relationships += 1
 
         for group, deterministic in ((det, True), (inferred, False)):
             by_type: dict[str, list[dict[str, Any]]] = defaultdict(list)
