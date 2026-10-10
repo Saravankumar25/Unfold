@@ -15,6 +15,8 @@ function reducer(state: ProgressState, action: Action): ProgressState {
 
 export const POLL_MS = 1500;
 export const MAX_BACKOFF_MS = 10_000;
+/** How long the first poll may take before the UI says the service is waking up. */
+export const WAKING_MS = 4000;
 
 /** Delay before the next poll: steady while healthy, doubling (capped) after consecutive failures. */
 export function nextPollDelay(failures: number): number {
@@ -35,10 +37,12 @@ export function useProjectProgress(projectId: string, job: JobOut | null): Progr
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cursor = 0;
     let failures = 0;
+    const waking = setTimeout(() => dispatch({ type: "connection", connection: "waking" }), WAKING_MS);
 
     const tick = async () => {
       try {
         const page = await api.getProgress(projectId, cursor, controller.signal);
+        clearTimeout(waking);
         failures = 0;
         cursor = page.cursor;
         dispatch({ type: "connection", connection: "live" });
@@ -60,6 +64,7 @@ export function useProjectProgress(projectId: string, job: JobOut | null): Progr
     void tick();
     return () => {
       controller.abort();
+      clearTimeout(waking);
       if (timer) clearTimeout(timer);
     };
   }, [projectId, terminal]);

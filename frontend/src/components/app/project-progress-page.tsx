@@ -30,6 +30,7 @@ function ProgressContent() {
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             {["Repository secured", "System reconstructed", "Guide assembled"].map((label, i) => { const done = ready || percent >= [10, 55, 90][i]!; return <div key={label} className="flex items-center gap-2 text-[12px] text-ink-soft">{done ? <Check size={14} className="text-ok" /> : i === Math.floor(percent / 35) ? <LoaderCircle size={14} className="animate-spin text-signal" /> : <CircleDashed size={14} className="text-ink-faint" />}{label}</div>; })}
           </div>
+          {!ready && !failed && progress.connection !== "live" && progress.connection !== "connecting" ? <p role="status" className="mb-0 mt-5 border-t border-line pt-4 text-[12.5px] leading-relaxed text-ink-soft">{progress.connection === "waking" ? "Waking the service up. The first request after a quiet period can take a little longer." : progress.connection === "lost" ? "Can't reach the service. Still trying; this page will recover on its own." : "Connection interrupted. Retrying…"}</p> : null}
           {progress.detail ? <p className="mb-0 mt-5 border-t border-line pt-4 font-mono text-[11px] leading-relaxed text-ink-faint">{progress.detail}</p> : null}
         </div>
 

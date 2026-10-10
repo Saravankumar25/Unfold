@@ -74,7 +74,8 @@ export type ClaimKind = "project_fact" | "inference" | "improvement";
 export type ChatMode = "default" | "simpler" | "deeper" | "quiz" | "interview";
 export const CHAT_MODES: readonly ChatMode[] = ["default", "simpler", "deeper", "quiz", "interview"];
 
-export type ArtifactKind = "guide_pdf" | "chat_pdf";
+export type ArtifactKind = "guide_pdf" | "guide_md" | "chat_pdf" | "chat_md";
+export type ExportFormat = "pdf" | "md";
 
 export type ArtifactStatus = "pending" | "ready" | "failed";
 
@@ -368,15 +369,6 @@ export interface GuideSectionOut {
   quality: Record<string, unknown>;
 }
 
-export type SectionVariant = "simpler" | "deeper";
-
-export interface SectionVariantOut {
-  key: string;
-  variant: SectionVariant;
-  content: SectionContent;
-  evidence: Record<string, EvidenceRef>;
-}
-
 export interface EvidenceOut {
   chunk_id: string;
   path: string;
@@ -445,35 +437,16 @@ export interface PostChatMessage {
 }
 
 /**
- * SSE `POST /chats/{id}/messages` — event names equal `type`:
- * chat.started {message_id} · retrieval.started · retrieval.completed {detail} · agent.started ·
- * agent.tool {tool} · agent.completed · response.delta {text} · response.evidence {evidence} ·
- * response.completed {message_id, seq} · error {code, message, retryable}
+ * `POST /chats/{id}/messages` returns the whole turn as one JSON body (`?stream=true` is an NDJSON variant of the
+ * same events that this client does not use: a request that works behind any buffering proxy is the contract).
  */
-export interface ChatEvent {
-  type: string;
-  text: string | null;
-  tool: string | null;
-  detail: string | null;
-  evidence: EvidenceRef[] | null;
-  message_id: string | null;
-  seq: number | null;
-  code: string | null;
-  message: string | null;
-  retryable: boolean | null;
+export interface ChatReplyOut {
+  user_message: ChatMessageOut;
+  message: ChatMessageOut;
+  /** claim grading of the answer: claims, verified, unsupported, grounded_ratio, ... */
+  grounding: Record<string, unknown>;
+  timings: Record<string, number>;
 }
-
-export type ChatEventType =
-  | "chat.started"
-  | "retrieval.started"
-  | "retrieval.completed"
-  | "agent.started"
-  | "agent.tool"
-  | "agent.completed"
-  | "response.delta"
-  | "response.evidence"
-  | "response.completed"
-  | "error";
 
 // exports
 
@@ -483,12 +456,12 @@ export interface ExportCreated {
 
 export interface ArtifactOut {
   id: string;
-  kind: string;
+  kind: ArtifactKind;
   status: string;
   error: string | null;
   size_bytes: number | null;
   created_at: string;
   expires_at: string;
-  /** relative, e.g. /api/v1/exports/{id}/download when ready */
+  /** same-origin path, /api/v1/exports/{id}/download, once ready */
   download_url: string | null;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChevronLeft, ChevronRight, Menu, MessageSquareText, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { EvidenceProvider, useEvidence } from "@/components/content/evidence-drawer";
@@ -44,16 +44,12 @@ function GuideWorkspace() {
   const [pickedKey, setSectionKey] = useState<string | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const sectionKey = pickedKey ?? guide.data?.sections[0]?.key ?? null;
-  const [variantState, setVariantState] = useState<{ key: string; content: SectionContent } | null>(null);
-  const variant = variantState?.key === sectionKey ? variantState.content : null;
-  const [variantBusy, setVariantBusy] = useState(false);
   const section = useResource(sectionKey ? `section:${project!.id}:${sectionKey}` : null, (signal) => api.getSection(project!.id, sectionKey!, signal));
   const sections = guide.data?.sections ?? [];
   const currentIndex = sections.findIndex((s) => s.key === sectionKey);
-  async function transform(kind: "simpler" | "deeper") { if (!sectionKey) return; setVariantBusy(true); try { const next = await api.sectionVariant(project!.id, sectionKey, kind); setVariantState({ key: sectionKey, content: next.content }); } finally { setVariantBusy(false); } }
   const nav = <nav aria-label="Guide chapters" className="flex h-full flex-col"><div className="border-b border-line p-5"><p className="m-0 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">Project guide</p><p className="mb-0 mt-1 font-serif text-[20px] font-medium">{guide.data?.estimated_read_minutes ?? "—"} min read</p></div><ol className="m-0 flex-1 list-none overflow-y-auto p-2">{sections.map((s, i) => <li key={s.key}><button type="button" onClick={() => { setSectionKey(s.key); setMobileNav(false); }} className={cn("flex w-full cursor-pointer items-start gap-3 rounded-s px-3 py-2.5 text-left", s.key === sectionKey ? "bg-paper-dim text-blueprint" : "text-ink-soft hover:bg-paper-dim")}><span className="mt-0.5 font-mono text-[10px] text-ink-faint">{String(i + 1).padStart(2, "0")}</span><span className="text-[13px] font-medium leading-snug">{s.title}</span></button></li>)}</ol></nav>;
   return <EvidenceProvider projectId={project!.id}>
-    <ProjectTopbar project={project!} current="guide" leading={<Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chapters" onClick={() => setMobileNav((v) => !v)}><Menu size={17} /></Button>} actions={<ExportButton start={() => api.exportGuide(project!.id)} filename={`${project!.name || "unfold"}-guide.pdf`} size="sm" />} />
+    <ProjectTopbar project={project!} current="guide" leading={<Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chapters" onClick={() => setMobileNav((v) => !v)}><Menu size={17} /></Button>} actions={<><ExportButton start={() => api.exportGuide(project!.id, "pdf")} filename={`${project!.name || "unfold"}-guide.pdf`} size="sm" /><ExportButton start={() => api.exportGuide(project!.id, "md")} filename={`${project!.name || "unfold"}-guide.md`} label="Markdown" size="sm" /></>} />
     <div className="grid min-h-[calc(100vh-var(--topbar-h))] lg:grid-cols-[var(--sidebar-w)_1fr]">
       <aside className="hidden border-r border-line bg-panel lg:block">{nav}</aside>
       {mobileNav ? <aside className="fixed inset-x-0 top-[calc(var(--topbar-h)+42px)] z-30 max-h-[70vh] border-b border-line bg-panel shadow-xl lg:hidden">{nav}</aside> : null}
@@ -63,8 +59,8 @@ function GuideWorkspace() {
             <p className="m-0 font-mono text-[11px] uppercase tracking-[.14em] text-signal">Chapter {currentIndex + 1} · {titleCase(section.data.kind)}</p>
             <h1 className="m-0 mt-3 font-serif text-[clamp(36px,6vw,58px)] font-[470] leading-[1.05]">{section.data.title}</h1>
             {section.data.content?.summary ? <p className="mb-0 mt-5 border-l-2 border-blueprint pl-4 text-[16px] leading-relaxed text-ink-soft">{section.data.content.summary}</p> : null}
-            <div className="mt-6 flex flex-wrap gap-2"><Button size="sm" variant="chip" disabled={variantBusy} onClick={() => void transform("simpler")}><Sparkles size={13} />Explain simpler</Button><Button size="sm" variant="chip" disabled={variantBusy} onClick={() => void transform("deeper")}><BookOpen size={13} />Go deeper</Button><Link href={`/projects/${project!.id}/chat?section=${encodeURIComponent(section.data.key)}`} className="inline-flex items-center gap-1.5 rounded-full border border-signal px-3 py-1.5 text-[12.5px] font-medium text-signal no-underline hover:bg-signal-soft"><MessageSquareText size={13} />Ask about this</Link></div>
-            <div className="mt-9">{(variant ?? section.data.content) ? <SectionBlocks projectId={project!.id} section={section.data} content={(variant ?? section.data.content)!} /> : <p className="text-ink-faint">{section.data.status === "failed" ? `This chapter could not be written${typeof section.data.quality.reason === "string" ? `: ${section.data.quality.reason}` : "."}` : "This chapter is still being assembled."}</p>}</div>
+            <div className="mt-6 flex flex-wrap gap-2"><Link href={`/projects/${project!.id}/chat?section=${encodeURIComponent(section.data.key)}`} className="inline-flex items-center gap-1.5 rounded-full border border-signal px-3 py-1.5 text-[12.5px] font-medium text-signal no-underline hover:bg-signal-soft"><MessageSquareText size={13} />Ask about this</Link></div>
+            <div className="mt-9">{section.data.content ? <SectionBlocks projectId={project!.id} section={section.data} content={section.data.content} /> : <p className="text-ink-faint">{section.data.status === "failed" ? `This chapter could not be written${typeof section.data.quality.reason === "string" ? `: ${section.data.quality.reason}` : "."}` : "This chapter is still being assembled."}</p>}</div>
             <div className="mt-12 flex items-center justify-between border-t border-line pt-5"><Button variant="ghost" disabled={currentIndex <= 0} onClick={() => setSectionKey(sections[currentIndex - 1]!.key)}><ChevronLeft size={15} />Previous</Button><Button variant="ghost" disabled={currentIndex >= sections.length - 1} onClick={() => setSectionKey(sections[currentIndex + 1]!.key)}>Next<ChevronRight size={15} /></Button></div>
           </>}
         </div>

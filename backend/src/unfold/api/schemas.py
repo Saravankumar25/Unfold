@@ -255,4 +255,4 @@ class ArtifactOut(BaseModel):
     size_bytes: int | None
     created_at: datetime
     expires_at: datetime
-    download_url: str | None  # relative, /exports/{id}/download, once ready
+    download_url: str | None  # same-origin path, /api/v1/exports/{id}/download, once ready

@@ -7,6 +7,7 @@ import { api } from "@/lib/api/endpoints";
 import { messageForCode } from "@/lib/api/errors";
 import type { ProjectOut } from "@/lib/api/types";
 import { useResource } from "@/lib/hooks/use-resource";
+import { useSlow } from "@/lib/hooks/use-slow";
 import { ErrorPanel } from "./error-panel";
 import { LoadingLines } from "./skeleton";
 
@@ -42,6 +43,7 @@ function CenteredPanel({ children }: { children: ReactNode }) {
 /** Loads the project; renders the error envelope (404 = expired/foreign) or children with the project. */
 export function ProjectLoaded({ children }: { children: (project: ProjectOut) => ReactNode }) {
   const { project, error, loading, reload } = useProject();
+  const slow = useSlow(!project && !error);
   if (project) return <>{children(project)}</>;
   if (error) {
     return (
@@ -56,7 +58,11 @@ export function ProjectLoaded({ children }: { children: (project: ProjectOut) =>
   }
   return (
     <CenteredPanel>
-      <LoadingLines label={loading ? "Loading project…" : "Preparing…"} lines={5} />
+      <LoadingLines
+        label={slow ? "Waking the service up… this can take a few seconds." : loading ? "Loading project…" : "Preparing…"}
+        lines={5}
+      />
+      {slow ? <p className="mt-4 text-[13px] text-ink-soft">Waking the service up. The first request after a quiet period can take a few seconds.</p> : null}
     </CenteredPanel>
   );
 }

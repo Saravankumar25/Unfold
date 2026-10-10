@@ -2,16 +2,10 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { isApiError } from "@/lib/api/client";
-import { api, streamPaths } from "@/lib/api/endpoints";
+import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/errors";
-import { parseJSON, postEventStream } from "@/lib/api/sse";
-import type { ChatEvent, ChatMode, PostChatMessage } from "@/lib/api/types";
-import { assistantKey, chatReducer, finalizeIfOpen, initialChatState, type ChatAction, type ChatState } from "@/lib/chat-state";
-
-function rootReducer(state: ChatState, action: ChatAction | { type: "finalize"; key: string }): ChatState {
-  if (action.type === "finalize") return finalizeIfOpen(state, action.key);
-  return chatReducer(state, action);
-}
+import type { ChatMode } from "@/lib/api/types";
+import { assistantKey, chatReducer, initialChatState, type ChatState } from "@/lib/chat-state";
 
 let keyCounter = 0;
 function nextKey(): string {
@@ -22,18 +16,19 @@ function nextKey(): string {
 export interface ChatThread {
   chatId: string | null;
   state: ChatState;
-  streaming: boolean;
+  /** A question is waiting for its answer. */
+  pending: boolean;
   loadingHistory: boolean;
   historyError: unknown;
   send: (text: string, mode: ChatMode, sectionKey?: string | null) => Promise<void>;
-  stop: () => void;
   selectChat: (chatId: string | null) => void;
   reloadHistory: () => void;
 }
 
 /**
- * One chat thread: loads history for `chatId`, streams answers from `POST /chats/{id}/messages`.
- * When no chat exists yet, the first `send` creates one (`POST /projects/{id}/chats`) and reports it via `onCreated`.
+ * One chat thread: loads history for `chatId` and sends questions with `POST /chats/{id}/messages` (one JSON
+ * reply per turn). When no chat exists yet, the first `send` creates one (`POST /projects/{id}/chats`) and
+ * reports it via `onCreated`.
  */
 export function useChatThread(
   projectId: string,
@@ -41,7 +36,7 @@ export function useChatThread(
   onCreated?: (chatId: string) => void,
 ): ChatThread {
   const [chatId, setChatId] = useState<string | null>(initialChatId);
-  const [state, dispatch] = useReducer(rootReducer, initialChatState);
+  const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [historyNonce, setHistoryNonce] = useState(0);
   /** `${chatId}#${nonce}` of the last settled history load, plus its error. */
   const [history, setHistory] = useState<{ key: string | null; error: unknown }>({ key: null, error: null });
@@ -83,10 +78,6 @@ export function useChatThread(
     setChatId(id);
   }, []);
 
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
   const send = useCallback(
     async (text: string, mode: ChatMode, sectionKey: string | null = null) => {
       const trimmed = text.trim();
@@ -101,27 +92,14 @@ export function useChatThread(
         if (!id) {
           const created = await api.createChat(projectId);
           id = created.id;
-          setHistory({ key: `${id}#${historyNonce}`, error: null }); // nothing to load: the stream fills it
+          setHistory({ key: `${id}#${historyNonce}`, error: null }); // nothing to load: the reply fills it
           setChatId(id);
           onCreatedRef.current?.(id);
         }
-        const body: PostChatMessage = { text: trimmed, mode, section_key: sectionKey };
-        await postEventStream(
-          streamPaths.chatMessages(id),
-          body,
-          (msg) => {
-            const event = parseJSON<ChatEvent>(msg.data);
-            const type = event?.type || msg.event;
-            dispatch({ type: "event", key: aKey, event: { ...(event ?? {}), type } });
-            return type === "response.completed" || type === "error" ? "stop" : undefined;
-          },
-          { signal: controller.signal },
-        );
-        dispatch({ type: "finalize", key: aKey });
+        const reply = await api.postMessage(id, { text: trimmed, mode, section_key: sectionKey }, controller.signal);
+        if (!controller.signal.aborted) dispatch({ type: "reply", key: aKey, reply });
       } catch (error) {
-        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
-          dispatch({ type: "stop", key: aKey });
-        } else {
+        if (!controller.signal.aborted) {
           dispatch({
             type: "fail",
             key: aKey,
@@ -141,11 +119,10 @@ export function useChatThread(
   return {
     chatId,
     state,
-    streaming: state.streamingKey !== null,
+    pending: state.pendingKey !== null,
     loadingHistory,
     historyError,
     send,
-    stop,
     selectChat,
     reloadHistory: () => setHistoryNonce((n) => n + 1),
   };

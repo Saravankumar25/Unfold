@@ -17,6 +17,8 @@ from unfold.persistence.postgres.models import ChatSessionRow, ProjectRow, Sessi
 from unfold.ports import session_rate_key
 from unfold.runtime import Runtime
 
+API_PREFIX = "/api/v1"
+
 
 def get_runtime(request: Request) -> Runtime:
     rt: Runtime = request.app.state.runtime

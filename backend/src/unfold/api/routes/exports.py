@@ -16,7 +16,7 @@ from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 
-from unfold.api.deps import RuntimeDep, SessionDep, owned_chat, owned_project, parse_uuid
+from unfold.api.deps import API_PREFIX, RuntimeDep, SessionDep, owned_chat, owned_project, parse_uuid
 from unfold.api.schemas import ArtifactOut, ExportCreated
 from unfold.core.errors import ErrorCode, NotFound, ProjectNotReady, RateLimited, UnfoldError
 from unfold.core.logging import get_logger
@@ -42,7 +42,7 @@ def _out(row: ArtifactRow) -> ArtifactOut:
         size_bytes=row.size_bytes,
         created_at=row.created_at,
         expires_at=row.expires_at,
-        download_url=f"/exports/{row.id}/download" if ready else None,
+        download_url=f"{API_PREFIX}/exports/{row.id}/download" if ready else None,
     )
 
 

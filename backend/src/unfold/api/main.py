@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from unfold import __version__
+from unfold.api.deps import API_PREFIX
 from unfold.api.errors import install_error_handling
 from unfold.api.routes import chat, exports, guide, projects, sessions
 from unfold.cleanup.sweeper import sweep
@@ -25,7 +26,6 @@ from unfold.runtime import Runtime
 from unfold.worker.queue import SubprocessJobQueue
 
 log = get_logger(__name__)
-API_PREFIX = "/api/v1"
 
 
 async def _sweep_forever(rt: Runtime, queue: JobQueue, every_s: float) -> None:

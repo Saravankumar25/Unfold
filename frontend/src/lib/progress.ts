@@ -4,7 +4,8 @@
  */
 import type { JobOut, ProgressEvent } from "./api/types";
 
-export type ConnectionState = "connecting" | "live" | "reconnecting" | "lost";
+/** `waking`: the first request has not been answered yet (a scaled-to-zero service is starting). */
+export type ConnectionState = "connecting" | "waking" | "live" | "reconnecting" | "lost";
 export type Outcome = "running" | "ready" | "failed";
 
 export interface StageEntry {

@@ -92,7 +92,7 @@ async def test_markdown_guide_export_lifecycle(
 
         ready = (await client.get(f"{API}/exports/{art}")).json()
         assert ready["status"] == "ready" and ready["kind"] == "guide_md" and ready["size_bytes"] > 200
-        assert ready["download_url"] == f"/exports/{art}/download"
+        assert ready["download_url"] == f"{API}/exports/{art}/download"
         dl = await client.get(f"{API}/exports/{art}/download")
         assert dl.status_code == 200
         assert dl.headers["content-type"].startswith("text/markdown")

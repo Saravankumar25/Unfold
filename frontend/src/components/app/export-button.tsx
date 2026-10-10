@@ -40,7 +40,7 @@ export function ExportButton({
       const reqId = isApiError(exp.error) && exp.error.requestId ? `Request ${exp.error.requestId}` : undefined;
       toast({ title: errorMessage(exp.error), description: reqId, tone: "error", durationMs: 9000 });
     } else if (exp.phase === "ready") {
-      toast({ title: "Your PDF is ready", description: "The download should start automatically.", tone: "success" });
+      toast({ title: "Your export is ready", description: "The download should start automatically.", tone: "success" });
     }
   }, [exp.phase, exp.error, toast]);
 
@@ -49,9 +49,9 @@ export function ExportButton({
     exp.phase === "starting"
       ? "Requesting export…"
       : exp.phase === "pending"
-        ? "Rendering PDF…"
+        ? "Preparing export…"
         : exp.phase === "ready"
-          ? "PDF ready"
+          ? "Export ready"
           : exp.phase === "failed"
             ? "Export failed"
             : "";

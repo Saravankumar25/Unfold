@@ -16,11 +16,11 @@ from dataclasses import dataclass, field
 
 from unfold.chat.models import ChatEvent
 from unfold.context.compiler import compile_context
-from unfold.context.models import LABEL_RE, CompiledContext, safe_header_field
+from unfold.context.models import CompiledContext, safe_header_field
 from unfold.core.errors import ErrorCode, GenerationError, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ChatMode, ClaimKind, ModelCapability, Priority, RetrievalMode
-from unfold.domain.models import ClaimRecord, SessionProfile
+from unfold.domain.models import ClaimRecord, EvidenceRef, SessionProfile
 from unfold.guide.generate import grade_claims
 from unfold.llm.schemas import LLMClient, LLMRequest, Message
 from unfold.observability.tracing import chat_first_token, span
@@ -63,7 +63,7 @@ _MODE_INSTRUCTIONS: dict[ChatMode, str] = {
 }
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
-_ANY_LABEL = re.compile(r"\s?\[E[1-9][0-9]{0,3}\]")
+_CITATION = re.compile(r"(\s?)\[(E[1-9][0-9]{0,3})\]")
 
 
 @dataclass(frozen=True)
@@ -116,13 +116,26 @@ def resolve_citations(text: str, ctx: CompiledContext) -> tuple[str, int]:
 
     def keep(m: re.Match[str]) -> str:
         nonlocal dropped
-        label = LABEL_RE.search(m.group(0))
-        if label and label.group(1) in ctx.label_map:
+        if m.group(2) in ctx.label_map:
             return m.group(0)
         dropped += 1
         return ""
 
-    return _ANY_LABEL.sub(keep, text), dropped
+    return _CITATION.sub(keep, text), dropped
+
+
+def renumber_citations(text: str, ctx: CompiledContext) -> tuple[str, list[EvidenceRef]]:
+    """Number the citations 1..k in order of first use, and return exactly the evidence they point at.
+
+    The reader sees `[E1]..[Ek]` and the evidence list has k entries in that order, so a label is an index.
+    """
+    refs = dict(zip((e.label for e in ctx.evidence), ctx.evidence_refs(), strict=True))
+    order: list[str] = []
+    for m in _CITATION.finditer(text):
+        if m.group(2) in refs and m.group(2) not in order:
+            order.append(m.group(2))
+    new = {old: f"E{n}" for n, old in enumerate(order, start=1)}
+    return _CITATION.sub(lambda m: f"{m.group(1)}[{new[m.group(2)]}]", text), [refs[label] for label in order]
 
 
 def grade_answer(text: str, ctx: CompiledContext, *, invalid_citations: int) -> dict[str, object]:
@@ -139,7 +152,7 @@ def grade_answer(text: str, ctx: CompiledContext, *, invalid_citations: int) -> 
             continue
         claims.append(
             ClaimRecord(
-                text=_ANY_LABEL.sub("", sentence).strip(),
+                text=_CITATION.sub("", sentence).strip(),
                 kind=ClaimKind.PROJECT_FACT,
                 evidence_ids=ctx.resolve_labels(labels),
             )
@@ -192,6 +205,7 @@ async def generate_answer(
         text = NO_EVIDENCE_REPLY
         yield ChatEvent(type="response.delta", text=text)
         first_token_ms = total_ms = _ms(started)
+        evidence: list[EvidenceRef] = []
         grounding: dict[str, object] = {"claims": 0, "insufficient_evidence": True}
     else:
         llm_req = LLMRequest(
@@ -229,11 +243,9 @@ async def generate_answer(
         if not raw.strip():
             raise GenerationError("The model returned an empty answer.", retryable=True)
         text, invalid = resolve_citations(redact_text(raw).strip(), ctx)
-        grounding = grade_answer(text, ctx, invalid_citations=invalid)
+        grounding = grade_answer(text, ctx, invalid_citations=invalid)  # against the context's own labels
+        text, evidence = renumber_citations(text, ctx)
         total_ms = _ms(started)
-
-    cited = set(ctx.resolve_labels(ctx.labels_in(text)))
-    evidence = [r for r in ctx.evidence_refs() if r.chunk_id in cited]
     yield ChatEvent(type="response.evidence", evidence=evidence)
     timings = {"retrieval_ms": retrieval_ms, "first_token_ms": first_token_ms, "total_ms": total_ms}
     log.info(

@@ -55,6 +55,22 @@ async def test_unknown_citation_labels_are_dropped_and_counted(fx: FixtureProjec
     assert (done.grounding or {})["invalid_citations"] == 1
 
 
+async def test_citations_are_renumbered_to_index_the_returned_evidence(fx: FixtureProject) -> None:
+    from unfold.evaluation.scripted import evidence_blocks
+
+    shown: dict[str, str] = {}
+
+    def answer(req: LLMRequest) -> str:
+        blocks = evidence_blocks(req.messages[0].content)
+        shown.update({label: path for label, path, _ in blocks})
+        first, third = blocks[2], blocks[0]  # cited out of context order
+        return f"`a_name` lives in `{first[1]}` [{first[0]}]. And `b_name` in `{third[1]}` [{third[0]}]."
+
+    done = (await _events(fx, ScriptedLLM(answer)))[-1]
+    assert done.text is not None and "[E1]" in done.text and "[E2]" in done.text and "[E3]" not in done.text
+    assert [r.path for r in done.evidence or []] == [shown["E3"], shown["E1"]]  # label n is entry n
+
+
 async def test_ungrounded_claim_is_graded_not_verified(fx: FixtureProject) -> None:
     def answer(req: LLMRequest) -> str:
         return "`QuantumReranker` replaces the fusion step in `reciprocal_rank_fusion` [E1]."
