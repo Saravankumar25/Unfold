@@ -62,7 +62,11 @@ class Unsupported(BaseModel):
 
 
 class StoredVerification(BaseModel):
-    """What `guide_sections.verification` holds: the final deterministic result plus how the revision went."""
+    """What `guide_sections.verification` holds: the final deterministic result plus how the revision went.
+
+    Block ids in `result` (`b3`) index the content that was verified, which is the stored content only when no
+    gap was qualified or removed afterwards (`gaps` empty); otherwise they can be off by the removed or split
+    blocks. Nothing resolves them against the stored content, they are a record of what failed."""
 
     result: VerificationResult
     rounds: int = 0

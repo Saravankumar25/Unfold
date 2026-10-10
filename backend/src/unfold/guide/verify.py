@@ -218,6 +218,17 @@ def sentences(block: Block) -> list[str]:
     return [u for t in block_texts(block) for u in _SENTENCE.split(t.strip()) if u]
 
 
+def place_claims(content: SectionContent, texts: Sequence[str]) -> dict[str, str | None]:
+    """The block each claim text was made in: the one with the sentence that restates it (`CLAIM_MATCH`), else
+    None. The same rule `verify_section` uses to say where an unsupported claim sits."""
+    units = [(f"b{i}", u) for i, block in enumerate(content.blocks) for u in sentences(block)]
+    out: dict[str, str | None] = {}
+    for text in texts:
+        i, score = best_unit(text, [u for _, u in units])
+        out[text] = units[i][0] if i >= 0 and score >= CLAIM_MATCH else None
+    return out
+
+
 def _mentions(text: str, name: str) -> bool:
     return bool(name) and re.search(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])", text) is not None
 
@@ -305,11 +316,7 @@ def verify_section(
         hits = [b for b, t in texts.items() if len(names) == 2 and all(_mentions(t, n) for n in names)]
         return hits[0] if hits else None
 
-    units = [(f"b{i}", u) for i, block in enumerate(content.blocks) for u in sentences(block)]
-
-    def place_claim(text: str) -> str | None:
-        i, score = best_unit(text, [u for _, u in units])
-        return units[i][0] if i >= 0 and score >= CLAIM_MATCH else None
+    placed = place_claims(content, [c.text for c in claims])
 
     for claim in claims:
         if len(claim.graph_node_ids) == 2:
@@ -328,7 +335,7 @@ def verify_section(
             ClaimStatus.UNSUPPORTED,
             ClaimStatus.INFERRED,
         ):
-            add("claim_supported", False, claim.text[:120], place_claim(claim.text), claim.note)
+            add("claim_supported", False, claim.text[:120], placed[claim.text], claim.note)
     return finalize(results, claims, None, round_no, cap)
 
 

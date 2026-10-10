@@ -152,8 +152,13 @@ async def test_every_chapter_is_verified_revised_and_no_unsupported_statement_is
         assert row.status == "ready" and row.quality_scores["verdict"] == "accept"
         assert UNSUPPORTED not in _text(row)  # the sentence was rewritten, not left standing
         facts = [c for c in row.claims if c["kind"] == ClaimKind.PROJECT_FACT.value]
-        assert facts and all(c["status"] == ClaimStatus.VERIFIED.value for c in facts)
+        assert all(c["status"] == ClaimStatus.VERIFIED.value for c in facts)
+        # the only block was rewritten: no claim made about the prose it replaced may stay behind (and so
+        # inflate groundedness) although that sentence was verified when it stood
+        assert [c["text"] for c in row.claims if "is part of the project" in c["text"]] == []
         assert row.input_hash and len(row.input_hash) == 64
+        # the critique ran once, before the repair; a revised chapter keeps what it said
+        assert row.quality_scores["semantic"] and row.verification["result"]["semantic"]
     stages = await _stages(runtime, seeded.project_id)
     assert (
         stages.index("VERIFYING_GUIDE") < stages.index("REVISING_GUIDE") < stages.index("GENERATING_VISUALS")

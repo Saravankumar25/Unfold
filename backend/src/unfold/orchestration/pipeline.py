@@ -51,7 +51,14 @@ from unfold.guide.research import Investigator, ResearchCaps
 from unfold.guide.revise import RevisionItem, plan_revision, run_revision_loop
 from unfold.guide.rewrite import Rewriter
 from unfold.guide.verification_models import SemanticCritique, StoredVerification, VerificationResult
-from unfold.guide.verify import block_texts, cited_paths, text_from_chunks, verify_section, with_critique
+from unfold.guide.verify import (
+    block_texts,
+    cited_paths,
+    place_claims,
+    text_from_chunks,
+    verify_section,
+    with_critique,
+)
 from unfold.guide.write import SectionEvidenceMissing, WrittenSection, write_chapter
 from unfold.indexing.chunking import chunk_project
 from unfold.indexing.dense import DenseIndex
@@ -120,7 +127,7 @@ class _VerifyState:
 
     claims: list[ClaimRecord]
     critique: SemanticCritique | None = None
-    last: VerificationResult | None = None
+    semantic: dict[str, float] | None = None  # the critique's scores, which round 0 alone computes
     stopped: str | None = None
 
 
@@ -699,7 +706,7 @@ class _Run:
                 state.critique = await self._critique(spec, c, others)
                 if state.critique is not None:
                     result = with_critique(result, state.critique, rnd, cfg.revision_max_rounds)
-            state.last = result
+                    state.semantic = result.semantic
             return result
 
         async def rewrite(c: SectionContent, items: Sequence[RevisionItem]) -> Mapping[str, Block]:
@@ -713,12 +720,10 @@ class _Run:
                 state.stopped = "budget"
                 await self.reporter.degraded("guide_revision")
                 return {}
-            assert state.last is not None
-            # the claims that failed inside a rewritten block are replaced by the ones made for its replacement
-            replaced = {
-                r.subject for r in state.last.deterministic if r.block in out and r.check == "claim_supported"
-            }
-            state.claims = [c for c in state.claims if c.text[:120] not in replaced] + rewriter.new_claims
+            # a claim stands behind the prose it was made in: every claim placed in a rewritten block (verified
+            # or not) goes, and the ones made for its replacement come in
+            placed = place_claims(c, [x.text for x in state.claims])
+            state.claims = [x for x in state.claims if placed[x.text] not in out] + rewriter.new_claims
             return out
 
         outcome = await run_revision_loop(
@@ -728,7 +733,10 @@ class _Run:
             cfg.revision_max_rounds,
             plan=lambda r, c: plan_revision(r, c, brief),
         )
-        final = outcome.verification.claims
+        verification = outcome.verification.model_copy(
+            update={"semantic": outcome.verification.semantic or state.semantic}
+        )
+        final = verification.claims
         out_claims: list[ClaimRecord] = []
         for c in final:
             fate = outcome.dispositions.get(c.text)
@@ -766,7 +774,7 @@ class _Run:
             else []
         )
         stored = StoredVerification(
-            result=outcome.verification,
+            result=verification,
             rounds=outcome.rounds,
             stopped_by=state.stopped or outcome.stopped_by,
             gaps=gaps,
@@ -779,7 +787,7 @@ class _Run:
             "revision_rounds": outcome.rounds,
             "gaps": len(gaps),
             "claims_not_stated": len(unstated),
-            "semantic": outcome.verification.semantic,
+            "semantic": verification.semantic,
         }
         return _Verified(
             content=outcome.content,
