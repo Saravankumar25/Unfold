@@ -29,3 +29,11 @@ instances).
 ## Consequences
 Provider windows become fixed (approximate) instead of sliding. A failed conditional write still consumes a write
 unit (DynamoDB docs). Production guard addition: `PROXY_HMAC_SECRET` required when running as Lambda.
+
+## Implementation notes (phase 4, stage C-E)
+- Unverified callers share one `unverified` bucket; the Lambda request-context address is **not** used (its
+  provenance behind the Web Adapter is unverified, and a forgeable header must not mint buckets).
+- The Vercel proxy signs with `PROXY_HMAC_SECRET` (`frontend/src/lib/client-signature.ts`); a shared test vector
+  keeps the two signers byte-identical.
+- LLM coordination: `llm.counter_coordination` (per-job cap and provider windows through the `CounterStore` port;
+  slots, cooldown, circuit and key rotation in process; key disablement persisted).

@@ -370,9 +370,10 @@ async def test_unverified_callers_share_one_rate_limit_bucket(aws: Any) -> None:
 async def test_a_project_over_the_chunk_cap_fails_typed_before_any_embedding(aws: Any) -> None:
     settings = aws.settings.model_copy(update={"max_chunks_per_project": 5})
     application = create_app(settings, queue=SqsJobQueue(settings))
-    async with application.router.lifespan_context(application), httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=application), base_url="http://t"
-    ) as c:
+    async with (
+        application.router.lifespan_context(application),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url="http://t") as c,
+    ):
         assert (await c.post("/api/v1/sessions")).status_code == 201
         project_id, job_id = await _upload(c, aws, _zip_of(FIXTURE))
         llm = ScriptedLLM()

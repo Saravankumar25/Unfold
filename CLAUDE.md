@@ -14,6 +14,7 @@ Target runtime (scale to zero on AWS): see `six-phase-plan.md`. Repo state and f
 | Backend integration tests | `cd backend && uv run pytest -m integration` (needs the stores) |
 | Lint / types / migrations | `uv run ruff check src tests` · `uv run mypy` · `uv run alembic check` |
 | Frontend | `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` |
+| Infra (Terraform fmt, offline plans, cost-guard policy tests; never `apply`) | `python scripts/check.py --only infra` |
 
 Detail for the backend lives in `backend/CLAUDE.md`; architecture in `docs/HLD.md` and `docs/LLD.md`;
 decisions in `docs/adr/`.

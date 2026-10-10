@@ -39,3 +39,10 @@ tune by benchmark), timeout 120 s, reserved concurrency 10 where the account all
 - A Function URL is directly callable; abuse is bounded by reserved concurrency, per-IP/global quotas and budgets.
 - Acceptance tests that require AWS: end-to-end streaming through Vercel, cold start p50/p95/p99, reserved
   concurrency feasibility in a new account.
+
+## Implementation notes (phase 4, stage C-E)
+- Entry point `unfold.api.aws:create_aws_app` (reads SSM secrets, then the normal app) behind Web Adapter 1.1.0; image
+  target `api-lambda`. Import hygiene is enforced by tests that import the API with the local-stack and analysis
+  packages blocked. `import unfold.api.main` measured 1.61 s (677 modules) on a loaded laptop.
+- Provider `hashicorp/aws` 6.x is required: the post-2025 Function URL permission pair needs
+  `aws_lambda_permission.invoked_via_function_url`, which 5.x lacks.

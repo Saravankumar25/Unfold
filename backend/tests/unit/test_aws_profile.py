@@ -150,11 +150,19 @@ def _imports_without(blocked: list[str], modules: list[str]) -> subprocess.Compl
         f"for m in {modules!r}:\n"
         "    importlib.import_module(m)\n"
     )
-    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)  # noqa: S603
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
 
 
 LOCAL_STACK = ["sqlalchemy", "asyncpg", "alembic", "redis", "minio", "neo4j", "qdrant_client"]
-ANALYSIS_STACK = ["tree_sitter", "tree_sitter_language_pack", "networkx", "hcl2", "yaml", "jinja2", "playwright"]
+ANALYSIS_STACK = [
+    "tree_sitter",
+    "tree_sitter_language_pack",
+    "networkx",
+    "hcl2",
+    "yaml",
+    "jinja2",
+    "playwright",
+]
 
 
 def test_api_lambda_image_needs_neither_the_local_stack_nor_the_analysis_stack() -> None:

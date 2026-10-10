@@ -29,3 +29,15 @@ and the existing SQLAlchemy adapter (reference and local dev) replaces direct OR
 - Per-event writes are transactional (counter + event + project liveness check), strictly ordered per project.
 - DynamoDB TTL is never relied on (deletion "typically within a few days"; expired items stay readable).
 - Reconsider Option C if the stage C contract suite cannot reach parity within the time box.
+
+## Implementation notes (phase 4, stage C-E)
+- Records are documents in attribute `d` with a `ver` counter; mutations are optimistic read-modify-write behind
+  `ControlStore.update_*` mutators (pure functions, retried on a lost race). Postgres uses row locks for the same
+  contract; one contract suite runs against both adapters.
+- A pointer item `J#<job_id>` resolves a job id (the only thing the queue carries) to its project partition.
+- Guide content replace is "write the new set, then delete what is not in it" with deterministic keys
+  (`SEC#<key>`, `DIAG#<id>`, `SUM#<level>#<key>`), not versioned key sets: simpler, idempotent, and a reader can only
+  see old, mixed or new during a re-plan that follows a crash.
+- Active-job and queued-job caps are counters updated in the transaction that changes the job; a cap that looks
+  exceeded is re-counted from the job records before a request is rejected.
+- Chat and export records of phase 3 are not yet modelled; they add item types to this table.

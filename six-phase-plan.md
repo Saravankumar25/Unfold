@@ -155,6 +155,11 @@ Stages (each ends in a committed artifact; implementation does not start before 
   env/secrets, limits, performance, reliability and recovery, cost for five scenarios (zero month, occasional use,
   interview demo, moderate, spike) split by cost type with stated assumptions, scaling, known limitations.
 
+Status (2026-10-10, branch `phase-4-aws`): stages A to F are implemented and verified locally; nothing was applied.
+Evidence and open items: `docs/infra/operations.md` sections 7 and 8, deployment `docs/infra/deployment.md`, cost
+`docs/infra/cost.md`. Remaining before phase 6: merge with phase 3 (chat/export records behind `ControlStore`), the
+rubric gate on the embedded backends, and the "requires AWS" acceptance list.
+
 Pipeline support (no new services; the engine runs on the ports and the phase 4 backends):
 - Retrieval-backend swaps (embedded dense, in-memory graph, S3 Vectors, Neo4j removal) are gated by the phase 3 rubric
   and retrieval evals; a swap that drops any dimension > 0.3 below the v2 baseline is rejected.

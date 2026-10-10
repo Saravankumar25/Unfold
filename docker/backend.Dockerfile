@@ -95,12 +95,13 @@ USER unfold
 ENTRYPOINT ["python", "-m", "unfold.worker.run"]
 
 # ---------------------------------------------------------------- exporter (PDF export task)
-FROM runtime AS exporter
+# Starts from the worker (models and grammars are already in its layers); only the venv is replaced by the
+# superset that also holds the rendering packages, and Chromium is added.
+FROM worker AS exporter
+USER root
 COPY --from=build-exporter /app/.venv /app/.venv
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/unfold/ms-playwright
-RUN APP_ENV=development python /app/docker/prefetch.py models grammars \
-    && playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/* \
-    && chown -R unfold:unfold /opt/unfold
+# Chromium stays root-owned and world-readable: a recursive chown here would copy every model layer again.
+RUN playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
 USER unfold
 ENTRYPOINT ["python", "-m", "unfold.worker.run"]
