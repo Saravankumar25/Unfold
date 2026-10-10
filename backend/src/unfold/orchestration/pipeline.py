@@ -1,7 +1,7 @@
 """The analysis pipeline (LLD §14): one job, run to completion by a one-shot worker process.
 
-acquire → inventory → analyse → IR → graph → lexical + dense index → subsystems → plan → write each section →
-verify claims → diagrams → finalize. Plain async functions; no framework owns state. Each stage group persists its
+acquire → inventory → analyse → IR → graph → lexical + dense index → subsystems → architecture + chapter plan →
+research each chapter → write each chapter → verify claims → diagrams → finalize. Plain async functions; no framework owns state. Each stage group persists its
 output and then writes a `job_checkpoints` row, so a rerun of the same job skips finished groups. Success is
 reported only after everything is persisted.
 """
@@ -32,14 +32,18 @@ from unfold.domain.models import ClaimRecord
 from unfold.graph.builder import GraphBuilder
 from unfold.graph.communities import detect as detect_subsystems
 from unfold.graph.communities import entity_subsystems
-from unfold.guide.generate import (
-    SectionEvidenceMissing,
-    grade_claims,
-    plan_guide,
-    project_facts,
-    write_section,
+from unfold.guide.generate import grade_claims, project_facts
+from unfold.guide.models import (
+    PLANNER_VERSION,
+    ChapterPlan,
+    DiagramBlock,
+    GuidePlan,
+    ResearchBrief,
+    SectionContent,
 )
-from unfold.guide.models import PLANNER_VERSION, DiagramBlock, GuidePlan, SectionContent
+from unfold.guide.plan import plan_chapters
+from unfold.guide.research import Investigator, ResearchCaps
+from unfold.guide.write import SectionEvidenceMissing, write_chapter
 from unfold.indexing.chunking import chunk_project
 from unfold.indexing.dense import DenseIndex
 from unfold.indexing.embeddings import embedder_for
@@ -64,6 +68,9 @@ from unfold.project_ir.snapshot import load_ir, save_ir
 from unfold.repo_intel.service import analyze_texts, scan_repository
 from unfold.retrieval.hybrid import HybridRetriever
 from unfold.runtime import Runtime
+from unfold.understand.architecture import build_architecture
+from unfold.understand.models import ArchitectureModel
+from unfold.understand.repomap import RepoMap
 
 log = get_logger(__name__)
 
@@ -169,6 +176,7 @@ class _Run:
         self.chunks = ChunkRepository(rt.db)
         self.done: set[str] = set()
         self.ir: ProjectIR | None = None
+        self._model: tuple[RepoMap, ArchitectureModel] | None = None
 
     # --- driver --------------------------------------------------------------------------------------------
 
@@ -185,6 +193,7 @@ class _Run:
             ("dense", self._dense),
             ("subsystems", self._subsystems),
             ("plan", self._plan),
+            ("research", self._research),
             ("sections", self._sections),
             ("verify", self._verify),
             ("visuals", self._visuals),
@@ -400,21 +409,38 @@ class _Run:
                 for r in res.scalars()
             ]
 
+    async def _understand(self) -> tuple[RepoMap, ArchitectureModel]:
+        """RepoMap + ArchitectureModel: deterministic, so a resumed run rebuilds them instead of storing them."""
+        if self._model is None:
+            ir = await self._load_ir()
+
+            def build() -> tuple[RepoMap, ArchitectureModel]:
+                return RepoMap(ir), build_architecture(ir)
+
+            self._model = await asyncio.to_thread(build)
+        return self._model
+
     async def _plan(self) -> dict[str, Any]:
-        await self.reporter.stage(JobStage.PLANNING_GUIDE)
+        await self.reporter.stage(JobStage.INVESTIGATING_PROJECT)
         ir = await self._load_ir()
+        rm, arch = await self._understand()
+        await self.reporter.stage(JobStage.PLANNING_GUIDE)
         views = await self._subsystem_views()
         facts = project_facts(ir, [(v.title, v.member_file_paths) for v in views])
         p = await self._project()
-        plan = await plan_guide(
+        plan, degraded = await plan_chapters(
             self.llm,
             ir,
+            rm,
+            arch,
             facts,
             technical_level=p.technical_level,
             instruction=p.user_instruction,
             job_id=self.job_id,
             project_id=self.pid,
         )
+        if degraded:
+            await self.reporter.degraded("guide_plan")
         async with self.rt.db.transaction() as s:
             await s.execute(delete(GuideSectionRow).where(GuideSectionRow.project_id == p.id))
             await s.merge(
@@ -433,7 +459,7 @@ class _Run:
                         claims=[],
                     )
                 )
-        return {"sections": len(plan.sections)}
+        return {"sections": len(plan.sections), "project_kind": arch.project_kind, "degraded": degraded}
 
     async def _stored_plan(self) -> GuidePlan:
         async with self.rt.db.session() as s:
@@ -442,6 +468,68 @@ class _Run:
             raise UnfoldError("The guide plan is missing.", code=ErrorCode.GENERATION_FAILED)
         return GuidePlan.model_validate(row.plan)
 
+    async def _section_rows(self) -> dict[str, GuideSectionRow]:
+        async with self.rt.db.session() as s:
+            res = await s.execute(
+                select(GuideSectionRow).where(GuideSectionRow.project_id == self.project.id)
+            )
+            return {r.section_key: r for r in res.scalars()}
+
+    async def _locked_row(self, s: Any, key: str) -> GuideSectionRow:
+        row: GuideSectionRow = (
+            await s.execute(
+                select(GuideSectionRow)
+                .where(GuideSectionRow.project_id == self.project.id, GuideSectionRow.section_key == key)
+                .with_for_update()
+            )
+        ).scalar_one()
+        return row
+
+    @staticmethod
+    def _raise_first(failures: list[BaseException], what: str) -> None:
+        first = failures[0]
+        if isinstance(first, UnfoldError):
+            raise first
+        raise UnfoldError(
+            f"{what} failed ({type(first).__name__}).", code=ErrorCode.GENERATION_FAILED, retryable=True
+        ) from first
+
+    async def _research(self) -> dict[str, Any]:
+        await self.reporter.stage(JobStage.RESEARCHING_GUIDE)
+        ir = await self._load_ir()
+        plan = await self._stored_plan()
+        p = await self._project()
+        rm, arch = await self._understand()
+        investigator = Investigator(
+            llm=self.llm,
+            retriever=HybridRetriever.for_project(self.rt, self.pid, ir, p.lexical_object_key),
+            chunks=self.chunks,
+            rm=rm,
+            arch=arch,
+            caps=ResearchCaps.from_settings(self.rt.settings),
+            project_id=self.pid,
+            job_id=self.job_id,
+        )
+        rows = await self._section_rows()
+        gate = asyncio.Semaphore(max(1, self.rt.settings.section_concurrency))
+        researched = 0
+
+        async def one(spec: ChapterPlan) -> None:
+            nonlocal researched
+            if rows[spec.key].research or rows[spec.key].content:
+                return  # an earlier attempt finished it; resume skips it
+            async with gate:
+                brief = await investigator.research(spec)
+            async with self.rt.db.transaction() as s:
+                (await self._locked_row(s, spec.key)).research = brief.model_dump(mode="json")
+            researched += 1
+            await self.reporter.heartbeat()
+
+        results = await asyncio.gather(*(one(s) for s in plan.sections), return_exceptions=True)
+        if failures := [r for r in results if isinstance(r, BaseException)]:
+            self._raise_first(failures, "Chapter research")
+        return {"researched": researched}
+
     async def _sections(self) -> dict[str, Any]:
         await self.reporter.stage(JobStage.GENERATING_GUIDE)
         ir = await self._load_ir()
@@ -449,31 +537,32 @@ class _Run:
         p = await self._project()
         views = await self._subsystem_views()
         facts = project_facts(ir, [(v.title, v.member_file_paths) for v in views])
-        retriever = HybridRetriever.for_project(self.rt, self.pid, ir, p.lexical_object_key)
         gate = asyncio.Semaphore(max(1, self.rt.settings.section_concurrency))
+        rows = await self._section_rows()
+        summaries = {
+            k: SectionContent.model_validate(r.content).summary for k, r in rows.items() if r.content
+        }
+        titles = {s.key: s.title for s in plan.sections}
         written = 0
         missing: list[SectionEvidenceMissing] = []
 
-        async def one(sec_key: str) -> None:
+        async def one(spec: ChapterPlan) -> None:
             nonlocal written
-            spec = next(s for s in plan.sections if s.key == sec_key)
-            async with self.rt.db.session() as s:
-                existing = (
-                    await s.execute(
-                        select(GuideSectionRow).where(
-                            GuideSectionRow.project_id == p.id, GuideSectionRow.section_key == sec_key
-                        )
-                    )
-                ).scalar_one()
-            if existing.content:
-                return  # written by an earlier attempt; resume skips it
+            research = rows[spec.key].research
+            if not research:
+                raise UnfoldError(
+                    f"The research brief for '{spec.key}' is missing.", code=ErrorCode.GENERATION_FAILED
+                )
+            deps = [(titles[d], summaries[d]) for d in spec.depends_on if d in summaries]
             try:
                 async with gate:
-                    draft = await write_section(
+                    draft = await write_chapter(
                         self.llm,
-                        retriever,
+                        self.chunks,
                         spec,
+                        ResearchBrief.model_validate(research),
                         facts,
+                        deps,
                         technical_level=p.technical_level,
                         instruction=p.user_instruction,
                         job_id=self.job_id,
@@ -482,43 +571,31 @@ class _Run:
             except SectionEvidenceMissing as exc:
                 missing.append(exc)
                 async with self.rt.db.transaction() as s:
-                    failed_row = (
-                        await s.execute(
-                            select(GuideSectionRow)
-                            .where(GuideSectionRow.project_id == p.id, GuideSectionRow.section_key == sec_key)
-                            .with_for_update()
-                        )
-                    ).scalar_one()
+                    failed_row = await self._locked_row(s, spec.key)
                     failed_row.status = SectionStatus.FAILED.value
                     failed_row.quality_scores = {"reason": exc.message}
                 return
             async with self.rt.db.transaction() as s:
-                row = (
-                    await s.execute(
-                        select(GuideSectionRow)
-                        .where(GuideSectionRow.project_id == p.id, GuideSectionRow.section_key == sec_key)
-                        .with_for_update()
-                    )
-                ).scalar_one()
+                row = await self._locked_row(s, spec.key)
                 row.content = draft.content.model_dump(mode="json")
                 row.claims = [c.model_dump(mode="json") for c in draft.claims]
                 row.evidence_summary = draft.evidence
                 row.status = SectionStatus.GENERATING.value  # `_verify` grades it, then it is ready
                 row.version += 1
+            summaries[spec.key] = draft.content.summary
             written += 1
             await self.reporter.heartbeat()
 
-        results = await asyncio.gather(*(one(s.key) for s in plan.sections), return_exceptions=True)
-        failures = [r for r in results if isinstance(r, BaseException)]
-        if failures:
-            first = failures[0]
-            if isinstance(first, UnfoldError):
-                raise first
-            raise UnfoldError(
-                f"Section generation failed ({type(first).__name__}).",
-                code=ErrorCode.GENERATION_FAILED,
-                retryable=True,
-            ) from first
+        # Waves in dependency order: a chapter sees the summaries of the chapters it builds on and nothing else.
+        remaining = [s for s in plan.sections if not rows[s.key].content]
+        while remaining:
+            left = {s.key for s in remaining}
+            wave = [s for s in remaining if not left & set(s.depends_on)] or remaining
+            results = await asyncio.gather(*(one(s) for s in wave), return_exceptions=True)
+            if failures := [r for r in results if isinstance(r, BaseException)]:
+                self._raise_first(failures, "Section generation")
+            done = {s.key for s in wave}
+            remaining = [s for s in remaining if s.key not in done]
         if missing:
             if len(missing) == len(plan.sections):
                 raise missing[0]  # nothing to show: fail the job as before

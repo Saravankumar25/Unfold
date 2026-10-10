@@ -182,6 +182,8 @@ class GuideSectionRow(Base):
     claims: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     evidence_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     quality_scores: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    research: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # `guide.models.ResearchBrief` (v2 plans)
+    input_hash: Mapped[str | None] = mapped_column(Text)  # unused until task 3.8
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     max_job_attempts: int = 3
     max_concurrent_jobs: int = 2
     section_concurrency: int = 2
+    # per-chapter investigation caps (docs/design/investigation-engine.md §5); inside the per-job LLM budget
+    research_max_rounds: int = 2
+    research_max_retrievals: int = 12
+    research_max_llm_calls: int = 4
+    research_brief_tokens: int = 6000
     max_sessions_per_ip_per_hour: int = 20
     max_sessions_per_hour: int = 500
     max_projects_per_ip_per_hour: int = 30

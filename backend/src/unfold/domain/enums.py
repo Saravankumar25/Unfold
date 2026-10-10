@@ -46,6 +46,7 @@ class JobStage(StrEnum):
     DISCOVERING_SUBSYSTEMS = "DISCOVERING_SUBSYSTEMS"
     INVESTIGATING_PROJECT = "INVESTIGATING_PROJECT"
     PLANNING_GUIDE = "PLANNING_GUIDE"
+    RESEARCHING_GUIDE = "RESEARCHING_GUIDE"
     GENERATING_GUIDE = "GENERATING_GUIDE"
     VERIFYING_GUIDE = "VERIFYING_GUIDE"
     GENERATING_VISUALS = "GENERATING_VISUALS"
@@ -91,6 +92,7 @@ PIPELINE: list[JobStage] = [
     JobStage.DISCOVERING_SUBSYSTEMS,
     JobStage.INVESTIGATING_PROJECT,
     JobStage.PLANNING_GUIDE,
+    JobStage.RESEARCHING_GUIDE,
     JobStage.GENERATING_GUIDE,
     JobStage.VERIFYING_GUIDE,
     JobStage.GENERATING_VISUALS,
@@ -114,6 +116,7 @@ USER_LABELS: dict[JobStage, str] = {
     JobStage.DISCOVERING_SUBSYSTEMS: "Understanding major subsystems",
     JobStage.INVESTIGATING_PROJECT: "Reconstructing workflows",
     JobStage.PLANNING_GUIDE: "Planning your guide",
+    JobStage.RESEARCHING_GUIDE: "Researching each chapter",
     JobStage.GENERATING_GUIDE: "Writing your guide",
     JobStage.VERIFYING_GUIDE: "Verifying explanations",
     JobStage.GENERATING_VISUALS: "Generating diagrams",

@@ -3,8 +3,9 @@
 `ScriptedLLM` records every request it receives (so prompts can be inspected) and answers with a function of the
 prompt. The default chat answerer is extractive: it cites the evidence labels it was shown and quotes identifiers
 from them, which makes a grounded answer a property of the context wiring rather than of any model. For the guide
-pipeline it plans four sections and writes each from the evidence it was shown, citing real labels (plus one
-invented identifier and one uncited claim, so grading always has something to catch).
+pipeline it echoes the deterministic outline it was shown (`scripted_refinement`) and writes each chapter from the
+evidence it was shown, citing real labels (plus one invented identifier and one uncited claim, so grading always has
+something to catch).
 """
 
 from __future__ import annotations
@@ -15,14 +16,9 @@ from collections.abc import AsyncIterator, Callable
 from pydantic import BaseModel
 
 from unfold.core.errors import ProviderCapacityError, UnfoldError
-from unfold.guide.models import (
-    DraftClaim,
-    GuidePlan,
-    GuideSectionPlan,
-    ParagraphBlock,
-    SectionContent,
-    SectionDraft,
-)
+from unfold.guide.models import DraftClaim, ParagraphBlock, SectionContent, SectionDraft
+from unfold.guide.plan import ChapterRefinement, PlanRefinement
+from unfold.guide.research import QuestionSet
 from unfold.llm.schemas import LLMRequest, LLMResponse, T, Usage
 
 _EVIDENCE = re.compile(
@@ -30,11 +26,26 @@ _EVIDENCE = re.compile(
 )
 _IDENT = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]{3,}(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b")
 _SKIP = frozenset({"self", "return", "import", "from", "class", "async", "await", "None", "True", "False"})
+_OUTLINE = re.compile(r"^- key=(\S+) \| title=(.*?) \| objective=(.*?) \| depends_on=", re.MULTILINE)
+_QUESTION = re.compile(r"^    \? (.+)$", re.MULTILINE)
 
 
 def evidence_blocks(prompt: str) -> list[tuple[str, str, str]]:
     """(label, path, text) for every evidence block rendered into a prompt."""
     return [(m.group(1), m.group(2), m.group(5)) for m in _EVIDENCE.finditer(prompt)]
+
+
+def scripted_refinement(prompt: str) -> PlanRefinement:
+    """Echo the outline rendered in a planner prompt: same keys, titles, objectives and questions."""
+    heads = list(_OUTLINE.finditer(prompt))
+    chapters = []
+    for i, m in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(prompt)
+        qs = _QUESTION.findall(prompt[m.end() : end])
+        chapters.append(
+            ChapterRefinement(key=m.group(1), title=m.group(2), objective=m.group(3), questions=qs)
+        )
+    return PlanRefinement(chapters=chapters)
 
 
 def extractive_answer(req: LLMRequest, *, max_blocks: int = 3) -> str:
@@ -80,37 +91,15 @@ class ScriptedLLM:
         self.requests.append(req)
         self.calls.append(req.purpose)
         out: BaseModel
-        if schema is GuidePlan:
-            out = self._plan()
+        if schema is PlanRefinement:
+            out = scripted_refinement(req.messages[0].content)
         elif schema is SectionDraft:
             out = self._section(req)
+        elif schema is QuestionSet:
+            out = QuestionSet(questions=["What does this part do?", "How is it used?"])
         else:
             raise NotImplementedError(f"ScriptedLLM has no script for {schema.__name__}")
         return schema.model_validate(out.model_dump())
-
-    @staticmethod
-    def _plan() -> GuidePlan:
-        titles = [
-            ("overview", "Overview"),
-            ("architecture", "Architecture"),
-            ("data-flow", "Data flow"),
-            ("running", "Running it"),
-        ]
-        return GuidePlan(
-            estimated_read_minutes=12,
-            sections=[
-                GuideSectionPlan(
-                    key=key,
-                    title=title,
-                    kind="backbone" if i < 2 else "core",
-                    purpose=f"Explain {title.lower()} of this project",
-                    target_minutes=3,
-                    evidence_objectives=["app", "api", "routes", "retrieval"],
-                    visual_needs=["architecture"] if i == 1 else [],
-                )
-                for i, (key, title) in enumerate(titles)
-            ],
-        )
 
     def _section(self, req: LLMRequest) -> SectionDraft:
         if self._fail_on_section is not None and self.sections_written >= self._fail_on_section:

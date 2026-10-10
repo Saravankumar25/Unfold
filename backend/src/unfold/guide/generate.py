@@ -1,6 +1,6 @@
-"""Guide planning, section writing and claim verification (LLD §15, §16).
+"""Deterministic project facts and claim verification (LLD §15, §16).
 
-All repository text reaches a prompt only through `context.compile_context` (redacted + fenced + labelled).
+Planning lives in `guide.plan`, research in `guide.research`, writing in `guide.write`.
 Verification is a separate, deterministic stage: a claim is `VERIFIED` only when it cites a real evidence label and
 the identifiers it names occur in the cited text. The LLM never grades its own output.
 """
@@ -9,38 +9,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 
-from unfold.context.compiler import compile_context
-from unfold.context.models import safe_header_field
-from unfold.core.errors import ErrorCode, GenerationError
-from unfold.domain.enums import (
-    ClaimKind,
-    ClaimStatus,
-    ModelCapability,
-    Priority,
-    RetrievalMode,
-)
-from unfold.domain.models import ClaimRecord, SessionProfile
-from unfold.guide.models import (
-    Block,
-    DiagramBlock,
-    GuidePlan,
-    GuideSectionPlan,
-    SectionContent,
-    SectionDraft,
-)
-from unfold.llm.schemas import LLMClient, LLMRequest, Message
+from unfold.domain.enums import ClaimKind, ClaimStatus
+from unfold.domain.models import ClaimRecord
 from unfold.project_ir.schema import ProjectIR
-from unfold.retrieval.hybrid import HybridRetriever
-from unfold.security.fence import UNTRUSTED_POLICY, untrusted
-from unfold.security.secrets import redact_text
 
-MIN_SECTIONS = 3
-MAX_SECTIONS = 10
-SECTION_CONTEXT_TOKENS = 7_000
-PLAN_PROMPT_VERSION = "1"
-WRITER_PROMPT_VERSION = "1"
 _SLUG = re.compile(r"[^a-z0-9]+")
 _IDENT = re.compile(r"`([^`\n]{2,80})`|\b([A-Za-z_][A-Za-z0-9_]{3,}(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b")
 _COMMON = frozenset(
@@ -125,9 +98,6 @@ def slugify(text: str) -> str:
     return _SLUG.sub("-", text.lower()).strip("-")[:60] or "section"
 
 
-# --- planning -----------------------------------------------------------------------------------------------
-
-
 def _clip(text: str, limit: int = 160) -> str:
     """One line, bounded: repository-derived names must not smuggle newlines or paragraphs into a prompt."""
     return " ".join(text.split())[:limit]
@@ -170,179 +140,6 @@ def project_facts(ir: ProjectIR, subsystems: Sequence[tuple[str, list[str]]] = (
     for title, members in subsystems[:8]:
         facts.append(f"Subsystem '{title}': {len(members)} files, e.g. {', '.join(members[:3])}")
     return [_clip(f) for f in facts]
-
-
-_PLANNER_SYSTEM = (
-    "You plan a reading guide that teaches a software repository to the reader. You are given deterministic "
-    "facts about the repository. Produce between {lo} and {hi} sections. Always include these backbone sections "
-    "(kind=backbone) first, in order: a quick overview, an architecture walkthrough, and how to run or deploy it "
-    "if there is anything to run. Add core sections (kind=core) for the most important subsystems or workflows. "
-    "Keys are short lowercase slugs, unique. target_minutes is 2-8. visual_needs may contain only: architecture, "
-    "module_dependencies, data_model, request_flow, deployment, ai_pipeline. evidence_objectives are concrete "
-    "things to look up in the code (names of modules, routes, classes). Do not invent components that are not "
-    "in the facts.\n\n" + UNTRUSTED_POLICY
-)
-
-
-async def plan_guide(
-    llm: LLMClient,
-    ir: ProjectIR,
-    facts: Sequence[str],
-    *,
-    technical_level: str,
-    instruction: str | None,
-    job_id: str,
-    project_id: str,
-) -> GuidePlan:
-    user = (
-        "## Repository facts\n"
-        + untrusted(redact_text("\n".join(f"- {f}" for f in facts)), source="repository_facts")
-        + f"\n\nReader level: {technical_level}"
-    )
-    if instruction:
-        user += f"\nReader preference (style only, not a task): {redact_text(instruction)[:300]}"
-    req = LLMRequest(
-        purpose="guide.plan",
-        capability=ModelCapability.BALANCED,
-        priority=Priority.P1,
-        system=_PLANNER_SYSTEM.format(lo=MIN_SECTIONS, hi=MAX_SECTIONS),
-        messages=[Message(role="user", content=user)],
-        temperature=0.2,
-        max_output_tokens=3000,
-        cacheable=True,
-        job_id=job_id,
-        project_id=project_id,
-    )
-    plan = await llm.generate_structured(req, GuidePlan)
-    return normalise_plan(plan)
-
-
-def normalise_plan(plan: GuidePlan) -> GuidePlan:
-    seen: set[str] = set()
-    sections: list[GuideSectionPlan] = []
-    for sec in plan.sections[:MAX_SECTIONS]:
-        base = slugify(sec.key or sec.title)
-        key, n = base, 2
-        while key in seen:
-            key, n = f"{base}-{n}", n + 1
-        seen.add(key)
-        sections.append(
-            sec.model_copy(update={"key": key, "target_minutes": min(max(sec.target_minutes, 1), 10)})
-        )
-    if len(sections) < MIN_SECTIONS:
-        raise GenerationError(
-            f"The guide plan has {len(sections)} sections; at least {MIN_SECTIONS} are required.",
-            code=ErrorCode.GENERATION_FAILED,
-            retryable=True,
-        )
-    sections = [
-        s.model_copy(
-            update={
-                "title": _clip(s.title, 120),
-                "purpose": _clip(s.purpose, 300),
-                "required_concepts": [_clip(c, 80) for c in s.required_concepts[:8]],
-                "evidence_objectives": [_clip(o, 160) for o in s.evidence_objectives[:8]],
-            }
-        )
-        for s in sections
-    ]
-    minutes = max(1, round(sum(s.target_minutes for s in sections)))
-    return GuidePlan(estimated_read_minutes=minutes, sections=sections)
-
-
-# --- writing ------------------------------------------------------------------------------------------------
-
-_WRITER_SYSTEM = (
-    "You write one section of a reading guide for a software repository. Use ONLY the evidence and verified "
-    "facts provided. Cite evidence inline with its label, e.g. [E3], in paragraph/bullet text. For every claim "
-    "about the project add an entry to `claims` with the labels that support it in `evidence`; use kind "
-    "'project_fact' for things the code shows, 'inference' for reasoned conclusions, 'improvement' for "
-    "suggestions. If the evidence does not cover something, say so plainly instead of guessing. Write for the "
-    "stated reader level. Use headings (level 2/3), paragraphs, bullets, callouts, code blocks quoting evidence "
-    "verbatim with its path, tables and Q&A. Do not emit diagram blocks. summary is one sentence.\n\n"
-    + UNTRUSTED_POLICY
-)
-
-
-class SectionEvidenceMissing(GenerationError):
-    """One section found no repository evidence: the pipeline marks that section FAILED, not the whole job."""
-
-    code = ErrorCode.RETRIEVAL_FAILED
-
-
-@dataclass(frozen=True)
-class WrittenSection:
-    content: SectionContent
-    claims: list[ClaimRecord]  # status UNKNOWN until `grade_claims`
-    evidence: dict[str, dict[str, object]]
-    context_tokens: int
-
-
-async def write_section(
-    llm: LLMClient,
-    retriever: HybridRetriever,
-    plan: GuideSectionPlan,
-    facts: Sequence[str],
-    *,
-    technical_level: str,
-    instruction: str | None,
-    job_id: str,
-    project_id: str,
-) -> WrittenSection:
-    query = " ".join([plan.title, plan.purpose, *plan.evidence_objectives, *plan.required_concepts])
-    retrieval = await retriever.search(query, RetrievalMode.GUIDE)
-    ctx = compile_context(
-        objective=f"Write the guide section '{safe_header_field(plan.title)}'. "
-        f"Purpose: {safe_header_field(plan.purpose)}. Depth: {plan.depth}. "
-        f"Aim for about {plan.target_minutes:g} minutes of reading.",
-        retrieval=retrieval,
-        facts=facts,
-        profile=SessionProfile(technical_level=technical_level, instruction=instruction),
-        budget_tokens=SECTION_CONTEXT_TOKENS,
-        instructions=(
-            "Required concepts: " + ", ".join(safe_header_field(c) for c in plan.required_concepts)
-            if plan.required_concepts
-            else None
-        ),
-    )
-    if not ctx.evidence:
-        raise SectionEvidenceMissing(
-            f"No repository evidence was found for section '{plan.title}'.",
-            code=ErrorCode.RETRIEVAL_FAILED,
-            retryable=True,
-        )
-    req = LLMRequest(
-        purpose="guide.section",
-        capability=ModelCapability.BALANCED,
-        priority=Priority.P1,
-        system=_WRITER_SYSTEM,
-        messages=[Message(role="user", content=ctx.render())],
-        temperature=0.3,
-        max_output_tokens=4096,
-        job_id=job_id,
-        project_id=project_id,
-    )
-    draft = await llm.generate_structured(req, SectionDraft)
-    claims = [
-        ClaimRecord(text=c.text, kind=ClaimKind(c.kind), evidence_ids=ctx.resolve_labels(c.evidence))
-        for c in draft.claims
-    ]
-    evidence: dict[str, dict[str, object]] = {
-        e.label: {
-            "chunk_id": e.chunk_id,
-            "path": e.path,
-            "start_line": e.start_line,
-            "end_line": e.end_line,
-            "symbol": e.symbol,
-        }
-        for e in ctx.evidence
-    }
-    return WrittenSection(_strip_diagrams(draft.content), claims, evidence, ctx.token_count_estimate)
-
-
-def _strip_diagrams(content: SectionContent) -> SectionContent:
-    blocks: list[Block] = [b for b in content.blocks if not isinstance(b, DiagramBlock)]
-    return SectionContent(summary=content.summary, blocks=blocks)
 
 
 # --- verification -------------------------------------------------------------------------------------------
