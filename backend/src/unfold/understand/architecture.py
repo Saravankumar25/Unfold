@@ -31,9 +31,26 @@ _APP = frozenset({"frontend_app", "mobile_app", "desktop_app", "web_app", "fulls
 _PIPELINE = frozenset({"data_pipeline", "background_worker", "ml_training"})
 
 
+# a manifest under one of these directories belongs to docs, tooling or samples, not to a package of the project
+_NOT_PACKAGES = frozenset({"docs", "doc", "test", "tests", "example", "examples", "script", "scripts"})
+_WORKSPACE_MARKERS = frozenset({"pnpm-workspace.yaml", "lerna.json", "nx.json", "turbo.json", "go.work"})
+
+
+def _monorepo(ir: ProjectIR) -> bool:
+    """Three packages below the root, or two with a workspace marker at the root: a backend/ plus a frontend/
+    (plus a docs/requirements.txt) is one service, not a monorepo."""
+    packages = {
+        d
+        for dep in ir.dependencies
+        if (d := posixpath.dirname(dep.manifest_path)) and not _NOT_PACKAGES & set(d.split("/"))
+    }
+    marked = any(f.path in _WORKSPACE_MARKERS for f in ir.files)
+    return len(packages) >= (2 if marked else 3)
+
+
 def _kind(ir: ProjectIR) -> ProjectKind:
     cats = set(ir.project.categories)
-    if len({posixpath.dirname(d.manifest_path) for d in ir.dependencies}) >= 3:
+    if _monorepo(ir):
         return "monorepo"
     if "cli_tool" in cats and not ir.endpoints:
         return "cli"

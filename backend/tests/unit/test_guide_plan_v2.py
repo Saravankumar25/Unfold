@@ -136,6 +136,33 @@ def test_skeleton_differs_by_project_kind_and_every_chapter_is_grounded(tmp_path
     assert len({tuple(k) for k in keys.values()}) == 3
 
 
+def test_a_service_with_a_frontend_and_docs_manifests_is_not_a_monorepo(tmp_path: Path) -> None:
+    service = {
+        "requirements.txt": "fastapi==0.110.0\n",
+        "backend/requirements.txt": "fastapi==0.110.0\n",
+        "frontend/package.json": '{"name": "web", "dependencies": {"react": "19.0.0"}}\n',
+        "docs/requirements.txt": "mkdocs==1.5.0\n",
+        "backend/app/main.py": (
+            "from fastapi import FastAPI\n\napp = FastAPI()\n\n\n@app.get('/ping')\ndef ping():\n    return 1\n"
+        ),
+    }
+    ir = _ir(tmp_path / "svc", service)
+    assert len({d.manifest_path.rpartition("/")[0] for d in ir.dependencies}) >= 3  # the old rule fired here
+    assert build_architecture(ir).project_kind == "web_service"
+
+
+def test_a_workspace_with_a_marker_is_a_monorepo_and_two_loose_packages_are_not(tmp_path: Path) -> None:
+    marked = {
+        "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\n",
+        "package.json": '{"name": "root", "private": true}\n',
+        "packages/a/package.json": '{"name": "a", "dependencies": {"react": "19.0.0"}}\n',
+        "packages/b/package.json": '{"name": "b", "dependencies": {"react": "19.0.0"}}\n',
+    }
+    assert build_architecture(_ir(tmp_path / "marked", marked)).project_kind == "monorepo"
+    two = {k: v for k, v in marked.items() if k != "pnpm-workspace.yaml"}
+    assert build_architecture(_ir(tmp_path / "two", two)).project_kind != "monorepo"
+
+
 def test_chapter_budget_follows_complexity_and_is_clamped() -> None:
     small = load_fixture("terraform_k8s").ir
     big = small.model_copy(update={"stats": {**small.stats, "code_files": 4000, "code_lines": 400_000}})
