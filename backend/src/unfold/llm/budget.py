@@ -12,25 +12,17 @@ Scope is per model (`LLM_QUOTA_SCOPE=shared`, the default: keys are credentials,
 
 from __future__ import annotations
 
-import asyncio
-import time
 import uuid
-from dataclasses import dataclass
 from typing import Any
 
 from redis.asyncio import Redis
 
 from unfold.core.config import Settings
-from unfold.domain.enums import Priority
+from unfold.llm.coordination import CONCURRENCY_WAIT_S, WAIT_BUDGET_S, Reservation, ReservingBudget
 
-WAIT_BUDGET_S: dict[Priority, float] = {
-    Priority.P0: 20.0,
-    Priority.P1: 180.0,
-    Priority.P2: 60.0,
-    Priority.P3: 30.0,
-}
+__all__ = ["CONCURRENCY_WAIT_S", "WAIT_BUDGET_S", "ProviderBudget", "Reservation"]
+
 WINDOW_MS = 60_000
-CONCURRENCY_WAIT_S = 8.0  # how long a full concurrency limit is polled before giving up on a model
 
 # KEYS: rpm, tpm, rpd_prefix, conc, cooldown
 # ARGV: rid, est_tokens, rpm_limit, tpm_limit, rpd_limit, conc_limit, lease_ms
@@ -129,18 +121,7 @@ return want
 """
 
 
-@dataclass(frozen=True)
-class Reservation:
-    id: str
-    model: str
-    scope: str
-    est_tokens: int
-    ts_ms: int
-    day: int
-    key_index: int | None = None
-
-
-class ProviderBudget:
+class ProviderBudget(ReservingBudget):
     def __init__(
         self,
         settings: Settings,
@@ -197,41 +178,6 @@ class ProviderBudget:
             return res, 0.0, "ok"
         reason = extra.decode() if isinstance(extra, bytes) else str(extra)
         return None, value / 1000.0, reason
-
-    async def reserve(
-        self,
-        model: str,
-        est_tokens: int,
-        priority: Priority,
-        *,
-        key_index: int | None = None,
-        max_wait_s: float | None = None,
-    ) -> Reservation | None:
-        """Reserve capacity, waiting in ≤1 s steps up to the priority wait budget. None → budget exhausted.
-
-        Gives up immediately when the server hint (cooldown / daily quota / window) exceeds the remaining wait;
-        a full concurrency limit is polled instead because its hint is only the lease ceiling.
-        """
-        budget = WAIT_BUDGET_S[priority] if max_wait_s is None else max(0.0, max_wait_s)
-        deadline = time.monotonic() + budget
-        concurrency_deadline = time.monotonic() + CONCURRENCY_WAIT_S
-        while True:
-            res, hint, _reason = await self.try_reserve(model, est_tokens, key_index=key_index)
-            if res is not None:
-                return res
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return None
-            if _reason == "concurrency":
-                # The hint is the lease expiry (a ceiling). In-flight calls normally finish far sooner, so poll
-                # briefly; past that the caller should try another candidate rather than queue behind this one.
-                if time.monotonic() >= concurrency_deadline:
-                    return None
-                await asyncio.sleep(max(0.01, min(self._step, remaining)))
-                continue
-            if hint > remaining:
-                return None
-            await asyncio.sleep(max(0.01, min(self._step, hint, remaining)))
 
     async def commit(self, reservation: Reservation, actual_tokens: int | None = None) -> None:
         """The call reached the provider: keep the request counted, replace the token estimate, free the slot."""

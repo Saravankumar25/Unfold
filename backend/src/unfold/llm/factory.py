@@ -6,10 +6,15 @@ call then raises `ProviderError(code=PROVIDER_NOT_CONFIGURED)`.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from unfold.core.config import Settings
 from unfold.llm.gateway import LLMGateway
 from unfold.llm.providers.base import Provider
-from unfold.persistence.redis_store import RedisStore
+from unfold.ports import CounterStore
+
+if TYPE_CHECKING:
+    from unfold.persistence.redis_store import RedisStore
 
 
 def configured_providers(settings: Settings) -> list[str]:
@@ -35,7 +40,10 @@ def build_providers(settings: Settings) -> dict[str, Provider]:
     return providers
 
 
-def build_gateway(settings: Settings, redis: RedisStore) -> LLMGateway:
+def build_gateway(
+    settings: Settings, redis: RedisStore | None, *, counters: CounterStore | None = None
+) -> LLMGateway:
+    """Redis-backed coordination (local stack), or the counter-store one when `redis` is None (AWS profile)."""
     providers = build_providers(settings)
     reason = None
     if not providers:
@@ -43,4 +51,26 @@ def build_gateway(settings: Settings, redis: RedisStore) -> LLMGateway:
             "No LLM provider is configured. Set GEMINI_API_KEY_1..4 (and optionally GROQ_API_KEY_1..4) "
             "in the environment, then restart the api/worker."
         )
-    return LLMGateway(settings, redis, providers, not_configured_reason=reason)
+    if redis is not None:
+        return LLMGateway(settings, redis, providers, not_configured_reason=reason)
+    if counters is None:
+        raise ValueError("build_gateway needs Redis or a counter store")
+    from unfold.llm.counter_coordination import (
+        CounterKeyPool,
+        CounterProviderBudget,
+        CounterUsageStore,
+        LocalCircuitBreaker,
+        NoCache,
+    )
+
+    return LLMGateway(
+        settings,
+        None,
+        providers,
+        circuit=LocalCircuitBreaker(),
+        budget=CounterProviderBudget(settings, counters),
+        keys=CounterKeyPool(counters),
+        cache=NoCache(),
+        usage=CounterUsageStore(counters),
+        not_configured_reason=reason,
+    )

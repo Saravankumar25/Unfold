@@ -50,7 +50,7 @@ async def test_every_stage_is_timestamped_and_survives_degraded(runtime: Runtime
         await s.flush()
         job_id = str(job.id)
     try:
-        reporter = ProgressReporter(runtime.db, runtime.progress, str(project_id), job_id)
+        reporter = ProgressReporter(runtime.control, runtime.progress, str(project_id), job_id)
         assert await reporter.start(alive_within=timedelta(minutes=2)) == 1
         stages = [s for s in PIPELINE if s not in (JobStage.RECEIVED, JobStage.READY)][:6]
         for st in stages:

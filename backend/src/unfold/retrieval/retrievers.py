@@ -25,9 +25,8 @@ from unfold.graph.queries import GraphQueries
 from unfold.indexing.dense import DenseStore
 from unfold.indexing.lexical import LexicalIndexCache
 from unfold.indexing.models import Chunk
-from unfold.indexing.store import ChunkRepository
 from unfold.indexing.tokenize import tokenize_query
-from unfold.ports import BlobStore
+from unfold.ports import BlobStore, ChunkStore
 from unfold.project_ir.schema import Entity, ProjectIR
 from unfold.retrieval.config import (
     CHUNKABLE_LABELS,
@@ -148,7 +147,7 @@ def _interleave(groups: Sequence[Sequence[GraphNode]]) -> list[GraphNode]:
 
 class GraphRetriever:
     def __init__(
-        self, graph: GraphQueries, chunks: ChunkRepository, config: RetrievalConfig = DEFAULT_CONFIG
+        self, graph: GraphQueries, chunks: ChunkStore, config: RetrievalConfig = DEFAULT_CONFIG
     ) -> None:
         self.graph = graph
         self.chunks = chunks
@@ -248,9 +247,7 @@ def _entity_text(e: Entity) -> str:
 class StructuralRetriever:
     """Similarity-free lookups over the Project IR (AI infra §17)."""
 
-    def __init__(
-        self, ir: ProjectIR, chunks: ChunkRepository, config: RetrievalConfig = DEFAULT_CONFIG
-    ) -> None:
+    def __init__(self, ir: ProjectIR, chunks: ChunkStore, config: RetrievalConfig = DEFAULT_CONFIG) -> None:
         self.ir = ir
         self.chunks = chunks
         self.config = config

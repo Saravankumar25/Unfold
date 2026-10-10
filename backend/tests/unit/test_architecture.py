@@ -89,11 +89,20 @@ _REDIS_COORDINATION = {
     "unfold.llm.circuit",
     "unfold.llm.key_pool",
 }
+_AWS_ADAPTERS = {
+    "unfold.persistence.s3_store",
+    "unfold.persistence.dynamodb.table",
+    "unfold.persistence.ssm_secrets",
+    "unfold.worker.sqs_queue",
+    "unfold.worker.dispatch",
+}
 _ADAPTER_SDKS = {
     "redis": {"unfold.persistence.redis_store", *_REDIS_COORDINATION},
     "minio": {"unfold.persistence.object_store"},
     "arq": set(),  # replaced by one-shot workers (ADR 0003)
-    "boto3": set(),  # the S3 adapter lands in phase 4 and is added here then
+    # the AWS adapters (ADR 0010-0014): S3, DynamoDB, SQS, ECS; `botocore` only for their error types
+    "boto3": _AWS_ADAPTERS,
+    "botocore": _AWS_ADAPTERS,
 }
 
 

@@ -19,8 +19,7 @@ from unfold.core.logging import configure_logging, get_logger
 from unfold.observability.tracing import configure_tracing
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
-from unfold.worker.queue import SubprocessJobQueue
-from unfold.worker.recovery import requeue_incomplete_jobs
+from unfold.worker.factory import build_job_queue
 
 log = get_logger(__name__)
 API_PREFIX = "/api/v1"
@@ -36,9 +35,14 @@ def create_app(settings: Settings | None = None, *, queue: JobQueue | None = Non
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rt = Runtime.create(settings)
         app.state.runtime = rt
-        app.state.queue = queue if queue is not None else await SubprocessJobQueue.connect(settings)
-        await rt.objects.ensure_bucket()
-        await requeue_incomplete_jobs(rt, app.state.queue)
+        app.state.queue = queue if queue is not None else await build_job_queue(settings)
+        if settings.persistence_backend == "postgres":
+            # Local stack only: nothing else schedules recovery. On AWS the scheduled sweeper does, and a
+            # cold-starting Lambda must not scan the table (ADR 0011).
+            from unfold.worker.recovery import requeue_incomplete_jobs
+
+            await rt.objects.ensure_bucket()
+            await requeue_incomplete_jobs(rt, app.state.queue)
         log.info("api.started", version=__version__, env=settings.app_env)
         try:
             yield
@@ -65,12 +69,14 @@ def create_app(settings: Settings | None = None, *, queue: JobQueue | None = Non
     async def ready() -> JSONResponse:
         rt: Runtime = app.state.runtime
         checks: dict[str, Any] = {
-            "postgres": rt.db.ping(),
-            "redis": rt.limiter.ping(),
-            "neo4j": rt.neo4j.ping(),
-            "qdrant": rt.qdrant.ping(),
+            "control": rt.control.ping(),
+            "limiter": rt.limiter.ping(),
             "object_store": rt.objects.ping(),
         }
+        if settings.graph_backend == "neo4j":
+            checks["neo4j"] = rt.neo4j.ping()
+        if settings.dense_backend == "qdrant":
+            checks["qdrant"] = rt.qdrant.ping()
         results = await asyncio.gather(
             *(asyncio.wait_for(c, 5) for c in checks.values()), return_exceptions=True
         )

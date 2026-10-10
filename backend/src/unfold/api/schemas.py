@@ -64,6 +64,23 @@ class ProjectCreated(BaseModel):
     job_id: str
 
 
+class CreateZipUpload(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(ge=1)  # bytes, checked against MAX_ZIP_BYTES before a URL is issued
+    technical_level: TechnicalLevel = TechnicalLevel.INTERMEDIATE
+    instruction: str | None = Field(default=None, max_length=1000)
+
+
+class UploadTicket(BaseModel):
+    """Presigned POST: send `fields` then the file as multipart form data to `url`, then call `complete`."""
+
+    project_id: str
+    url: str
+    fields: dict[str, str]
+    max_bytes: int
+    expires_at: datetime
+
+
 class JobOut(BaseModel):
     id: str
     status: str  # queued | running | succeeded | failed

@@ -76,6 +76,9 @@ def settings(migrated_database: str) -> Settings:
         max_sessions_per_hour=100_000,
         max_projects_per_ip_per_hour=100_000,
         max_projects_per_hour_global=100_000,
+        # the shared test database keeps `queued` jobs from earlier runs; the caps have their own tests
+        max_active_jobs_per_session=100_000,
+        max_queued_jobs_global=100_000,
     )
 
 

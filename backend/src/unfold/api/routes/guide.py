@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter
-from sqlalchemy import select
 
 from unfold.api.deps import RuntimeDep, SessionDep, owned_project
 from unfold.api.schemas import (
@@ -24,15 +23,8 @@ from unfold.api.schemas import (
 from unfold.core.errors import ErrorCode, NotFound, UnfoldError
 from unfold.diagrams.models import DiagramSpec
 from unfold.domain.models import ClaimRecord, EvidenceRef
+from unfold.domain.records import DiagramRec, ProjectRec, SectionRec
 from unfold.guide.models import GuidePlan, SectionContent
-from unfold.indexing.store import ChunkRepository
-from unfold.persistence.postgres.models import (
-    DiagramRow,
-    GuidePlanRow,
-    GuideSectionRow,
-    ProjectRow,
-    SummaryRow,
-)
 from unfold.project_ir.snapshot import load_ir
 from unfold.runtime import Runtime
 from unfold.security.injection import scan, trust_label
@@ -47,15 +39,14 @@ def _not_ready() -> UnfoldError:
     )
 
 
-async def _plan(rt: Runtime, project: ProjectRow) -> GuidePlan:
-    async with rt.db.session() as s:
-        row = await s.get(GuidePlanRow, project.id)
-    if row is None:
+async def _plan(rt: Runtime, project: ProjectRec) -> GuidePlan:
+    stored = await rt.control.get_plan(project.id)
+    if stored is None:
         raise _not_ready()
-    return GuidePlan.model_validate(row.plan)
+    return GuidePlan.model_validate(stored)
 
 
-def _summary(row: GuideSectionRow, kind: str, minutes: float) -> GuideSectionSummary:
+def _summary(row: SectionRec, kind: str, minutes: float) -> GuideSectionSummary:
     content = SectionContent.model_validate(row.content) if row.content else None
     return GuideSectionSummary(
         key=row.section_key,
@@ -72,18 +63,7 @@ def _summary(row: GuideSectionRow, kind: str, minutes: float) -> GuideSectionSum
 async def get_guide(project_id: str, rt: RuntimeDep, session: SessionDep) -> GuideOut:
     project = await owned_project(rt, session, project_id)
     plan = await _plan(rt, project)
-    async with rt.db.session() as s:
-        rows = (
-            (
-                await s.execute(
-                    select(GuideSectionRow)
-                    .where(GuideSectionRow.project_id == project.id)
-                    .order_by(GuideSectionRow.position)
-                )
-            )
-            .scalars()
-            .all()
-        )
+    rows = await rt.control.sections(project.id)
     spec = {sec.key: sec for sec in plan.sections}
     sections = [
         _summary(
@@ -94,7 +74,7 @@ async def get_guide(project_id: str, rt: RuntimeDep, session: SessionDep) -> Gui
         for r in rows
     ]
     return GuideOut(
-        project_id=str(project.id), estimated_read_minutes=plan.estimated_read_minutes, sections=sections
+        project_id=project.id, estimated_read_minutes=plan.estimated_read_minutes, sections=sections
     )
 
 
@@ -102,14 +82,7 @@ async def get_guide(project_id: str, rt: RuntimeDep, session: SessionDep) -> Gui
 async def get_section(project_id: str, key: str, rt: RuntimeDep, session: SessionDep) -> GuideSectionOut:
     project = await owned_project(rt, session, project_id)
     plan = await _plan(rt, project)
-    async with rt.db.session() as s:
-        row = (
-            await s.execute(
-                select(GuideSectionRow).where(
-                    GuideSectionRow.project_id == project.id, GuideSectionRow.section_key == key
-                )
-            )
-        ).scalar_one_or_none()
+    row = await rt.control.get_section(project.id, key)
     if row is None:
         raise NotFound("Section not found.")
     spec = next((sec for sec in plan.sections if sec.key == key), None)
@@ -140,7 +113,7 @@ async def get_section(project_id: str, key: str, rt: RuntimeDep, session: Sessio
 @router.get("/{project_id}/evidence/{chunk_id}", response_model=EvidenceOut)
 async def get_evidence(project_id: str, chunk_id: str, rt: RuntimeDep, session: SessionDep) -> EvidenceOut:
     project = await owned_project(rt, session, project_id)
-    found = await ChunkRepository(rt.db).get_many(str(project.id), [chunk_id])
+    found = await rt.chunks.get_many(project.id, [chunk_id])
     if not found:
         raise NotFound("Evidence not found.")
     chunk = found[0]
@@ -156,7 +129,7 @@ async def get_evidence(project_id: str, chunk_id: str, rt: RuntimeDep, session: 
     )
 
 
-def _diagram_out(row: DiagramRow) -> DiagramOut:
+def _diagram_out(row: DiagramRec) -> DiagramOut:
     spec = DiagramSpec.model_validate(row.spec)
     return DiagramOut(**spec.model_dump(), mermaid=row.mermaid, origin=row.origin)
 
@@ -164,9 +137,8 @@ def _diagram_out(row: DiagramRow) -> DiagramOut:
 @router.get("/{project_id}/diagrams/{diagram_id}", response_model=DiagramOut)
 async def get_diagram(project_id: str, diagram_id: str, rt: RuntimeDep, session: SessionDep) -> DiagramOut:
     project = await owned_project(rt, session, project_id)
-    async with rt.db.session() as s:
-        row = await s.get(DiagramRow, diagram_id)
-    if row is None or row.project_id != project.id:
+    row = await rt.control.get_diagram(project.id, diagram_id)
+    if row is None:
         raise NotFound("Diagram not found.")
     return _diagram_out(row)
 
@@ -177,29 +149,9 @@ async def get_architecture(project_id: str, rt: RuntimeDep, session: SessionDep)
     if not project.ir_object_key:
         raise _not_ready()
     ir = await load_ir(rt.objects, project.ir_object_key)
-    async with rt.db.session() as s:
-        subsystems = (
-            (
-                await s.execute(
-                    select(SummaryRow).where(
-                        SummaryRow.project_id == project.id, SummaryRow.level == "subsystem"
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        diagram = (
-            (
-                await s.execute(
-                    select(DiagramRow).where(
-                        DiagramRow.project_id == project.id, DiagramRow.kind == "architecture"
-                    )
-                )
-            )
-            .scalars()
-            .first()
-        )
+    subsystems = await rt.control.summaries(project.id, "subsystem")
+    diagrams = await rt.control.diagrams(project.id, "architecture")
+    diagram = diagrams[0] if diagrams else None
     counts: dict[str, int] = {
         "files": len(ir.files),
         "symbols": len(ir.symbols),

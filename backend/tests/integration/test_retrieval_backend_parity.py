@@ -95,9 +95,11 @@ async def _analyze(rt: Runtime, name: str) -> Analyzed:
         s.add(job)
         await s.flush()
         job_id = str(job.id)
-    reporter = ProgressReporter(rt.db, rt.progress, str(project_id), job_id)
+    reporter = ProgressReporter(rt.control, rt.progress, str(project_id), job_id)
     assert await reporter.start(alive_within=timedelta(minutes=2)) == 1
-    run = _Run(rt, None, project, job_id, reporter)  # type: ignore[arg-type]  # stages below never call the LLM
+    record = await rt.control.get_project(str(project_id))
+    assert record is not None
+    run = _Run(rt, None, record, job_id, reporter)  # type: ignore[arg-type]  # stages below never call the LLM
     for step in (run._analyze, run._graph, run._lexical, run._dense, run._subsystems):
         await step()
     async with rt.db.session() as s:

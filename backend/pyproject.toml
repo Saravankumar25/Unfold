@@ -8,35 +8,18 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "alembic>=1.20.0",
-    "asyncpg>=0.31.0",
-    "bm25s>=0.3.11",
+    # shared by every image: the API, the control handlers and the analysis worker
+    "boto3>=1.43.111",
     "fastapi>=0.141.1",
-    "fastembed>=0.8.0",
-    "google-genai>=2.24.0",
     "httpx>=0.28.1",
-    "jinja2>=3.1.6",
-    "minio>=7.2.20",
-    "neo4j>=6.3.1",
-    "networkx>=3.7",
     "opentelemetry-exporter-otlp>=1.44.0",
     "opentelemetry-instrumentation-fastapi>=0.65b0",
     "opentelemetry-sdk>=1.44.0",
     "orjson>=3.12.0",
-    "playwright>=1.63.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
-    "python-hcl2>=8.1.4",
     "python-multipart>=0.0.32",
-    "pyyaml>=6.0.3",
-    "qdrant-client>=1.19.1",
-    "redis>=5",
-    "sqlalchemy[asyncio]>=2.0.54",
-    "sse-starlette>=3.4.11",
     "structlog>=26.1.0",
-    "tomli-w>=1.2.0",
-    "tree-sitter>=0.25.2,<0.26",  # 0.26.0 corrupts memory on TS input (access violation, see tests)
-    "tree-sitter-language-pack>=1.20.0",
     "uvicorn[standard]>=0.53.0",
 ]
 
@@ -46,6 +29,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "moto[dynamodb,s3,sqs,ecs,events,ssm]>=5",
     "mypy>=2.3.1",
     "poethepoet>=0.48.0",
     "pytest>=9.1.1",
@@ -55,6 +39,38 @@ dev = [
     "ruff>=0.16.8",
     "testcontainers>=4.15.0",
 ]
+# Images pick groups (`uv sync --no-default-groups --group ...`); a developer machine gets all of them.
+local = [  # the Postgres/Redis/MinIO/Qdrant/Neo4j stack (PERSISTENCE_BACKEND=postgres); not in any AWS image
+    "alembic>=1.20.0",
+    "asyncpg>=0.31.0",
+    "minio>=7.2.20",
+    "neo4j>=6.3.1",
+    "qdrant-client>=1.19.1",
+    "redis>=5",
+    "sqlalchemy[asyncio]>=2.0.54",
+]
+ai = [  # retrieval and model clients: chat in the API, section writing in the worker
+    "bm25s>=0.3.11",
+    "fastembed>=0.8.0",
+    "google-genai>=2.24.0",
+]
+analysis = [  # worker only: parsing the repository
+    "networkx>=3.7",
+    "python-hcl2>=8.1.4",
+    "pyyaml>=6.0.3",
+    "tree-sitter>=0.25.2,<0.26",  # 0.26.0 corrupts memory on TS input (access violation, see tests)
+    "tree-sitter-language-pack>=1.20.0",
+]
+export = [  # the exporter image only (PDF rendering)
+    "jinja2>=3.1.6",
+    "playwright>=1.63.0",
+]
+lambda-runtime = [  # lets the worker image run the control handlers as Lambda functions
+    "awslambdaric>=3.1.1",
+]
+
+[tool.uv]
+default-groups = ["dev", "local", "ai", "analysis", "export"]
 
 [project.scripts]
 unfold-api = "unfold.api.main:run"

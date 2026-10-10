@@ -22,7 +22,7 @@ from unfold.core.config import get_settings
 from unfold.core.logging import configure_logging, get_logger
 from unfold.llm.factory import build_gateway
 from unfold.observability.tracing import configure_tracing
-from unfold.orchestration.pipeline import RETRY_EXIT_CODE, run_analysis
+from unfold.orchestration.constants import RETRY_EXIT_CODE
 from unfold.runtime import Runtime
 
 log = get_logger(__name__)
@@ -64,12 +64,17 @@ async def run(task: str, ref: str) -> int:
         log.info("worker.swept_workdirs", count=swept)
     rt = Runtime.create(settings, db_pool_size=4)
     try:
-        await rt.objects.ensure_bucket()
+        if settings.persistence_backend == "postgres":
+            await rt.objects.ensure_bucket()
         if task == "cleanup":
             counts = await cleanup_project(rt, ref)
             log.info("cleanup.done", project_id=ref, **counts)
             return 0
-        gateway = build_gateway(settings, rt.redis)
+        from unfold.orchestration.pipeline import run_analysis
+
+        gateway = build_gateway(
+            settings, rt.redis if settings.persistence_backend == "postgres" else None, counters=rt.counters
+        )
         rt.llm = gateway
         outcome = await run_analysis(rt, gateway, ref)
         if outcome.succeeded or not outcome.retry:

@@ -5,20 +5,15 @@ Progress reflects real stages only (PRD §7.2). A stage is published after its p
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from unfold.core.errors import UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import PIPELINE, JobStage, JobStatus, check_transition
+from unfold.domain.records import JobRec
 from unfold.observability.tracing import tracer
-from unfold.persistence.postgres.db import Database
-from unfold.persistence.postgres.models import AnalysisJobRow
-from unfold.ports import ProgressStore
+from unfold.ports import ControlStore, ProgressStore
 
 log = get_logger(__name__)
 STAGE_TOTAL = len(PIPELINE)
@@ -43,58 +38,68 @@ def stage_event(
 
 
 class ProgressReporter:
-    def __init__(self, db: Database, progress: ProgressStore, project_id: str, job_id: str) -> None:
-        self.db = db
+    """Job state transitions. Each is a mutator the store applies atomically (row lock or version check), so it
+    must be a pure function of the record it is handed (it may be re-run after a lost race)."""
+
+    def __init__(self, control: ControlStore, progress: ProgressStore, project_id: str, job_id: str) -> None:
+        self.control = control
         self.progress = progress
         self.project_id = project_id
-        self.job_id = uuid.UUID(job_id)
-
-    async def _load(self, session: AsyncSession) -> AnalysisJobRow:
-        stmt = select(AnalysisJobRow).where(AnalysisJobRow.id == self.job_id).with_for_update()
-        row: AnalysisJobRow = (await session.execute(stmt)).scalar_one()
-        return row
+        self.job_id = job_id
 
     async def start(self, *, alive_within: timedelta) -> int | None:
         """Claim the job and mark it running (new attempt); the attempt number, or None when it is not ours.
 
-        Done under the row lock so two workers started together cannot both own one job: a finished job, or a
+        Done atomically so two workers started together cannot both own one job: a finished job, or a
         running one whose heartbeat is fresh, is left alone.
         """
-        async with self.db.transaction() as s:
-            row = await self._load(s)
-            if row.status == JobStatus.SUCCEEDED.value:
-                return None
+
+        claimed = False
+
+        def claim(job: JobRec) -> bool | None:
+            nonlocal claimed
+            claimed = False  # the store may run this again after a lost race
+            now = datetime.now(UTC)
+            if job.status == JobStatus.SUCCEEDED.value:
+                return False
             if (
-                row.status == JobStatus.RUNNING.value
-                and row.heartbeat_at is not None
-                and datetime.now(UTC) - row.heartbeat_at < alive_within
+                job.status == JobStatus.RUNNING.value
+                and job.heartbeat_at is not None
+                and now - job.heartbeat_at < alive_within
             ):
-                return None
-            row.status = JobStatus.RUNNING.value
-            row.attempt += 1
-            row.started_at = row.started_at or datetime.now(UTC)
-            row.heartbeat_at = datetime.now(UTC)
-            row.error_code = None
-            row.error_detail = None
-            attempt = row.attempt
-        log.info("job.started", attempt=attempt)
-        return attempt
+                return False
+            job.status = JobStatus.RUNNING.value
+            job.attempt += 1
+            job.started_at = job.started_at or now
+            job.heartbeat_at = now
+            job.error_code = None
+            job.error_detail = None
+            claimed = True
+            return True
+
+        job = await self.control.update_job(self.job_id, claim)
+        if not claimed:
+            return None
+        log.info("job.started", attempt=job.attempt)
+        return job.attempt
 
     async def stage(self, stage: JobStage, detail: str | None = None) -> None:
-        async with self.db.transaction() as s:
-            row = await self._load(s)
-            current = JobStage(row.current_stage)
+        def apply(job: JobRec) -> bool | None:
+            current = JobStage(job.current_stage)
             if not stage.is_failure and not current.is_terminal and 0 <= stage.order < current.order:
-                return  # resuming inside a group that already ran: keep the furthest stage reached
+                return False  # resuming inside a group that already ran: keep the furthest stage reached
             check_transition(current, stage)
-            row.current_stage = stage.value
-            progress = dict(row.stage_progress or {})
-            # a new nested dict: mutating the shared one is invisible to SQLAlchemy (plain JSONB column)
+            job.current_stage = stage.value
+            progress = dict(job.stage_progress or {})
+            # a new nested dict: the stored document is replaced whole, never patched in place
             progress["stages"] = {**progress.get("stages", {}), stage.value: datetime.now(UTC).isoformat()}
             if detail:
                 progress["detail"] = detail
-            row.stage_progress = progress
-            row.heartbeat_at = datetime.now(UTC)
+            job.stage_progress = progress
+            job.heartbeat_at = datetime.now(UTC)
+            return True
+
+        await self.control.update_job(self.job_id, apply)
         await self.progress.publish(self.project_id, stage_event("stage", stage, detail=detail))
         span = tracer.start_span(
             "job.stage", attributes={"stage": stage.value, "project_id": self.project_id}
@@ -103,44 +108,51 @@ class ProgressReporter:
         log.info("job.stage", stage=stage.value, detail=detail)
 
     async def degraded(self, component: str) -> None:
-        async with self.db.transaction() as s:
-            row = await self._load(s)
-            progress = dict(row.stage_progress or {})
-            deg = set(progress.get("degraded", []))
-            deg.add(component)
-            progress["degraded"] = sorted(deg)
-            row.stage_progress = progress
+        def apply(job: JobRec) -> bool | None:
+            progress = dict(job.stage_progress or {})
+            progress["degraded"] = sorted({*progress.get("degraded", []), component})
+            job.stage_progress = progress
+            return True
+
+        await self.control.update_job(self.job_id, apply)
 
     async def heartbeat(self) -> None:
-        async with self.db.transaction() as s:
-            row = await self._load(s)
-            row.heartbeat_at = datetime.now(UTC)
+        def apply(job: JobRec) -> bool | None:
+            job.heartbeat_at = datetime.now(UTC)
+            return True
+
+        await self.control.update_job(self.job_id, apply)
 
     async def succeed(self) -> None:
-        async with self.db.transaction() as s:
-            row = await self._load(s)
-            check_transition(JobStage(row.current_stage), JobStage.READY)
-            row.current_stage = JobStage.READY.value
-            row.status = JobStatus.SUCCEEDED.value
-            row.completed_at = datetime.now(UTC)
-            row.retryable = False
+        def apply(job: JobRec) -> bool | None:
+            check_transition(JobStage(job.current_stage), JobStage.READY)
+            job.current_stage = JobStage.READY.value
+            job.status = JobStatus.SUCCEEDED.value
+            job.completed_at = datetime.now(UTC)
+            job.retryable = False
+            return True
+
+        await self.control.update_job(self.job_id, apply)
         await self.progress.publish(self.project_id, stage_event("ready", JobStage.READY))
         log.info("job.ready")
 
     async def fail(self, error: UnfoldError, *, will_retry: bool) -> None:
         """Record a failure. When the runner will retry, the job stays `queued` at its current stage."""
         failure = JobStage(error.failure_stage)
-        async with self.db.transaction() as s:
-            row = await self._load(s)
-            row.error_code = error.code.value
-            row.error_detail = {"message": error.message, **{k: str(v) for k, v in error.detail.items()}}
-            row.retryable = error.retryable
+
+        def apply(job: JobRec) -> bool | None:
+            job.error_code = error.code.value
+            job.error_detail = {"message": error.message, **{k: str(v) for k, v in error.detail.items()}}
+            job.retryable = error.retryable
             if will_retry:
-                row.status = JobStatus.QUEUED.value
+                job.status = JobStatus.QUEUED.value
             else:
-                row.status = JobStatus.FAILED.value
-                row.current_stage = failure.value
-                row.completed_at = datetime.now(UTC)
+                job.status = JobStatus.FAILED.value
+                job.current_stage = failure.value
+                job.completed_at = datetime.now(UTC)
+            return True
+
+        await self.control.update_job(self.job_id, apply)
         if not will_retry:
             await self.progress.publish(self.project_id, stage_event("failed", failure, error=error))
         log.warning("job.failed", code=error.code.value, will_retry=will_retry, stage=failure.value)

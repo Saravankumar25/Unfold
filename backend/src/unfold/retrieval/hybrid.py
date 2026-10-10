@@ -30,9 +30,8 @@ from unfold.indexing.dense import DenseStore, dense_store_for
 from unfold.indexing.lexical import LexicalIndexCache
 from unfold.indexing.models import Chunk
 from unfold.indexing.reranker import CrossEncoderReranker, reranker_for
-from unfold.indexing.store import ChunkRepository
 from unfold.observability.tracing import retrieval_latency, set_attrs, span
-from unfold.ports import BlobStore
+from unfold.ports import BlobStore, ChunkStore
 from unfold.project_ir.schema import ProjectIR
 from unfold.retrieval.config import CHUNKABLE_LABELS, DEFAULT_CONFIG, FINAL_K_BY_BREADTH, RetrievalConfig
 from unfold.retrieval.errors import RetrievalFailed
@@ -86,7 +85,7 @@ class HybridRetriever:
         self,
         *,
         project_id: str,
-        chunks: ChunkRepository,
+        chunks: ChunkStore,
         lexical_cache: LexicalIndexCache,
         objects: BlobStore,
         lexical_key: str | None,
@@ -122,7 +121,7 @@ class HybridRetriever:
         """Wire every retriever from the process `Runtime` (singleton embedder / reranker / BM25 cache)."""
         return cls(
             project_id=project_id,
-            chunks=ChunkRepository(runtime.db),
+            chunks=runtime.chunks,
             lexical_cache=lexical_cache_for(runtime),
             objects=runtime.objects,
             lexical_key=lexical_key,

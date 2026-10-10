@@ -13,7 +13,7 @@ import sys
 
 from unfold.core.config import Settings
 from unfold.core.logging import get_logger
-from unfold.orchestration.pipeline import ALIVE_WITHIN, RETRY_EXIT_CODE
+from unfold.orchestration.constants import ALIVE_WITHIN, RETRY_EXIT_CODE
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
 from unfold.worker.recovery import fail_abandoned_job
