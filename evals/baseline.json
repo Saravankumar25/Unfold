@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "suites": {
+    "groundedness": {
+      "claim_grade_accuracy": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "hallucination_verified_rate": {
+        "score": 0.0,
+        "max": 0.05
+      },
+      "chat_grounded_ratio": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "chat_answered_with_evidence": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "chat_citations_valid": {
+        "score": 1.0,
+        "min": 0.95
+      }
+    },
+    "retrieval": {
+      "hit_rate_at_8": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "mrr": {
+        "score": 0.7756,
+        "min": 0.73
+      }
+    },
+    "graph": {
+      "relation_recall": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "subsystem_agreement": {
+        "score": 1.0,
+        "min": 0.95
+      }
+    },
+    "injection": {
+      "scanner_recall": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "scanner_false_positive_rate": {
+        "score": 0.1667,
+        "max": 0.22
+      },
+      "fence_integrity": {
+        "score": 1.0,
+        "min": 0.95
+      },
+      "chat_prompt_safety": {
+        "score": 1.0,
+        "min": 0.95
+      }
+    }
+  }
+}

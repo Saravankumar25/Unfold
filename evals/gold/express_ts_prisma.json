@@ -1,0 +1,42 @@
+{
+  "repo": "express_ts_prisma",
+  "retrieval": [
+    {"q": "How is the JWT verified for protected routes?", "expect": ["src/middleware/auth.ts"]},
+    {"q": "Where are published blog posts listed with pagination?", "expect": ["src/services/postService.ts"]},
+    {"q": "Which database models exist in the Prisma schema?", "expect": ["prisma/schema.prisma"]},
+    {"q": "Which route adds a comment to a post?", "expect": ["src/routes/posts.ts"]},
+    {"q": "How does login issue a token?", "expect": ["src/services/authService.ts", "src/routes/auth.ts"]},
+    {"q": "How are errors turned into HTTP responses?", "expect": ["src/middleware/errorHandler.ts"]},
+    {"q": "How does the web frontend call the API?", "expect": ["web/src/api/client.ts", "web/src/hooks/usePosts.ts"]},
+    {"q": "How is the application configured from environment variables?", "expect": ["src/config.ts"]}
+  ],
+  "claims": [
+    {"text": "`requireAuth` verifies a Bearer token with `jwt.verify`", "kind": "project_fact", "cite": ["src/middleware/auth.ts"], "expect": "VERIFIED"},
+    {"text": "`requireRole` answers 403 when the user role differs", "kind": "project_fact", "cite": ["src/middleware/auth.ts"], "expect": "VERIFIED"},
+    {"text": "`listPublished` pages through posts using `PAGE_SIZE`", "kind": "project_fact", "cite": ["src/services/postService.ts"], "expect": "VERIFIED"},
+    {"text": "`createPost` calls `prisma.post.create`", "kind": "project_fact", "cite": ["src/services/postService.ts"], "expect": "VERIFIED"},
+    {"text": "`refreshToken` rotates refresh tokens stored in `tokenStore`", "kind": "project_fact", "cite": ["src/middleware/auth.ts"], "expect": "INFERRED", "hallucinated": true},
+    {"text": "`listPublished` pages through posts", "kind": "project_fact", "cite": ["src/middleware/auth.ts"], "expect": "INFERRED", "hallucinated": true},
+    {"text": "`getPost` includes comments and the author", "kind": "project_fact", "cite": [], "expect": "UNSUPPORTED"},
+    {"text": "Authorization is enforced per route rather than globally", "kind": "inference", "cite": ["src/routes/posts.ts"], "expect": "STRONGLY_INFERRED"}
+  ],
+  "chat": [
+    "How is the JWT verified?",
+    "Where are posts listed?",
+    "Which database models exist?"
+  ],
+  "relations": [
+    {"type": "HANDLES", "source": "loginHandler", "target": "POST /login"},
+    {"type": "HANDLES", "source": "createPost", "target": "POST /"},
+    {"type": "READS_FROM", "source": "listPublished", "target": "Post"},
+    {"type": "WRITES_TO", "source": "addComment", "target": "Comment"},
+    {"type": "WRITES_TO", "source": "register", "target": "User"}
+  ],
+  "subsystems": {
+    "together": [
+      ["src/services/postService.ts", "src/services/userService.ts"],
+      ["web/src/App.tsx", "web/src/components/PostList.tsx"]
+    ],
+    "apart": [["web/src/App.tsx", "src/services/authService.ts"]]
+  }
+}
