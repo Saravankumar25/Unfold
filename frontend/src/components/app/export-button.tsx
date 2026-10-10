@@ -30,6 +30,7 @@ export function ExportButton({
   size?: ButtonProps["size"];
 }) {
   const exp = useExport(start, filename);
+  const kind = filename.endsWith(".md") ? "Markdown" : "PDF";
   const { toast } = useToast();
   const lastPhase = useRef(exp.phase);
 
@@ -40,18 +41,18 @@ export function ExportButton({
       const reqId = isApiError(exp.error) && exp.error.requestId ? `Request ${exp.error.requestId}` : undefined;
       toast({ title: errorMessage(exp.error), description: reqId, tone: "error", durationMs: 9000 });
     } else if (exp.phase === "ready") {
-      toast({ title: "Your export is ready", description: "The download should start automatically.", tone: "success" });
+      toast({ title: `Your ${kind} export is ready`, description: "The download should start automatically.", tone: "success" });
     }
-  }, [exp.phase, exp.error, toast]);
+  }, [exp.phase, exp.error, toast, kind]);
 
   const busy = exp.phase === "starting" || exp.phase === "pending";
   const status =
     exp.phase === "starting"
       ? "Requesting export…"
       : exp.phase === "pending"
-        ? "Preparing export…"
+        ? `Preparing ${kind} export…`
         : exp.phase === "ready"
-          ? "Export ready"
+          ? `${kind} export ready`
           : exp.phase === "failed"
             ? "Export failed"
             : "";

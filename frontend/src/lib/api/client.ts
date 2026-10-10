@@ -136,7 +136,7 @@ export class ApiClient {
   }
 
   /**
-   * Perform a request and return the raw OK `Response` (used by SSE readers).
+   * Perform a request and return the raw OK `Response` (`request` parses it).
    * Non-OK responses are converted to `ApiError`, with one session-bootstrap retry.
    */
   async send(method: string, path: string, options: RequestOptions = {}): Promise<Response> {

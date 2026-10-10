@@ -42,6 +42,7 @@ export function useProjectProgress(projectId: string, job: JobOut | null): Progr
     const tick = async () => {
       try {
         const page = await api.getProgress(projectId, cursor, controller.signal);
+        if (controller.signal.aborted) return;
         clearTimeout(waking);
         failures = 0;
         cursor = page.cursor;
@@ -55,6 +56,7 @@ export function useProjectProgress(projectId: string, job: JobOut | null): Progr
         }
       } catch {
         if (controller.signal.aborted) return;
+        clearTimeout(waking); // an answer that is an error is not "still waking up"
         failures += 1;
         dispatch({ type: "connection", connection: failures >= 5 ? "lost" : "reconnecting" });
       }

@@ -6,8 +6,7 @@ import type { NextConfig } from "next";
  * (HttpOnly, set by the API) is first-party (HLD §2, D9).
  *
  * Why a Route Handler and not `rewrites()`:
- * - measured: the rewrite proxy gzip-buffers `text/event-stream` (no SSE bytes reached the client for 24 s,
- *   while the API emitted an event at +0.2 s and a heartbeat at +10 s);
+ * - the rewrite proxy buffers streamed bodies (measured with SSE before the SSE routes were removed);
  * - rewrites are resolved at `next build`, so `output: "standalone"` would bake the API origin into the image;
  *   the handler reads `API_INTERNAL_URL` at runtime (docker: `http://api:8000`);
  * - an `afterFiles` rewrite would shadow the dynamic `[...path]` handler, so there is deliberately no rewrite.

@@ -7,17 +7,15 @@ import { CodeView } from "./code-view";
 import { InlineText, type CiteHandler } from "./inline-text";
 import { MermaidView } from "./mermaid-view";
 
-/** Chat answers: markdown-lite AST → React (no raw HTML). Tolerates partial input while streaming. */
+/** Chat answers: markdown-lite AST → React (no raw HTML). */
 export function MarkdownView({
   text,
   resolve,
   onCite,
-  streaming = false,
 }: {
   text: string;
   resolve?: CitationResolver;
   onCite?: CiteHandler;
-  streaming?: boolean;
 }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
   return (
@@ -59,14 +57,10 @@ export function MarkdownView({
           case "code":
             return <CodeView key={i} code={b.code} language={b.language} className="my-2.5 mb-2.5" />;
           case "mermaid":
-            return b.closed || !streaming ? (
+            return (
               <div key={i} className="my-2.5 rounded-m border border-line bg-panel p-3">
                 <MermaidView source={b.code} label="Diagram from the answer" />
               </div>
-            ) : (
-              <pre key={i} className="my-2.5 overflow-x-auto rounded-s bg-paper-dim p-3 font-mono text-[12px] text-ink-faint">
-                <code>{b.code}</code>
-              </pre>
             );
           case "rule":
             return <hr key={i} className="my-3 border-0 border-t border-line" />;

@@ -140,3 +140,24 @@ describe("useProjectProgress", () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("waking vs failing", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps showing reconnecting, not waking, when the first poll fails fast", async () => {
+    vi.spyOn(api, "getProgress").mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useProjectProgress("p1", job()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.connection).toBe("reconnecting");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WAKING_MS + 1);
+    });
+    expect(result.current.connection).not.toBe("waking");
+  });
+});

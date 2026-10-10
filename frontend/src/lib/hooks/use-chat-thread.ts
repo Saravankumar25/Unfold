@@ -7,6 +7,9 @@ import { errorMessage } from "@/lib/api/errors";
 import type { ChatMode } from "@/lib/api/types";
 import { assistantKey, chatReducer, initialChatState, type ChatState } from "@/lib/chat-state";
 
+/** An answer that has not arrived after this long is reported as failed (the server keeps its own limits). */
+export const ANSWER_TIMEOUT_MS = 150_000;
+
 let keyCounter = 0;
 function nextKey(): string {
   keyCounter += 1;
@@ -54,7 +57,8 @@ export function useChatThread(
     const controller = new AbortController();
     api.getChat(chatId, controller.signal).then(
       (detail) => {
-        if (controller.signal.aborted) return;
+        // A turn in flight owns the list: loading over it would drop the question and its answer.
+        if (controller.signal.aborted || abortRef.current) return;
         dispatch({ type: "load", messages: detail.messages });
         setHistory({ key, error: null });
       },
@@ -73,6 +77,7 @@ export function useChatThread(
 
   const selectChat = useCallback((id: string | null) => {
     abortRef.current?.abort();
+    abortRef.current = null; // a turn of the chat we are leaving must not block the next send
     dispatch({ type: "reset" });
     setHistoryNonce((n) => n + 1); // force a fresh history load even for a previously loaded id
     setChatId(id);
@@ -81,16 +86,22 @@ export function useChatThread(
   const send = useCallback(
     async (text: string, mode: ChatMode, sectionKey: string | null = null) => {
       const trimmed = text.trim();
-      if (!trimmed || abortRef.current) return;
+      if (!trimmed || abortRef.current || loadingHistory) return;
       const key = nextKey();
       const aKey = assistantKey(key);
       const controller = new AbortController();
       abortRef.current = controller;
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, ANSWER_TIMEOUT_MS);
       dispatch({ type: "send", key, text: trimmed, mode });
       try {
         let id = chatId;
         if (!id) {
           const created = await api.createChat(projectId);
+          if (controller.signal.aborted) return; // the user moved to another chat meanwhile
           id = created.id;
           setHistory({ key: `${id}#${historyNonce}`, error: null }); // nothing to load: the reply fills it
           setChatId(id);
@@ -99,7 +110,15 @@ export function useChatThread(
         const reply = await api.postMessage(id, { text: trimmed, mode, section_key: sectionKey }, controller.signal);
         if (!controller.signal.aborted) dispatch({ type: "reply", key: aKey, reply });
       } catch (error) {
-        if (!controller.signal.aborted) {
+        if (timedOut) {
+          dispatch({
+            type: "fail",
+            key: aKey,
+            code: "ANSWER_TIMEOUT",
+            message: "The answer is taking too long. Try again in a moment.",
+            retryable: true,
+          });
+        } else if (!controller.signal.aborted) {
           dispatch({
             type: "fail",
             key: aKey,
@@ -110,10 +129,11 @@ export function useChatThread(
           });
         }
       } finally {
+        clearTimeout(timer);
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [chatId, projectId, historyNonce],
+    [chatId, projectId, historyNonce, loadingHistory],
   );
 
   return {
