@@ -35,7 +35,6 @@ from unfold.graph.communities import detect as detect_subsystems
 from unfold.graph.communities import entity_subsystems
 from unfold.guide.critique import critique_section
 from unfold.guide.generate import claim_quality, grade_claims, project_facts, unstated_claims
-from unfold.guide.input_hash import chapter_input_hash, evidence_ids
 from unfold.guide.models import (
     PLANNER_VERSION,
     Block,
@@ -492,61 +491,31 @@ class _Run:
         )
         if degraded:
             await self.reporter.degraded("guide_plan")
-        existing = await self._section_rows()
-        kept = {
-            spec.key
-            for spec in plan.sections
-            if (row := existing.get(spec.key)) is not None and await self._is_current(spec, row, p)
-        }
         async with self.rt.db.transaction() as s:
-            # only stale chapters go: a row whose plan entry and evidence are unchanged keeps its finished work
-            stale = [r.id for k, r in existing.items() if k not in kept]
-            if stale:
-                await s.execute(delete(GuideSectionRow).where(GuideSectionRow.id.in_(stale)))
+            # Rows left by a crashed earlier attempt of this stage go: a project has one analysis job, so there
+            # is no finished chapter to reuse (chapter-level reuse by input hash is not built, ADR 0017).
+            await s.execute(delete(GuideSectionRow).where(GuideSectionRow.project_id == p.id))
             await s.merge(
                 GuidePlanRow(
                     project_id=p.id, plan=plan.model_dump(mode="json"), planner_version=PLANNER_VERSION
                 )
             )
             for i, sec in enumerate(plan.sections):
-                if sec.key in kept:
-                    row = await self._locked_row(s, sec.key)
-                    row.position, row.title = i, sec.title
-                else:
-                    s.add(
-                        GuideSectionRow(
-                            project_id=p.id,
-                            section_key=sec.key,
-                            title=sec.title,
-                            position=i,
-                            status=SectionStatus.PENDING.value,
-                            claims=[],
-                        )
+                s.add(
+                    GuideSectionRow(
+                        project_id=p.id,
+                        section_key=sec.key,
+                        title=sec.title,
+                        position=i,
+                        status=SectionStatus.PENDING.value,
+                        claims=[],
                     )
+                )
         return {
             "sections": len(plan.sections),
-            "reused": len(kept),
             "project_kind": arch.project_kind,
             "degraded": degraded,
         }
-
-    async def _input_hash(self, spec: ChapterPlan, brief: ResearchBrief, project: ProjectRow) -> str:
-        found = await self.chunks.get_many(self.pid, evidence_ids(brief))
-        return chapter_input_hash(
-            spec,
-            brief,
-            {c.id: c.content_hash for c in found},
-            technical_level=project.technical_level,
-            instruction=project.user_instruction,
-            revision_rounds=self.rt.settings.revision_max_rounds,
-        )
-
-    async def _is_current(self, spec: ChapterPlan, row: GuideSectionRow, project: ProjectRow) -> bool:
-        """A finished, verified chapter whose recomputed input hash equals the stored one needs no work."""
-        if not (row.research and row.content and row.verification and row.input_hash):
-            return False
-        brief = ResearchBrief.model_validate(row.research)
-        return await self._input_hash(spec, brief, project) == row.input_hash
 
     async def _stored_plan(self) -> GuidePlan:
         async with self.rt.db.session() as s:
@@ -799,7 +768,7 @@ class _Run:
         )
 
     async def _persist_chapter(
-        self, key: str, brief: ResearchBrief, draft: WrittenSection, done: _Verified, input_hash: str
+        self, key: str, brief: ResearchBrief, draft: WrittenSection, done: _Verified
     ) -> None:
         async with self.rt.db.transaction() as s:
             row = await self._locked_row(s, key)
@@ -809,7 +778,6 @@ class _Run:
             row.evidence_summary = done.evidence
             row.quality_scores = done.quality
             row.verification = done.verification.model_dump(mode="json")
-            row.input_hash = input_hash
             row.status = done.status.value
             row.version += 1
 
@@ -874,7 +842,6 @@ class _Run:
         GENERATING); `_verify` grades, revises and finishes it."""
         await self.reporter.stage(JobStage.GENERATING_GUIDE)
         plan = await self._stored_plan()
-        p = await self._project()
         facts = await self._facts()
         gate = asyncio.Semaphore(max(1, self.rt.settings.section_concurrency))
         rows = await self._section_rows()
@@ -902,13 +869,11 @@ class _Run:
                     failed_row.status = SectionStatus.FAILED.value
                     failed_row.quality_scores = {"reason": exc.message}
                 return
-            digest = await self._input_hash(spec, brief, p)
             async with self.rt.db.transaction() as s:
                 row = await self._locked_row(s, spec.key)
                 row.content = draft.content.model_dump(mode="json")
                 row.claims = [c.model_dump(mode="json") for c in draft.claims]
                 row.evidence_summary = draft.evidence
-                row.input_hash = digest
                 row.status = (
                     SectionStatus.GENERATING.value
                 )  # `_verify` grades and revises it, then it is ready
@@ -991,7 +956,6 @@ class _Run:
         if spec is None:
             raise UnfoldError("That chapter is not in the guide.", code=ErrorCode.NOT_FOUND, retryable=False)
         rows = await self._section_rows()
-        p = await self._project()
         facts = await self._facts()
         summaries = {
             k: SectionContent.model_validate(r.content).summary for k, r in rows.items() if r.content
@@ -1006,7 +970,7 @@ class _Run:
             (titles[k], summaries.get(k, s.objective)) for s in plan.sections if (k := s.key) != spec.key
         ]
         done = await self._verify_one(spec, draft.content, draft.claims, draft.evidence, brief, facts, others)
-        await self._persist_chapter(spec.key, brief, draft, done, await self._input_hash(spec, brief, p))
+        await self._persist_chapter(spec.key, brief, draft, done)
         return {
             "regenerated": spec.key,
             "rounds": done.verification.rounds,

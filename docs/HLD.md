@@ -114,8 +114,7 @@ judgment is needed:
    that made it; no unsupported statement is left standing as fact (`degraded` section status records that gaps were
    stated).
 
-Each chapter stores an `input_hash` over its plan entry, the content hashes of its evidence, the prompt versions and
-the reader level; equal hash means the stored chapter is what a rerun would produce.
+A chapter is not reused across analyses: Chapter-level reuse by input hash is not built: a project has exactly one analysis job (created with the project, resumed by checkpoint on retry or sweep) and a regeneration always redoes its chapter, so no second job ever finds finished chapters to compare. `guide_sections.input_hash` stays as an unwritten nullable column (additive, already migrated); a re-analysis feature would need to write and read it.
 
 ### Regenerate one chapter (ADR 0017)
 `POST /projects/{id}/sections/{key}/regenerate` -> an `analysis_jobs` row of kind `regenerate` + `enqueue_analysis` ->
@@ -155,7 +154,7 @@ every marked project, expires sessions, projects and exports, restarts stale job
 | D12 | **Deletion is a durable marker + idempotent sweeper**, never TTL alone (ADR 0006). | Restart-safe cleanup. |
 | D13 | **Investigate before writing** (ADR 0017): deterministic architecture model and flow traces, an adaptive chapter plan, a bounded per-chapter research loop that produces a brief with proof labels; the writer sees the brief, not a chunk dump. No agent framework, no new store. | One retrieval per section bounded quality; the map already existed in the IR and graph. |
 | D14 | **Deterministic verification first, one critique, bounded repair**: location, excerpt and edge checks cost nothing; the critique may only name blocks; at most two rewrites of failing blocks; leftovers are qualified or removed with their claims. | A model never grades or silently fixes itself; unsupported statements are never left as fact. |
-| D15 | **Per-chapter `input_hash` and single-chapter regeneration** as a typed job on the existing queue port. | Equal inputs are reused; a reader can redo one chapter without paying for the guide. |
+| D15 | **Single-chapter regeneration** as a typed job on the existing queue port. Per-chapter input-hash reuse was designed and not built (nothing can reach it: one analysis job per project). | A reader can redo one chapter without paying for the guide. |
 
 ## 6. Quality attributes -> mechanisms
 

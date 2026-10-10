@@ -1,4 +1,4 @@
-"""Verify, revise, input hash and single-chapter regeneration against the real stores.
+"""Verify, revise and single-chapter regeneration against the real stores.
 
 The only double is the model (`ScriptedLLM`, here writing a chapter with one uncited, unsupported sentence so that
 every chapter has something to repair). Parsing, indexing, retrieval, verification, persistence and the API are real.
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -99,7 +98,6 @@ def _frozen(row: GuideSectionRow) -> dict[str, Any]:
             "quality_scores",
             "research",
             "verification",
-            "input_hash",
             "status",
             "version",
             "position",
@@ -156,7 +154,6 @@ async def test_every_chapter_is_verified_revised_and_no_unsupported_statement_is
         # the only block was rewritten: no claim made about the prose it replaced may stay behind (and so
         # inflate groundedness) although that sentence was verified when it stood
         assert [c["text"] for c in row.claims if "is part of the project" in c["text"]] == []
-        assert row.input_hash and len(row.input_hash) == 64
         # the critique ran once, before the repair; a revised chapter keeps what it said
         assert row.quality_scores["semantic"] and row.verification["result"]["semantic"]
     stages = await _stages(runtime, seeded.project_id)
@@ -280,7 +277,7 @@ async def test_regenerate_route_is_owner_scoped_idempotent_and_rate_limited(
         }
         assert after[key].version == rows[key].version + 1
         assert after[key].verification and after[key].verification["result"]["verdict"] == "accept"
-        assert after[key].research and after[key].input_hash == rows[key].input_hash  # same inputs, same hash
+        assert after[key].research
         done = (await client.get(f"{base}/progress?after=999999999")).json()
         assert done["regeneration"]["status"] == "succeeded" and done["job"]["status"] == "succeeded"
 
@@ -341,79 +338,3 @@ async def test_a_failed_regeneration_leaves_the_chapter_and_the_project_intact(
         assert (await client.get(f"{API}/projects/{seeded.project_id}")).json()["job"][
             "status"
         ] == "succeeded"
-
-
-# ---- input hash -------------------------------------------------------------------------------------------------
-
-
-async def test_a_rerun_with_unchanged_inputs_skips_research_writing_and_verification(
-    runtime: Runtime, gappy: tuple[Any, GappyLLM]
-) -> None:
-    seeded, _ = gappy
-    rows = await _rows(runtime, seeded.project_id)
-    before = {k: _frozen(r) for k, r in rows.items()}
-    async with runtime.db.transaction() as s:  # a second analysis job of the same project
-        job = AnalysisJobRow(
-            project_id=uuid.UUID(seeded.project_id),
-            status="queued",
-            current_stage="RECEIVED",
-            stage_progress={},
-            attempt=0,
-            created_at=datetime.now(UTC),
-        )
-        s.add(job)
-        await s.flush()
-        job_id = str(job.id)
-    llm = GappyLLM()
-    assert (await run_analysis(runtime, llm, job_id)).succeeded
-    for purpose in ("guide.research", "guide.section", "guide.critique", "guide.revise"):
-        assert purpose not in llm.calls, purpose
-    assert llm.calls.count("guide.plan") == 1  # the plan itself is cheap and decides what is stale
-    assert {k: _frozen(r) for k, r in (await _rows(runtime, seeded.project_id)).items()} == before
-
-
-async def test_only_stale_chapters_are_deleted_and_redone(
-    runtime: Runtime, gappy: tuple[Any, GappyLLM]
-) -> None:
-    seeded, _ = gappy
-    rows = await _rows(runtime, seeded.project_id)
-    key = list(rows)[2]
-    async with runtime.db.transaction() as s:
-        (
-            await s.execute(
-                select(GuideSectionRow).where(
-                    GuideSectionRow.project_id == uuid.UUID(seeded.project_id),
-                    GuideSectionRow.section_key == key,
-                )
-            )
-        ).scalar_one().input_hash = "not-the-current-hash"
-        s.add(  # a chapter the new plan does not have
-            GuideSectionRow(
-                project_id=uuid.UUID(seeded.project_id),
-                section_key="ghost",
-                title="Ghost",
-                position=99,
-                status="ready",
-                claims=[],
-                content={"summary": "old", "blocks": []},
-            )
-        )
-        job = AnalysisJobRow(
-            project_id=uuid.UUID(seeded.project_id),
-            status="queued",
-            current_stage="RECEIVED",
-            stage_progress={},
-            attempt=0,
-            created_at=datetime.now(UTC),
-        )
-        s.add(job)
-        await s.flush()
-        job_id = str(job.id)
-    before = {k: _frozen(r) for k, r in rows.items() if k != key}
-    llm = GappyLLM()
-    assert (await run_analysis(runtime, llm, job_id)).succeeded
-    assert llm.calls.count("guide.section") == 1 and llm.calls.count("guide.critique") == 1
-    after = await _rows(runtime, seeded.project_id)
-    assert "ghost" not in after and set(after) == set(rows)
-    assert {k: _frozen(r) for k, r in after.items() if k != key} == before
-    assert after[key].verification is not None and after[key].input_hash != "not-the-current-hash"
