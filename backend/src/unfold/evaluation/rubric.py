@@ -27,23 +27,23 @@ from unfold.guide.models import (
     BulletsBlock,
     CalloutBlock,
     CodeBlock,
-    GlossaryBlock,
     GuideSection,
     HeadingBlock,
-    ParagraphBlock,
-    QABlock,
-    TableBlock,
+)
+from unfold.guide.verify import (
+    LABEL,
+    block_texts,
+    code_end_line,
+    in_bounds,
+    norm,
+    path_line_mentions,
+    quoted_lines_present,
 )
 from unfold.project_ir.schema import ProjectIR
 
 MAX_SCORE = 4.0
 SHINGLE = 5  # words per n-gram for the redundancy check
-_CODE_EXT = frozenset(
-    {"py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "rb", "php", "cs", "c", "cc", "cpp", "h", "hpp"}
-    | {"tf", "yml", "yaml", "json", "toml", "md", "sql", "sh", "kt", "swift"}
-)
-_LABEL = re.compile(r"\[(E\d+)\]")
-_PATHLINE = re.compile(r"(?<![\w/.-])([\w./-]+\.(\w{1,6})):(\d+)(?:-(\d+))?")
+_LABEL = LABEL  # shared with the verifier: both agree on what a citation is
 _SEQUENCE = re.compile(r"\b(first|then|next|after|before|finally|once|step|subsequently)\b", re.I)
 _ERRORS = re.compile(
     r"\b(errors?|exceptions?|raises?|fails?|failures?|timeouts?|retry|retries|invalid|fallbacks?|degrad\w+)\b",
@@ -135,20 +135,7 @@ def _units(sec: GuideSection) -> Iterator[str]:
         return
     yield sec.content.summary
     for b in sec.content.blocks:
-        if isinstance(b, HeadingBlock | ParagraphBlock | CalloutBlock):
-            yield b.text
-        elif isinstance(b, BulletsBlock):
-            yield from b.items
-        elif isinstance(b, TableBlock):
-            yield from b.headers
-            for row in b.rows:
-                yield from row
-        elif isinstance(b, QABlock):
-            yield b.question
-            yield b.answer
-        elif isinstance(b, GlossaryBlock):
-            for g in b.items:
-                yield f"{g.term}: {g.definition}"
+        yield from block_texts(b)
 
 
 def _codes(sec: GuideSection) -> list[CodeBlock]:
@@ -256,12 +243,8 @@ def groundedness(sections: Sequence[GuideSection]) -> Score:
     return _score(verified / len(facts) if facts else 0.0, raw)
 
 
-def _norm(s: str) -> str:
-    return " ".join(s.split())
-
-
 def _line_ok(start: int | None, end: int | None, path: str, files: Mapping[str, int]) -> bool:
-    return path in files and start is not None and end is not None and 1 <= start <= end <= files[path]
+    return in_bounds(start, end, files.get(path))
 
 
 def citation_accuracy(
@@ -291,10 +274,8 @@ def citation_accuracy(
             line_ok += ln
             passed += p and ln
         for u in _units(s):
-            for path, ext, a, b in _PATHLINE.findall(u):
-                if path not in ir.files and not ("/" in path and ext in _CODE_EXT):
-                    continue
-                key = (path, int(a), int(b or a))
+            for key in path_line_mentions(u, ir.files):
+                path = key[0]
                 if key in seen:
                     continue
                 seen.add(key)
@@ -310,19 +291,18 @@ def citation_accuracy(
             total += 1
             excerpts += 1
             p = cb.path in ir.files
-            n = cb.code.count("\n") + 1
             ln = p and (
-                cb.start_line is None or _line_ok(cb.start_line, cb.start_line + n - 1, cb.path, ir.files)
+                cb.start_line is None
+                or _line_ok(cb.start_line, code_end_line(cb.code, cb.start_line), cb.path, ir.files)
             )
             # Every quoted line must exist in the cited file's chunks; dropped lines (elision) are allowed.
             have = {
-                _norm(ln_)
+                norm(ln_)
                 for c in chunks.values()
                 if c.get("path") == cb.path
                 for ln_ in str(c.get("text", "")).splitlines()
             }
-            quoted = [_norm(x) for x in cb.code.splitlines() if x.strip()]
-            ex = bool(p and quoted and all(q in have for q in quoted))
+            ex = p and quoted_lines_present(cb.code, have)
             path_ok += p
             line_ok += ln
             excerpt_ok += ex

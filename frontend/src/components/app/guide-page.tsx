@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { EvidenceProvider, useEvidence } from "@/components/content/evidence-drawer";
 import { CodeView } from "@/components/content/code-view";
-import { InlineText } from "@/components/content/inline-text";
+import { EvidenceAppendix } from "@/components/content/evidence-appendix";
+import { Statement } from "@/components/content/inline-text";
 import { DiagramView } from "@/components/diagram/diagram-view";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/endpoints";
 import type { Block, GuideSectionOut, SectionContent } from "@/lib/api/types";
-import { mapResolver } from "@/lib/citations";
+import { appendixItems, citationSource, isUnconfirmed, mapResolver } from "@/lib/citations";
 import { useResource } from "@/lib/hooks/use-resource";
 import { cn, titleCase } from "@/lib/utils";
 import { ErrorPanel } from "./error-panel";
@@ -19,23 +20,28 @@ import { ProjectReadyGate, useProject } from "./project-provider";
 import { ProjectTopbar } from "./project-topbar";
 import { LoadingLines } from "./skeleton";
 
+const UNCONFIRMED = "border-l-2 border-dashed border-signal pl-3";
+
 function SectionBlocks({ projectId, section, content }: { projectId: string; section: GuideSectionOut; content: SectionContent }) {
   const { openEvidence } = useEvidence();
+  const { project } = useProject();
+  const source = citationSource(project);
   const resolve = mapResolver(section.evidence);
   const cite = (label: string, ref: Parameters<typeof openEvidence>[0][number]["ref"]) => openEvidence([{ label, ref }]);
-  return <div className="prose-guide">{content.blocks.map((block: Block, i) => {
+  const appendix = <EvidenceAppendix items={appendixItems(content, section.evidence)} source={source} onOpen={(it) => openEvidence([it])} />;
+  return <><div className="prose-guide">{content.blocks.map((block: Block, i) => {
     switch (block.type) {
       case "heading": return block.level === 2 ? <h2 key={i} className="mb-4 mt-9 font-serif text-[28px] font-medium">{block.text}</h2> : <h3 key={i} className="mb-3 mt-7 font-serif text-[21px] font-medium">{block.text}</h3>;
-      case "paragraph": return <p key={i}><InlineText text={block.text} resolve={resolve} onCite={cite} /></p>;
-      case "bullets": { const items = block.items.map((x, j) => <li key={j}><InlineText text={x} resolve={resolve} onCite={cite} /></li>); return block.ordered ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>; }
-      case "callout": return <aside key={i} className={cn("my-6 border-l-2 bg-paper-dim px-5 py-4 text-[14px] leading-relaxed", block.tone === "warning" ? "border-signal" : "border-blueprint")}><p className="mb-1 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">{block.tone}</p><InlineText text={block.text} resolve={resolve} onCite={cite} /></aside>;
+      case "paragraph": return <p key={i} className={isUnconfirmed(block.text) ? UNCONFIRMED : undefined}><Statement source={source} text={block.text} resolve={resolve} onCite={cite} /></p>;
+      case "bullets": { const items = block.items.map((x, j) => <li key={j} className={isUnconfirmed(x) ? UNCONFIRMED : undefined}><Statement source={source} text={x} resolve={resolve} onCite={cite} /></li>); return block.ordered ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>; }
+      case "callout": return <aside key={i} className={cn("my-6 border-l-2 bg-paper-dim px-5 py-4 text-[14px] leading-relaxed", block.tone === "warning" ? "border-signal" : "border-blueprint", isUnconfirmed(block.text) && "border-dashed border-signal")}><p className="mb-1 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">{block.tone}</p><Statement source={source} text={block.text} resolve={resolve} onCite={cite} /></aside>;
       case "code": return <CodeView key={i} code={block.code} language={block.language} path={block.path ?? undefined} startLine={block.start_line ?? undefined} caption={block.caption ?? undefined} lineNumbers />;
       case "diagram": return <DiagramView key={i} projectId={projectId} diagramId={block.diagram_id} caption={block.caption} />;
-      case "table": return <div key={i} className="my-6 overflow-x-auto"><table className="w-full border-collapse text-left text-[13px]"><thead><tr>{block.headers.map((h) => <th key={h} className="border-b border-line-strong bg-paper-dim px-3 py-2 font-semibold">{h}</th>)}</tr></thead><tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c} className="border-b border-line px-3 py-2.5 align-top text-ink-soft"><InlineText text={cell} resolve={resolve} onCite={cite} /></td>)}</tr>)}</tbody></table></div>;
-      case "qa": return <details key={i} className="my-3 rounded-s border border-line bg-panel px-4 py-3"><summary className="cursor-pointer font-semibold">{block.question}</summary><p className="mb-0 mt-3 text-ink-soft"><InlineText text={block.answer} resolve={resolve} onCite={cite} /></p></details>;
+      case "table": return <div key={i} className="my-6 overflow-x-auto"><table className="w-full border-collapse text-left text-[13px]"><thead><tr>{block.headers.map((h) => <th key={h} className="border-b border-line-strong bg-paper-dim px-3 py-2 font-semibold">{h}</th>)}</tr></thead><tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c} className="border-b border-line px-3 py-2.5 align-top text-ink-soft"><Statement source={source} text={cell} resolve={resolve} onCite={cite} /></td>)}</tr>)}</tbody></table></div>;
+      case "qa": return <details key={i} className="my-3 rounded-s border border-line bg-panel px-4 py-3"><summary className="cursor-pointer font-semibold">{block.question}</summary><p className="mb-0 mt-3 text-ink-soft"><Statement source={source} text={block.answer} resolve={resolve} onCite={cite} /></p></details>;
       case "glossary": return <dl key={i} className="grid gap-3 sm:grid-cols-2">{block.items.map((item) => <div key={item.term} className="border-l border-line-strong pl-3"><dt className="font-semibold">{item.term}</dt><dd className="m-0 mt-1 text-[13px] leading-relaxed text-ink-soft">{item.definition}</dd></div>)}</dl>;
     }
-  })}</div>;
+  })}</div>{appendix}</>;
 }
 
 function GuideWorkspace() {
