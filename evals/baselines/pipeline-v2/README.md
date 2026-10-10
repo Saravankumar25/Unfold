@@ -36,6 +36,15 @@ Gate (`docs/design/investigation-engine.md` section 7): no dimension more than 0
 on fastapi_rag, -0.25); citation resolve rate 1.0 on both (>= 0.98); unsupported 0, uncited 0, unverified project
 facts left 0 on both. The replicate holds as well (`replicate/scores.json`).
 
+How to read the numbers (none of this changes a recorded value):
+
+- `uncertainty_honesty` and "unverified project facts left 0" test the pipeline's own qualify-or-remove step, not an
+  independent measure: that step removes or qualifies every unsupported fact by construction, so 4.0 and 0 show it ran.
+- `citation_accuracy` shares its primitives with the verifier (`guide.verify`), so it agrees with it by design and is
+  not a second opinion.
+- The scorer leaves any sentence containing `unknown`, `unclear`, `does not show/specify/state/describe` (the
+  `_GAPS` phrases) out of specificity and redundancy, whatever else the sentence says.
+
 Readability and judged depth/specificity are human fields: `review-sheet.json` in each directory is generated and
 still unfilled. Do not read those dimensions off this table.
 

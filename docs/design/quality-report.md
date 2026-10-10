@@ -117,6 +117,19 @@ Risk to name: leaving gap sentences out of the specificity denominator could in 
 a guide with gap sentences in place of generic ones. The regex only matches statements about evidence, and gaps
 remain visible in `gaps_stated` and in the guide text, but a human reviewer should still read for padding.
 
+What these dimensions are, plainly (none of it changes a recorded number):
+
+- **`uncertainty_honesty` and "unverified facts left = 0" test the pipeline's own enforcement, not an independent
+  measure.** The verify-and-repair stage qualifies or removes every unsupported project fact by construction, so a
+  score of 4.0 and a count of 0 follow from that step having run. They show that the step works; they are not
+  evidence that the guide states nothing false.
+- **`citation_accuracy` shares primitives with the verifier** (`guide.verify`: `path_exists`, `line_in_bounds`, the
+  excerpt check). A citation the verifier cannot resolve is also one the scorer cannot, so the 4.0 is agreement
+  between two views of one rule set and not a second opinion.
+- **The `_GAPS` exclusion is broad.** Any sentence containing "unknown", "unclear", "does not show/specify/state/
+  describe" and the other `_GAPS` phrases is left out of specificity and redundancy, including a sentence that says
+  it for another reason and also names something. That is the same padding risk seen from the other side.
+
 ## 6. Limitations
 
 - **Sample.** Two repositories (one is the project's own fixture), one model tier, one run each plus one
@@ -132,7 +145,7 @@ remain visible in `gaps_stated` and in the guide text, but a human reviewer shou
 - **Critique-triggered rewrites are not isolated** (section 3); after a rewrite the critique is not run again, so a
   rewritten block is judged only by the deterministic checks.
 - **No cross-revision reuse and call-graph proof levels** (`docs/HLD.md` section 7): not exercised by this
-  measurement. Regeneration and hash reuse are covered by integration tests, not by quality runs.
+  measurement. Regeneration is covered by integration tests, not by quality runs; hash reuse is not built (ADR 0017).
 - **Seconds** were measured with no control for machine load and include the model-runtime change `60652ed`;
   v1's seconds were taken before it.
 - **Not measured:** cost in money, the public GitHub rendering of citations in a browser, PDF/Markdown export of
