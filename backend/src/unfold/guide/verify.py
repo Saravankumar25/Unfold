@@ -56,6 +56,7 @@ _CODE_EXT = frozenset(
     | {"tf", "yml", "yaml", "json", "toml", "md", "sql", "sh", "kt", "swift"}
 )
 _WORD = re.compile(r"[a-z][a-z0-9]{2,}")
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")  # getDb -> get Db, so it meets `get_db`
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _STOP = frozenset(
     {
@@ -200,8 +201,9 @@ def _stem(w: str) -> str:
 
 
 def words(text: str) -> set[str]:
-    """Content words of a text, stemmed, identifiers split at underscores; what claims and sentences are matched on."""
-    return {_stem(w) for w in _WORD.findall(text.lower().replace("_", " "))} - _STOP
+    """Content words of a text, stemmed, identifiers split at underscores and case changes; what claims and
+    sentences are matched on."""
+    return {_stem(w) for w in _WORD.findall(_CAMEL.sub(" ", text).lower().replace("_", " "))} - _STOP
 
 
 def best_unit(claim: str, units: Sequence[str]) -> tuple[int, float]:

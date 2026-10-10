@@ -41,3 +41,25 @@ def test_an_uncited_claim_that_names_something_the_chapter_lacks_is_dropped() ->
     uncited = _claim("`NonexistentWidgetFactory` builds widgets.", ClaimStatus.UNSUPPORTED, ids=[])
     assert unstated_claims([uncited], CHUNKS, PROSE) == [uncited]
     assert unstated_claims([uncited], CHUNKS, PROSE + " NonexistentWidgetFactory builds widgets.") == []
+
+
+def test_a_claim_naming_get_db_is_stated_by_prose_that_writes_getdb() -> None:
+    claim = _claim("`get_db` opens the session.", ClaimStatus.INFERRED)
+    assert unstated_claims([claim], CHUNKS, "The route calls getDb to open the session.") == []
+    camel = _claim("`getDb` opens the session.", ClaimStatus.INFERRED)
+    assert unstated_claims([camel], CHUNKS, "The route calls get_db to open the session.") == []
+
+
+def test_snake_and_camel_spellings_are_one_name_when_grading_and_placing() -> None:
+    from unfold.guide.generate import grade_claims
+    from unfold.guide.models import ParagraphBlock, SectionContent
+    from unfold.guide.verify import place_claims
+
+    chunks = {"c1": "def getDb():\n    return session\n"}
+    graded, _ = grade_claims([_claim("`get_db` returns the session.", ClaimStatus.PROPOSED)], chunks)
+    assert graded[0].status is ClaimStatus.VERIFIED
+    content = SectionContent(
+        summary="s",
+        blocks=[ParagraphBlock(text="Settings are loaded once."), ParagraphBlock(text="getDb returns the session.")],
+    )
+    assert place_claims(content, ["`get_db` returns the session."]) == {"`get_db` returns the session.": "b1"}

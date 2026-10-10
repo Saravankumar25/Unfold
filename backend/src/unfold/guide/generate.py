@@ -161,7 +161,10 @@ def _identifiers(text: str) -> set[str]:
 
 
 def _contains_word(haystack: str, needle: str) -> bool:
-    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(needle)}(?![A-Za-z0-9_])", haystack) is not None
+    """`needle` and `haystack` lowercase. Underscores are ignored on both sides so `get_db` and `getDb` are one
+    name (identifier spellings differ between the evidence and the prose)."""
+    word = re.escape(needle.replace("_", ""))
+    return re.search(rf"(?<![a-z0-9]){word}(?![a-z0-9])", haystack.replace("_", "")) is not None
 
 
 def grade_claims(
