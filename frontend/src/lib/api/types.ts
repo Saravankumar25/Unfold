@@ -32,6 +32,7 @@ export type JobStage =
   | "RESEARCHING_GUIDE"
   | "GENERATING_GUIDE"
   | "VERIFYING_GUIDE"
+  | "REVISING_GUIDE"
   | "GENERATING_VISUALS"
   | "FINALIZING"
   | "READY"
@@ -62,6 +63,7 @@ export const PIPELINE: readonly JobStage[] = [
   "RESEARCHING_GUIDE",
   "GENERATING_GUIDE",
   "VERIFYING_GUIDE",
+  "REVISING_GUIDE",
   "GENERATING_VISUALS",
   "FINALIZING",
   "READY",
@@ -294,6 +296,9 @@ export interface JobOut {
   error_message: string | null;
   retryable: boolean;
   degraded: string[];
+  /** `regenerate`: a single-chapter redo (`section_key`), never the analysis of the project. */
+  kind?: "analysis" | "regenerate";
+  section_key?: string | null;
   started_at: string | null;
   completed_at: string | null;
 }
@@ -337,6 +342,8 @@ export interface ProgressPage {
   events: ProgressItem[];
   cursor: number;
   job: JobOut;
+  /** The latest single-chapter regeneration of this project, if any. */
+  regeneration?: JobOut | null;
 }
 
 // guide
@@ -454,6 +461,11 @@ export interface ChatReplyOut {
 
 export interface ExportCreated {
   artifact_id: string;
+}
+
+export interface RegenerateCreated {
+  job_id: string;
+  section_key: string;
 }
 
 export interface ArtifactOut {

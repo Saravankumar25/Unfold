@@ -18,6 +18,7 @@ import { ErrorPanel } from "./error-panel";
 import { ExportButton } from "./export-button";
 import { ProjectReadyGate, useProject } from "./project-provider";
 import { ProjectTopbar } from "./project-topbar";
+import { RegenerateButton } from "./regenerate-button";
 import { LoadingLines } from "./skeleton";
 
 const UNCONFIRMED = "border-l-2 border-dashed border-signal pl-3";
@@ -65,7 +66,7 @@ function GuideWorkspace() {
             <p className="m-0 font-mono text-[11px] uppercase tracking-[.14em] text-signal">Chapter {currentIndex + 1} · {titleCase(section.data.kind)}</p>
             <h1 className="m-0 mt-3 font-serif text-[clamp(36px,6vw,58px)] font-[470] leading-[1.05]">{section.data.title}</h1>
             {section.data.content?.summary ? <p className="mb-0 mt-5 border-l-2 border-blueprint pl-4 text-[16px] leading-relaxed text-ink-soft">{section.data.content.summary}</p> : null}
-            <div className="mt-6 flex flex-wrap gap-2"><Link href={`/projects/${project!.id}/chat?section=${encodeURIComponent(section.data.key)}`} className="inline-flex items-center gap-1.5 rounded-full border border-signal px-3 py-1.5 text-[12.5px] font-medium text-signal no-underline hover:bg-signal-soft"><MessageSquareText size={13} />Ask about this</Link></div>
+            <div className="mt-6 flex flex-wrap gap-2"><Link href={`/projects/${project!.id}/chat?section=${encodeURIComponent(section.data.key)}`} className="inline-flex items-center gap-1.5 rounded-full border border-signal px-3 py-1.5 text-[12.5px] font-medium text-signal no-underline hover:bg-signal-soft"><MessageSquareText size={13} />Ask about this</Link><RegenerateButton projectId={project!.id} sectionKey={section.data.key} onDone={() => { section.reload(); guide.reload(); }} /></div>
             <div className="mt-9">{section.data.content ? <SectionBlocks projectId={project!.id} section={section.data} content={section.data.content} /> : <p className="text-ink-faint">{section.data.status === "failed" ? `This chapter could not be written${typeof section.data.quality.reason === "string" ? `: ${section.data.quality.reason}` : "."}` : "This chapter is still being assembled."}</p>}</div>
             <div className="mt-12 flex items-center justify-between border-t border-line pt-5"><Button variant="ghost" disabled={currentIndex <= 0} onClick={() => setSectionKey(sections[currentIndex - 1]!.key)}><ChevronLeft size={15} />Previous</Button><Button variant="ghost" disabled={currentIndex >= sections.length - 1} onClick={() => setSectionKey(sections[currentIndex + 1]!.key)}>Next<ChevronRight size={15} /></Button></div>
           </>}

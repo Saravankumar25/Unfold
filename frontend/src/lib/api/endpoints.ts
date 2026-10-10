@@ -17,6 +17,7 @@ import type {
   ProgressPage,
   ProjectCreated,
   ProjectOut,
+  RegenerateCreated,
   SessionCurrentOut,
   SessionOut,
   TechnicalLevel,
@@ -52,6 +53,8 @@ export function createEndpoints(client: ApiClient) {
       client.get<GuideOut>(`/projects/${enc(projectId)}/guide`, { signal }),
     getSection: (projectId: string, key: string, signal?: AbortSignal) =>
       client.get<GuideSectionOut>(`/projects/${enc(projectId)}/guide/sections/${enc(key)}`, { signal }),
+    regenerateSection: (projectId: string, key: string) =>
+      client.post<RegenerateCreated>(`/projects/${enc(projectId)}/sections/${enc(key)}/regenerate`),
     getEvidence: (projectId: string, chunkId: string, signal?: AbortSignal) =>
       client.get<EvidenceOut>(`/projects/${enc(projectId)}/evidence/${enc(chunkId)}`, { signal }),
 
