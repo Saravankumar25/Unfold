@@ -19,7 +19,7 @@ def project_prefix(project_id: str) -> str:
 # Rate-limit keys. Per-session and per-project keys are removed with their owner (cleanup); per-IP and global
 # counters are fixed windows that carry no owner and expire by TTL alone.
 SESSION_RATE_BUCKETS = ("projects", "chat")
-PROJECT_RATE_BUCKETS = ("export",)
+PROJECT_RATE_BUCKETS = ("export", "regenerate")
 
 
 def session_rate_key(bucket: str, session_id: object) -> str:

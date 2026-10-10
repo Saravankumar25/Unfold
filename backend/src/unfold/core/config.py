@@ -122,6 +122,10 @@ class Settings(BaseSettings):
     research_max_retrievals: int = 12
     research_max_llm_calls: int = 4
     research_brief_tokens: int = 6000
+    revision_max_rounds: int = 2  # rewrite rounds per chapter (investigation engine, section 5 Reviser)
+    max_regenerations_per_hour: int = (
+        6  # per project; each one re-researches, rewrites and re-verifies a chapter
+    )
     max_sessions_per_ip_per_hour: int = 20
     max_sessions_per_hour: int = 500
     max_projects_per_ip_per_hour: int = 30

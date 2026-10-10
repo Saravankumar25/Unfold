@@ -81,6 +81,10 @@ class AnalysisJobRow(Base):
     __tablename__ = "analysis_jobs"
     id: Mapped[uuid.UUID] = _uuid_pk()
     project_id: Mapped[uuid.UUID] = _project_fk()
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="analysis", server_default="analysis"
+    )
+    section_key: Mapped[str | None] = mapped_column(String(64))  # kind == "regenerate": the chapter to redo
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
     current_stage: Mapped[str] = mapped_column(String(40), nullable=False, default="RECEIVED")
     stage_progress: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
@@ -183,7 +187,10 @@ class GuideSectionRow(Base):
     evidence_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     quality_scores: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     research: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # `guide.models.ResearchBrief` (v2 plans)
-    input_hash: Mapped[str | None] = mapped_column(Text)  # unused until task 3.8
+    verification: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB
+    )  # `guide.verification_models.StoredVerification`
+    input_hash: Mapped[str | None] = mapped_column(Text)  # `guide.input_hash.chapter_input_hash`
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

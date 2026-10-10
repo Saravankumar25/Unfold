@@ -76,6 +76,8 @@ class JobOut(BaseModel):
     error_message: str | None = None
     retryable: bool = False
     degraded: list[str] = Field(default_factory=list)
+    kind: str = "analysis"  # analysis | regenerate
+    section_key: str | None = None  # regenerate: the chapter being redone
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -121,6 +123,7 @@ class ProgressPage(BaseModel):
     events: list[ProgressItem]
     cursor: int
     job: JobOut
+    regeneration: JobOut | None = None  # the latest single-chapter regeneration of this project, if any
 
 
 # ---- guide -------------------------------------------------------------------------------------------------
@@ -245,6 +248,11 @@ class ChatReplyOut(BaseModel):
 
 class ExportCreated(BaseModel):
     artifact_id: str
+
+
+class RegenerateCreated(BaseModel):
+    job_id: str
+    section_key: str
 
 
 class ArtifactOut(BaseModel):

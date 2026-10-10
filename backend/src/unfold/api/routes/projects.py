@@ -63,22 +63,37 @@ def job_out(job: AnalysisJobRow) -> JobOut:
         error_message=str(detail.get("message")) if detail.get("message") else None,
         retryable=job.retryable,
         degraded=list((job.stage_progress or {}).get("degraded", [])),
+        kind=job.kind,
+        section_key=job.section_key,
         started_at=job.started_at,
         completed_at=job.completed_at,
     )
 
 
 async def latest_job(rt: Runtime, project_id: uuid.UUID) -> AnalysisJobRow:
+    """The project's analysis job: a failed chapter regeneration never reads as a failed analysis."""
     async with rt.db.session() as s:
         job = (
             await s.execute(
                 select(AnalysisJobRow)
-                .where(AnalysisJobRow.project_id == project_id)
+                .where(AnalysisJobRow.project_id == project_id, AnalysisJobRow.kind == "analysis")
                 .order_by(AnalysisJobRow.created_at.desc())
                 .limit(1)
             )
         ).scalar_one()
     return job
+
+
+async def latest_regeneration(rt: Runtime, project_id: uuid.UUID) -> AnalysisJobRow | None:
+    async with rt.db.session() as s:
+        return (
+            await s.execute(
+                select(AnalysisJobRow)
+                .where(AnalysisJobRow.project_id == project_id, AnalysisJobRow.kind == "regenerate")
+                .order_by(AnalysisJobRow.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
 
 
 async def _enforce_creation_limits(request: Request, rt: Runtime, session: CurrentSession) -> None:
@@ -261,5 +276,11 @@ async def project_progress(
     project = await owned_project(rt, session, project_id)
     events = await rt.progress.read_after(str(project.id), min(after, 2**63 - 1), limit=200)
     job = await latest_job(rt, project.id)
+    regen = await latest_regeneration(rt, project.id)
     items = [ProgressItem(seq=seq, **event) for seq, event in events]
-    return ProgressPage(events=items, cursor=events[-1][0] if events else after, job=job_out(job))
+    return ProgressPage(
+        events=items,
+        cursor=events[-1][0] if events else after,
+        job=job_out(job),
+        regeneration=job_out(regen) if regen else None,
+    )
