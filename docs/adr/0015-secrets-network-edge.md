@@ -12,8 +12,9 @@ standard parameters free.
 
 ## Decision
 - SSM Parameter Store SecureString (standard tier, AWS-managed key). Fargate via task-definition `secrets`; Lambda
-  via a cold-start `GetParameters` loader. Terraform creates names with placeholder values and `ignore_changes`;
-  values are set out of band.
+  via a cold-start `GetParameters` loader. Terraform creates **no** parameters (a refresh reads a SecureString back
+  decrypted, so the real value would enter the state and every plan job could read it); it derives names and ARNs
+  only, values are put out of band with `aws ssm put-parameter`.
 - No NAT, no interface endpoints. One VPC with two public subnets, no inbound, egress 443, S3 and DynamoDB gateway
   endpoints; tasks get a public IPv4 only while running ($0.00067 per 8-minute job). Lambda is outside any VPC.
 - No CloudFront or WAF: edge rate rules would key on Vercel egress addresses. Revisit if browsers call the API

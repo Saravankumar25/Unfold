@@ -1,6 +1,6 @@
 # ADR 0013: Embedded dense index and in-memory graph; Qdrant, Neo4j, Redis and S3 Vectors not adopted
 
-Status: proposed (2026-10-10) · Phase 4 stage B
+Status: accepted for implementation (2026-10-10) · Phase 4 stage B; gates measured in stage C/D
 
 ## Context
 Dense vectors are 384-d float32 (3.7 MB for 2 424 chunks) and graph/dense are already optional stages. The graph is
@@ -30,3 +30,12 @@ about $65.70 per month), Neo4j on t4g.medium ($24.53/$16.35 per month; fallback 
 ## Consequences
 Chat processes need the IR, chunks, BM25 and dense artifacts in memory (cache per instance, bounded by
 `MAX_CHUNKS_PER_PROJECT`). Query embedding and reranking stay local ONNX (152 MB models in the API image).
+
+## Measured gates (implementation, three fixtures, real embedder, Qdrant and Neo4j)
+Dense: recall@40 1.0000 (476 queries; 120 filtered queries 1.0000), top-1 equal 1.0000. Graph: eight methods
+identical to Neo4j on every compared call; `find_entities` top-20 overlap 1.0000 (identical order 99.7 %);
+`path_between` agrees on existence and hop count (arbitrary-vs-smallest choice among equal shortest paths).
+Not measured: the 2 424-chunk input, self-loop degree, Linux. Code defaults stay `qdrant`/`neo4j`; AWS
+environments set `DENSE_BACKEND=artifact`, `GRAPH_BACKEND=memory`. Details: `docs/infra/architecture-decision.md` 4.5.
+Cache note: the dense cache trusts an entry for 300 s (the object is rewritten under a fixed key), the in-memory graph
+is built lazily in a worker thread per project and process and keyed on the loaded IR object.

@@ -401,15 +401,36 @@ case-insensitive / token match replaces the fulltext index; variable-length trav
 - If the graph gate fails: ship `GRAPH_BACKEND=off` (already a supported degradation, recorded as
   `degraded=graph`) and report it; do **not** claim equivalence.
 
+**Measured (phase 4 implementation, 2026-10-10, `backend/tests/integration/test_retrieval_backend_parity.py`,
+real fastembed `BAAI/bge-small-en-v1.5`, real Qdrant and Neo4j, the three fixture repos analysed by the real
+pipeline stages):**
+
+| Gate | Result | Notes |
+|---|---|---|
+| Dense recall@40 vs Qdrant | **1.0000** over 476 queries (up to 120 chunk texts plus symbol names per fixture) | exact cosine; gate >= 0.95 |
+| Dense top-1 equal | **1.0000** | gate >= 95 %; queries are chunk texts, so the top hit is the chunk itself in both: a weak top-1 test, the recall number is the informative one |
+| Dense with filters (content type, subsystem, both) | recall@40 **1.0000** over 120 filtered queries | same `MatchAny` semantics; chunks without a subsystem never match a subsystem filter |
+| Graph `get_node`, `neighbors` (depth 1-3, two rel-type sets, limit 5/50), `callers`, `callees`, `subsystem_members`, `overview`, `module_dependencies`, `endpoint_flows` | **identical** to Neo4j on every compared call (322 / 3 864 / 966 / 966 / 13 / 3 / 3 / 3) | model equality including order and scores |
+| Graph `find_entities` (limit 20, 333 queries: exact, upper-case, single words, 4-name seed lists) | mean top-20 overlap **1.0000**, identical order on 99.7 % | exact and case-insensitive tiers are identical; the fulltext tier is a BM25 approximation of Lucene (tokenizer and idf are per project, Neo4j's are index-wide) |
+| Graph `path_between` (684 pairs, 4 and 6 hops) | existence agrees on all pairs, hop count equal on all pairs with a path, every returned path validated edge by edge | Neo4j returns an arbitrary shortest path when several exist; memory returns the lexicographically smallest, so the node *sequences* can differ at equal length. A start equal to the end yields no path in both |
+
+Not measured: the 2 424-chunk medium input (the three committed fixtures have 100-200 chunks), self-loop degree
+(`overview.top_nodes` counts a recursive call once; Neo4j's undirected `COUNT {}` on a self loop was not verified),
+Linux. `memory` and `artifact` are not the defaults of the code (`GRAPH_BACKEND=neo4j`, `DENSE_BACKEND=qdrant`
+remain the oracles); the Terraform environments set `memory` and `artifact`. End-to-end through the pipeline
+stages and `HybridRetriever` with both AWS backends is covered by `test_pipeline_and_retrieval_run_on_the_aws_backends`
+(dense and graph sources contribute, nothing degraded).
+
 ### 4.6 (6) Secrets
 
 SSM Parameter Store SecureString, standard tier (free; 10 000 parameters, 4 KB; 40 TPS shared), AWS-managed key
 (`alias/aws/ssm`, no monthly key fee). Names `/unfold/<env>/{gemini_api_key_1..4,groq_api_key_1..4,github_token,
 proxy_hmac_secret}`. Fargate: task definition `secrets.valueFrom` (execution role `ssm:GetParameters`), no code. Lambda:
 a cold-start loader (`core/ssm_env.py`, one `GetParameters` call of <=10 names, cached) populates `Settings` before
-construction; Lambda environment variables hold only parameter paths. Terraform creates the parameter resources with a
-placeholder and `lifecycle { ignore_changes = [value] }`; real values are put with `aws ssm put-parameter` (runbook),
-so **no secret is in state or the repo**. Secrets Manager costs $0.40/secret/month and offers rotation nothing here
+construction; Lambda environment variables hold only parameter paths. Terraform creates **no** `aws_ssm_parameter` (phase 4 implementation finding: a refresh reads a SecureString back
+with decryption, so `ignore_changes` would not keep the real value out of state, and every plan job could read
+it); it only derives the names and ARNs. Values are put with `aws ssm put-parameter` (runbook,
+`docs/infra/ci-additions.md`), so **no secret is in state or the repo**. Secrets Manager costs $0.40/secret/month and offers rotation nothing here
 uses. Rotation procedure: put new value, `aws lambda update-function-configuration` (touch env) to force cold start;
 tasks read at start. A rejected key is already disabled at runtime (EA F-4) and alarmed (topic 11).
 
@@ -605,7 +626,7 @@ partition delete.
 | 8 | Lambda `unfold-control` (handlers: dispatcher, task_stopped, sweeper) + SQS event source mapping (batch 1, max concurrency 2) | orchestration |
 | 9 | EventBridge rule (ECS Task State Change STOPPED, this cluster) and Scheduler schedule `rate(15 minutes)` + scheduler role | recovery, sweep |
 | 10 | IAM roles: api, control, task, task-execution, scheduler/events; least privilege (S3 `projects/*`, table ARN, queue ARN, `ecs:RunTask` on the task family with `iam:PassRole` to two roles, SSM `/unfold/<env>/*`) | security |
-| 11 | SSM parameters (placeholders, `ignore_changes`) | secrets |
+| 11 | SSM parameter **names/ARNs only** (parameters are created out of band, never by Terraform: see 4.6) | secrets |
 | 12 | CloudWatch log groups (14 d), 4-5 alarms, metric filters, AWS Budgets x2 | operations |
 | 13 | Bootstrap (separate state): S3 state bucket (versioned, native lockfile), GitHub OIDC provider, deploy roles (`plan`, `apply`, image push) | CI/CD |
 
@@ -643,8 +664,10 @@ Order that keeps `main` shippable: 1, 2, 3, 12 (S3 path, still Postgres) -> 4, 5
 
 `infra/terraform/bootstrap` (state bucket, OIDC provider, deploy roles), `modules/{network,storage,data,queue,
 registry,api,control,worker,iam,secrets,observability}`, `envs/{dev,prod}` with pinned provider versions and a
-`region` variable. Remote state in S3 with native lockfile locking (Terraform >= 1.10; confirm in stage D, UNVERIFIED
-here). `terraform apply` only by an owner-approved workflow (GitHub Environment protection), never from this run.
+`region` variable. Remote state in S3. Resolved in stage D: native lockfile locking (`use_lockfile`) needs Terraform >= 1.10 and the
+pinned/installed version is 1.9.8, so the **bootstrap creates a DynamoDB lock table** (`unfold-tfstate-lock`, on
+demand, deletion protection) and the env backends use `dynamodb_table`; move to `use_lockfile` and drop the table when
+the pin reaches 1.10. `terraform apply` only by an owner-approved workflow (GitHub Environment protection), never from this run.
 
 ## 9. Acceptance tests
 
@@ -667,7 +690,7 @@ Cost Explorer vs model after 24-48 h.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | No retrieval-quality baseline exists on `main` (EA §9) | cannot prove "quality preserved" with evals | differential tests (4.5), rerun with phase 3 evals when they land |
-| Native crash in tree-sitter on TS input (EA F-2), Linux unverified | worker dies, retries repeat the crash | reproduce in the Linux image first; per-file isolation or subprocess; typed failure |
+| Native crash in tree-sitter on TS input (EA F-2) | worker dies, retries repeat the crash | **root-caused and fixed in implementation (audit commit)**: py-tree-sitter 0.26.0 corrupts memory (reproduces with the unchanged extractor on 2 of 62 frontend files; 0.25.0-0.25.2 pass 62/62 and the pair 0.25.2 + language-pack 1.20.0 is what runs now); pinned `tree-sitter>=0.25.2,<0.26`. Linux behaviour of 0.26.0 was not measured, so the pin stays until a Linux image run shows otherwise; per-file process isolation was not added |
 | Embedding throughput (6.1 chunks/s here) and 3.5 GB peak | long jobs, OOM | chunk cap, benchmark matrix, size by data not guess |
 | LWA + REST/Function URL streaming through Vercel unverified end to end | chat `stream=true` may buffer | acceptance test; `stream=false` always works |
 | New-account quotas (Lambda concurrency, Fargate 6 vCPU, SFN transitions) | cannot reserve concurrency or run 2 tasks | numbers not documented: check at account creation, design needs only 1 task and works without reserved concurrency |
