@@ -2,20 +2,24 @@
 
 `python -m unfold.worker.run analysis <job_id>` is exactly what a Fargate task runs in the AWS adapter; only the
 launcher differs. No long-lived worker loop exists. The job row in Postgres is the durable queue; this adapter just
-starts processes (bounded by `MAX_CONCURRENT_JOBS`) and restarts a job whose worker asked to be retried.
+starts processes (bounded by `MAX_CONCURRENT_JOBS`) and restarts a job whose worker asked to be retried or died.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 
 from unfold.core.config import Settings
 from unfold.core.logging import get_logger
-from unfold.orchestration.pipeline import RETRY_EXIT_CODE
+from unfold.orchestration.pipeline import ALIVE_WITHIN, RETRY_EXIT_CODE
 from unfold.ports import JobQueue
 
 log = get_logger(__name__)
+
+# After a crash the dead worker's heartbeat is still fresh; a new worker started sooner would be refused.
+CRASH_RETRY_SECONDS = ALIVE_WITHIN.total_seconds() + 10.0
 
 
 class SubprocessJobQueue(JobQueue):
@@ -30,7 +34,7 @@ class SubprocessJobQueue(JobQueue):
 
     async def aclose(self) -> None:
         """Stop supervising. Running workers are separate processes and finish on their own."""
-        for task in self._tasks.values():
+        for task in list(self._tasks.values()):
             task.cancel()
         await asyncio.gather(*self._tasks.values(), return_exceptions=True)
         self._tasks.clear()
@@ -44,18 +48,34 @@ class SubprocessJobQueue(JobQueue):
     def _spawn(self, key: str, task: str, ref: str, delay: float) -> None:
         if key in self._tasks and not self._tasks[key].done():
             return  # idempotent: the same job is never supervised twice
-        self._tasks[key] = asyncio.create_task(self._supervise(task, ref, delay), name=key)
+        supervised = asyncio.create_task(self._supervise(task, ref, delay), name=key)
+        supervised.add_done_callback(lambda _t: self._tasks.pop(key, None))
+        self._tasks[key] = supervised
 
     async def _supervise(self, task: str, ref: str, delay: float) -> None:
+        """Run the worker until it exits 0. Exit 75 retries soon; any other exit (OOM kill, crash, hang) retries
+        once the heartbeat guard has expired. Cleanup does not wait behind analysis slots."""
         if delay:
             await asyncio.sleep(delay)
-        async with self._slots:
-            for attempt in range(1, self._settings.max_job_attempts + 1):
-                proc = await asyncio.create_subprocess_exec(
-                    sys.executable, "-m", "unfold.worker.run", task, ref
-                )
-                code = await proc.wait()
-                log.info("worker.exited", task=task, ref=ref, code=code, attempt=attempt)
-                if code != RETRY_EXIT_CODE:
-                    return
-                await asyncio.sleep(min(30.0, 5.0 * attempt))
+        hard_limit = self._settings.job_timeout_seconds + 60.0
+        for attempt in range(1, self._settings.max_job_attempts + 1):
+            slot = self._slots if task == "analysis" else contextlib.nullcontext()
+            async with slot:
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        sys.executable, "-m", "unfold.worker.run", task, ref
+                    )
+                    try:
+                        code = await asyncio.wait_for(proc.wait(), hard_limit)
+                    except TimeoutError:
+                        proc.kill()  # in-thread parsing cannot be cancelled: the process is the unit of timeout
+                        await proc.wait()
+                        code = -9
+                except Exception as exc:
+                    log.error("worker.spawn_failed", task=task, ref=ref, error_type=type(exc).__name__)
+                    code = -1
+            log.info("worker.exited", task=task, ref=ref, code=code, attempt=attempt)
+            if code == 0:
+                return
+            await asyncio.sleep(min(30.0, 5.0 * attempt) if code == RETRY_EXIT_CODE else CRASH_RETRY_SECONDS)
+        log.error("worker.gave_up", task=task, ref=ref)

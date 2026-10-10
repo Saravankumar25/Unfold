@@ -27,7 +27,7 @@ from unfold.repo_intel.models import (
 
 _PEP508_NAME = re.compile(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 _REQ_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*([<>=!~].*)?")
-_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+_MAX_HEADING_LINE = 400
 _ENGINE_TYPES = {"aws_db_instance", "aws_rds_cluster", "google_sql_database_instance"}
 _COMPOSE_NAMES = re.compile(r"^(docker-)?compose([.\-].+)?\.ya?ml$", re.IGNORECASE)
 
@@ -84,14 +84,7 @@ class ConfigAnalyzer:
         fa = FileAnalysis(path=file.path, language=file.language, analyzer=self.name)
         try:
             getattr(self, f"_{kind}")(file, text, fa)
-        except (
-            ValueError,
-            TypeError,
-            KeyError,
-            AttributeError,
-            yaml.YAMLError,
-            tomllib.TOMLDecodeError,
-        ) as exc:
+        except Exception as exc:
             fa.errors.append(f"{kind}: {type(exc).__name__}: {str(exc)[:160]}")
         return fa
 
@@ -353,10 +346,13 @@ class ConfigAnalyzer:
         for i, line in enumerate(lines, 1):
             if line.lstrip().startswith(("```", "~~~")):
                 in_fence = not in_fence
-            elif not in_fence:
-                m = _HEADING.match(line)
-                if m:
-                    found.append((i, len(m.group(1)), m.group(2)))
+            elif not in_fence and line.startswith("#") and len(line) <= _MAX_HEADING_LINE:
+                # Plain scanning, not a regex: a backtracking pattern over untrusted lines is a ReDoS.
+                body = line.lstrip("#")
+                level = len(line) - len(body)
+                title = body.strip().rstrip("#").strip()
+                if level <= 6 and body[:1] in (" ", "\t") and title:
+                    found.append((i, level, title))
         for idx, (start, level, title) in enumerate(found):
             end = found[idx + 1][0] - 1 if idx + 1 < len(found) else len(lines)
             fa.sections.append(
@@ -364,16 +360,29 @@ class ConfigAnalyzer:
             )
 
 
-def _images_of(node: Any) -> set[str]:
-    """Container images anywhere in a Kubernetes object (`containers[].image`, `initContainers[].image`)."""
+_MAX_YAML_NODES = 20_000
+
+
+def _images_of(root: Any) -> set[str]:
+    """Container images anywhere in a Kubernetes object (`containers[].image`, `initContainers[].image`).
+
+    Iterative with a visited set and a node cap: YAML aliases share nodes, so a recursive walk of a hostile
+    document could otherwise expand without bound.
+    """
     out: set[str] = set()
-    if isinstance(node, dict):
-        image = node.get("image")
-        if isinstance(image, str):
-            out.add(image)
-        for value in node.values():
-            out |= _images_of(value)
-    elif isinstance(node, list):
-        for value in node:
-            out |= _images_of(value)
+    seen: set[int] = set()
+    stack = [root]
+    while stack and len(seen) < _MAX_YAML_NODES:
+        node = stack.pop()
+        if isinstance(node, dict | list):
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+        if isinstance(node, dict):
+            image = node.get("image")
+            if isinstance(image, str):
+                out.add(image)
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
     return out

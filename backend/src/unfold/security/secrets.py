@@ -13,7 +13,7 @@ REDACTED = "<REDACTED_SECRET>"
 _PATTERNS: list[tuple[str, re.Pattern[str], int]] = [
     (
         "private_key",
-        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----"),
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]{0,8192}?-----END [A-Z ]*PRIVATE KEY-----"),
         0,
     ),
     ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), 0),

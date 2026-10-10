@@ -13,7 +13,7 @@ import tempfile
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -96,14 +96,14 @@ async def run_analysis(rt: Runtime, llm: LLMClient, job_id: str) -> RunOutcome:
         raise UnfoldError("Analysis job not found.", code=ErrorCode.NOT_FOUND, http_status=404)
     if job.status == "succeeded":
         return RunOutcome(succeeded=True, retry=False)
-    if job.status == "running" and job.heartbeat_at and datetime.now(UTC) - job.heartbeat_at < ALIVE_WITHIN:
-        log.warning("job.already_running", job_id=job_id)
-        return RunOutcome(succeeded=False, retry=False)  # another worker owns it; do not run it twice
 
     pid = str(project.id)
     bind_context(project_id=pid, job_id=job_id)
     reporter = ProgressReporter(rt.db, rt.progress, pid, job_id)
-    attempt = await reporter.start()
+    attempt = await reporter.start(alive_within=ALIVE_WITHIN)
+    if attempt is None:
+        log.warning("job.not_claimed", job_id=job_id)  # finished, or another worker owns it
+        return RunOutcome(succeeded=False, retry=False)
     settings = rt.settings
     if attempt > settings.max_job_attempts:
         err = UnfoldError(
@@ -115,15 +115,21 @@ async def run_analysis(rt: Runtime, llm: LLMClient, job_id: str) -> RunOutcome:
         return RunOutcome(succeeded=False, retry=False)
 
     beat = asyncio.create_task(_heartbeat(reporter))
+    limit = asyncio.timeout(settings.job_timeout_seconds)
     try:
-        async with asyncio.timeout(settings.job_timeout_seconds):
+        async with limit:
             await _Run(rt, llm, project, job_id, reporter).execute()
         await reporter.succeed()
         return RunOutcome(succeeded=True, retry=False)
     except TimeoutError:
-        err = UnfoldError(
-            "The analysis exceeded its time limit.", code=ErrorCode.ANALYSIS_STAGE_FAILED, retryable=True
-        )
+        if limit.expired():
+            err = UnfoldError(
+                "The analysis exceeded its time limit.", code=ErrorCode.ANALYSIS_STAGE_FAILED, retryable=True
+            )
+        else:
+            err = UnfoldError(
+                "A network call timed out.", code=ErrorCode.PROVIDER_UNAVAILABLE, retryable=True
+            )
     except UnfoldError as exc:
         err = exc
     except Exception as exc:
@@ -183,6 +189,7 @@ class _Run:
             ("visuals", self._visuals),
         ]
         for name, step in steps:
+            await self._ensure_project_exists()
             if name in self.done:
                 log.info("job.stage_skipped", group=name)
                 continue
@@ -190,6 +197,12 @@ class _Run:
                 data = await step()
             await self._checkpoint(name, data or {})
         await self.reporter.stage(JobStage.FINALIZING)
+
+    async def _ensure_project_exists(self) -> None:
+        """Stop when the project was removed mid-run, so cleanup's work is not recreated behind it."""
+        async with self.rt.db.session() as s:
+            if await s.get(ProjectRow, self.project.id) is None:
+                raise UnfoldError("The project was removed.", code=ErrorCode.NOT_FOUND, retryable=False)
 
     async def _checkpoint(self, name: str, data: dict[str, Any]) -> None:
         async with self.rt.db.transaction() as s:
@@ -348,7 +361,8 @@ class _Run:
             await s.execute(delete(SummaryRow).where(SummaryRow.project_id == self.project.id))
             s.add_all(rows)
 
-        file_sub = {f.path: c.id for c in candidates for f in ir.files if f.id in set(c.member_file_ids)}
+        path_by_id = {f.id: f.path for f in ir.files}
+        file_sub = {path_by_id[i]: c.id for c in candidates for i in c.member_file_ids if i in path_by_id}
         chunk_map = {
             c.id: file_sub[c.path] for c in await self.chunks.list_project(self.pid) if c.path in file_sub
         }
@@ -448,10 +462,7 @@ class _Run:
                         )
                     )
                 ).scalar_one()
-            if (
-                existing.status in (SectionStatus.READY.value, SectionStatus.DEGRADED.value)
-                and existing.content
-            ):
+            if existing.content:
                 return  # written by an earlier attempt; resume skips it
             async with gate:
                 draft = await write_section(
@@ -475,7 +486,7 @@ class _Run:
                 row.content = draft.content.model_dump(mode="json")
                 row.claims = [c.model_dump(mode="json") for c in draft.claims]
                 row.evidence_summary = draft.evidence
-                row.status = SectionStatus.READY.value
+                row.status = SectionStatus.GENERATING.value  # `_verify` grades it, then it is ready
                 row.version += 1
             written += 1
             await self.reporter.heartbeat()

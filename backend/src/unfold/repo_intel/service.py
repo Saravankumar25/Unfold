@@ -23,6 +23,7 @@ from unfold.security.secrets import redact
 
 log = get_logger(__name__)
 
+SCAN_BYTES = 256 * 1024
 _README = re.compile(r"^readme(\.\w+)?$", re.IGNORECASE)
 
 
@@ -64,14 +65,19 @@ def analyze_texts(
         for analyzer in chosen:
             if not analyzer.supports(meta):
                 continue
-            fa = analyzer.analyze(meta, text, ctx)
+            try:
+                fa = analyzer.analyze(meta, text, ctx)
+            except Exception as exc:
+                errors[path] = [f"{analyzer.name}: {type(exc).__name__}"]
+                break
             files[path] = fa
             if fa.errors:
                 errors[path] = list(fa.errors)
             break
+        probe = text[:SCAN_BYTES]  # bounded: the signal regexes must not be fed a megabyte of one pattern
         signals = [
-            *(["secret"] if redact(text).redacted else []),
-            *(["injection"] if scan(text, max_signals=1) else []),
+            *(["secret"] if redact(probe).redacted else []),
+            *(["injection"] if scan(probe, max_signals=1) else []),
         ]
         if signals:
             flagged[path] = signals

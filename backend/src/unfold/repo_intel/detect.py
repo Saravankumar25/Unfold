@@ -176,7 +176,7 @@ def _score_categories(analyses: Mapping[str, FileAnalysis], det: DetectionResult
     fw_techs = {d.technology for d in det.frameworks}
     ai_kinds = {d.category for d in det.ai_components}
     compose_builds = sum(1 for fa in analyses.values() for s in fa.compose_services if s.build_context)
-    infra_resources = sum(len(fa.infra) for fa in analyses.values())
+    infra_files = sum(1 for fa in analyses.values() if fa.infra)
     web_backend = bool(app_objects & WEB_APP_OBJECTS) or has_routes or "web_backend" in fw_cats
     frontend = "web_frontend" in fw_cats
 
@@ -211,7 +211,7 @@ def _score_categories(analyses: Mapping[str, FileAnalysis], det: DetectionResult
         sig("background_worker", 0.6, "task queue worker")
     if compose_builds >= 3:
         sig("microservices", 0.6, "three or more built compose services")
-    if infra_resources and infra_resources >= len(analyses) // 2:
+    if infra_files and infra_files * 2 >= len(analyses):
         sig("infrastructure", 0.6, "mostly infrastructure definitions")
     if "mobile" in fw_cats:
         sig("mobile_app", 0.8, "mobile framework")

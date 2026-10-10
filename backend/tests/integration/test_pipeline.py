@@ -399,3 +399,24 @@ async def test_a_job_with_a_live_heartbeat_is_not_run_twice(runtime: Runtime) ->
         assert job is not None and job.attempt == 1  # untouched: the owner is still working
     finally:
         await _teardown(runtime, project_id)
+
+
+async def test_resuming_inside_a_stage_group_does_not_move_the_job_backwards(runtime: Runtime) -> None:
+    from datetime import timedelta as _td
+
+    from unfold.domain.enums import JobStage
+    from unfold.orchestration.progress import ProgressReporter
+
+    project_id, job_id = await _seed(runtime, _zip_of(FIXTURE))
+    try:
+        reporter = ProgressReporter(runtime.db, runtime.progress, project_id, job_id)
+        assert await reporter.start(alive_within=_td(minutes=2)) == 1
+        await reporter.stage(JobStage.INGESTING)
+        await reporter.stage(JobStage.VALIDATING_INPUT)  # a rerun re-enters the group from its first stage
+        async with runtime.db.session() as s:
+            job = await s.get(AnalysisJobRow, uuid.UUID(job_id))
+        assert job is not None and job.current_stage == "INGESTING"
+        # a second claim while the first worker is alive is refused
+        assert await reporter.start(alive_within=_td(minutes=2)) is None
+    finally:
+        await _teardown(runtime, project_id)

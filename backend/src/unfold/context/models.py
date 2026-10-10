@@ -113,7 +113,7 @@ def facts_block(facts: Iterable[str]) -> str:
     body = "\n".join(f"- {f}" for f in facts)
     if not body:
         return ""
-    return "## Verified facts\n" + untrusted(body, source="verified_facts", trust="deterministic_analysis")
+    return "## Verified facts\n" + untrusted(body, source="verified_facts", trust="repository_derived")
 
 
 def summary_block(s: SummaryItem) -> str:

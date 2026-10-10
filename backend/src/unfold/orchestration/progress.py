@@ -6,7 +6,7 @@ Progress reflects real stages only (PRD §7.2). A stage is published after its p
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -54,10 +54,22 @@ class ProgressReporter:
         row: AnalysisJobRow = (await session.execute(stmt)).scalar_one()
         return row
 
-    async def start(self) -> int:
-        """Mark the job running (new attempt). Returns the attempt number."""
+    async def start(self, *, alive_within: timedelta) -> int | None:
+        """Claim the job and mark it running (new attempt); the attempt number, or None when it is not ours.
+
+        Done under the row lock so two workers started together cannot both own one job: a finished job, or a
+        running one whose heartbeat is fresh, is left alone.
+        """
         async with self.db.transaction() as s:
             row = await self._load(s)
+            if row.status == JobStatus.SUCCEEDED.value:
+                return None
+            if (
+                row.status == JobStatus.RUNNING.value
+                and row.heartbeat_at is not None
+                and datetime.now(UTC) - row.heartbeat_at < alive_within
+            ):
+                return None
             row.status = JobStatus.RUNNING.value
             row.attempt += 1
             row.started_at = row.started_at or datetime.now(UTC)
@@ -71,7 +83,10 @@ class ProgressReporter:
     async def stage(self, stage: JobStage, detail: str | None = None) -> None:
         async with self.db.transaction() as s:
             row = await self._load(s)
-            check_transition(JobStage(row.current_stage), stage)
+            current = JobStage(row.current_stage)
+            if not stage.is_failure and not current.is_terminal and 0 <= stage.order < current.order:
+                return  # resuming inside a group that already ran: keep the furthest stage reached
+            check_transition(current, stage)
             row.current_stage = stage.value
             progress = dict(row.stage_progress or {})
             progress.setdefault("stages", {})[stage.value] = datetime.now(UTC).isoformat()

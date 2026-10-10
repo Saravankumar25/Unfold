@@ -8,8 +8,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
+import shutil
 import sys
+import tempfile
+import threading
+import time
 from collections.abc import Sequence
+from pathlib import Path
 
 from unfold.cleanup.service import cleanup_project
 from unfold.core.config import get_settings
@@ -22,10 +28,34 @@ from unfold.runtime import Runtime
 log = get_logger(__name__)
 
 
+def sweep_stale_workdirs(max_age_s: float = 3600.0) -> int:
+    """Remove job workdirs a killed worker left behind (they hold an untrusted extracted repository)."""
+    removed = 0
+    for path in Path(tempfile.gettempdir()).glob("unfold-job-*"):
+        try:
+            if path.is_dir() and time.time() - path.stat().st_mtime > max_age_s:
+                shutil.rmtree(path, ignore_errors=True)
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+def _arm_watchdog(seconds: float) -> None:
+    """Last resort: in-thread parsing cannot be cancelled, so end the process (exit 75 = run me again)."""
+    timer = threading.Timer(seconds, lambda: os._exit(RETRY_EXIT_CODE))
+    timer.daemon = True
+    timer.start()
+
+
 async def run(task: str, ref: str) -> int:
     settings = get_settings()
     configure_logging(settings)
     configure_tracing(settings, "worker")
+    _arm_watchdog(settings.job_timeout_seconds + 30.0)
+    swept = sweep_stale_workdirs()
+    if swept:
+        log.info("worker.swept_workdirs", count=swept)
     rt = Runtime.create(settings, db_pool_size=4)
     try:
         await rt.objects.ensure_bucket()

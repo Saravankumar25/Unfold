@@ -123,3 +123,59 @@ def test_plan_normalisation_makes_keys_unique_and_rejects_tiny_plans() -> None:
     assert [s.key for s in plan.sections] == ["same-title", "same-title-2", "overview"]
     with pytest.raises(Exception, match="at least"):
         normalise_plan(GuidePlan(estimated_read_minutes=1, sections=[sec("a")]))
+
+
+# --- hostile input: nothing here may hang or fail the job --------------------------------------------------
+
+
+def _under(seconds: float, fn: object) -> None:
+    import time
+
+    start = time.perf_counter()
+    fn()  # type: ignore[operator]
+    assert time.perf_counter() - start < seconds
+
+
+def test_malformed_and_deeply_nested_files_are_recorded_not_raised() -> None:
+    assert _run("main.tf", 'resource "a" "b" {{{ not hcl').errors
+    assert _run("package.json", "[" * 200_000).errors
+    assert _run("k8s/x.yaml", "apiVersion: v1\nkind: [unclosed").errors
+
+
+def test_yaml_alias_bomb_is_bounded() -> None:
+    refs = ", ".join(["*a"] * 9)
+    lines = ["apiVersion: v1", "kind: Bomb", "x0: &a0 [image-less]"]
+    for i in range(1, 10):
+        lines.append(f"x{i}: &a{i} [{', '.join(f'*a{i - 1}' for _ in range(9))}]")
+    del refs
+    _under(2.0, lambda: _run("k8s/bomb.yaml", "\n".join(lines) + "\n"))
+
+
+def test_markdown_headings_do_not_backtrack() -> None:
+    nasty = "# a" + " " * 5000 + "x\n" + "#" * 300 + " not a heading\n# Real\n"
+    fa = A.analyze(_file("README.md"), nasty, None)  # type: ignore[arg-type]
+    _under(1.0, lambda: A.analyze(_file("README.md"), nasty * 20, None))  # type: ignore[arg-type]
+    assert [s.title for s in fa.sections][-1] == "Real"
+
+
+def test_secret_and_injection_scanners_are_not_quadratic() -> None:
+    from unfold.security.injection import scan
+    from unfold.security.secrets import redact
+
+    _under(3.0, lambda: redact("-----BEGIN PRIVATE KEY-----\n" * 8000))
+    _under(3.0, lambda: scan("\n" * 100_000 + "system: hi"))
+
+
+def test_claim_with_nothing_checkable_is_not_verified_and_names_match_whole_words() -> None:
+    texts = {"c1": "class UserNameStore: pass"}
+    graded, _ = grade_claims(
+        [
+            _claim("The service handles requests through a queue", ClaimKind.PROJECT_FACT, ["c1"]),
+            _claim(
+                "`user` is stored", ClaimKind.PROJECT_FACT, ["c1"]
+            ),  # `user` is only a prefix of UserNameStore
+        ],
+        texts,
+    )
+    assert graded[0].status is ClaimStatus.STRONGLY_INFERRED and graded[0].confidence == 0.5
+    assert graded[1].status is ClaimStatus.INFERRED

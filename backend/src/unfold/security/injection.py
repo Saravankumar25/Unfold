@@ -23,7 +23,7 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
         "chat_template_tokens",
         re.compile(r"<\|(im_start|im_end|system|assistant|user|endoftext)\|>|\[/?INST\]|<<SYS>>", re.I),
     ),
-    ("fake_role_header", re.compile(r"^\s*(system|assistant)\s*:\s", re.I | re.M)),
+    ("fake_role_header", re.compile(r"^[ \t]*(system|assistant)[ \t]*:[ \t]", re.I | re.M)),
     ("tool_call_imitation", re.compile(r"\"(tool_calls|function_call)\"\s*:", re.I)),
     (
         "exfiltration",

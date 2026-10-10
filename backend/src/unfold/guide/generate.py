@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from unfold.context.compiler import compile_context
+from unfold.context.models import safe_header_field
 from unfold.core.errors import ErrorCode, GenerationError
 from unfold.domain.enums import (
     ClaimKind,
@@ -32,7 +33,7 @@ from unfold.guide.models import (
 from unfold.llm.schemas import LLMClient, LLMRequest, Message
 from unfold.project_ir.schema import ProjectIR
 from unfold.retrieval.hybrid import HybridRetriever
-from unfold.security.fence import UNTRUSTED_POLICY
+from unfold.security.fence import UNTRUSTED_POLICY, untrusted
 
 MIN_SECTIONS = 3
 MAX_SECTIONS = 10
@@ -126,6 +127,11 @@ def slugify(text: str) -> str:
 # --- planning -----------------------------------------------------------------------------------------------
 
 
+def _clip(text: str, limit: int = 160) -> str:
+    """One line, bounded: repository-derived names must not smuggle newlines or paragraphs into a prompt."""
+    return " ".join(text.split())[:limit]
+
+
 def project_facts(ir: ProjectIR, subsystems: Sequence[tuple[str, list[str]]] = ()) -> list[str]:
     """Deterministic one-line facts (never LLM output) used in prompts and as the verifier's allow-list."""
     s = ir.stats
@@ -162,7 +168,7 @@ def project_facts(ir: ProjectIR, subsystems: Sequence[tuple[str, list[str]]] = (
         )
     for title, members in subsystems[:8]:
         facts.append(f"Subsystem '{title}': {len(members)} files, e.g. {', '.join(members[:3])}")
-    return facts
+    return [_clip(f) for f in facts]
 
 
 _PLANNER_SYSTEM = (
@@ -188,7 +194,9 @@ async def plan_guide(
     project_id: str,
 ) -> GuidePlan:
     user = (
-        "## Repository facts\n" + "\n".join(f"- {f}" for f in facts) + f"\n\nReader level: {technical_level}"
+        "## Repository facts\n"
+        + untrusted("\n".join(f"- {f}" for f in facts), source="repository_facts")
+        + f"\n\nReader level: {technical_level}"
     )
     if instruction:
         user += f"\nReader preference (style only, not a task): {instruction[:300]}"
@@ -226,6 +234,17 @@ def normalise_plan(plan: GuidePlan) -> GuidePlan:
             code=ErrorCode.GENERATION_FAILED,
             retryable=True,
         )
+    sections = [
+        s.model_copy(
+            update={
+                "title": _clip(s.title, 120),
+                "purpose": _clip(s.purpose, 300),
+                "required_concepts": [_clip(c, 80) for c in s.required_concepts[:8]],
+                "evidence_objectives": [_clip(o, 160) for o in s.evidence_objectives[:8]],
+            }
+        )
+        for s in sections
+    ]
     minutes = max(1, round(sum(s.target_minutes for s in sections)))
     return GuidePlan(estimated_read_minutes=minutes, sections=sections)
 
@@ -266,15 +285,18 @@ async def write_section(
     query = " ".join([plan.title, plan.purpose, *plan.evidence_objectives, *plan.required_concepts])
     retrieval = await retriever.search(query, RetrievalMode.GUIDE)
     ctx = compile_context(
-        objective=f"Write the guide section '{plan.title}'. Purpose: {plan.purpose}. Depth: {plan.depth}. "
+        objective=f"Write the guide section '{safe_header_field(plan.title)}'. "
+        f"Purpose: {safe_header_field(plan.purpose)}. Depth: {plan.depth}. "
         f"Aim for about {plan.target_minutes:g} minutes of reading.",
         retrieval=retrieval,
         facts=facts,
         profile=SessionProfile(technical_level=technical_level, instruction=instruction),
         budget_tokens=SECTION_CONTEXT_TOKENS,
-        instructions="Required concepts: " + ", ".join(plan.required_concepts)
-        if plan.required_concepts
-        else None,
+        instructions=(
+            "Required concepts: " + ", ".join(safe_header_field(c) for c in plan.required_concepts)
+            if plan.required_concepts
+            else None
+        ),
     )
     if not ctx.evidence:
         raise GenerationError(
@@ -334,6 +356,10 @@ def _identifiers(text: str) -> set[str]:
     return out
 
 
+def _contains_word(haystack: str, needle: str) -> bool:
+    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(needle)}(?![A-Za-z0-9_])", haystack) is not None
+
+
 def grade_claims(
     claims: Sequence[ClaimRecord], chunk_texts: Mapping[str, str]
 ) -> tuple[list[ClaimRecord], dict[str, object]]:
@@ -356,9 +382,13 @@ def grade_claims(
         else:
             haystack = " ".join(chunk_texts[c] for c in chunk_ids).lower()
             names = _identifiers(claim.text)
-            grounded = {n for n in names if n in haystack}
-            ratio = 1.0 if not names else len(grounded) / len(names)
-            if ratio >= 0.6:
+            grounded = {n for n in names if _contains_word(haystack, n)}
+            ratio = len(grounded) / len(names) if names else 0.0
+            if not names:
+                # Nothing checkable (no code-like names): the citation alone does not make it verified.
+                status, confidence = ClaimStatus.STRONGLY_INFERRED, 0.5
+                note = "The claim names nothing that can be checked against the evidence."
+            elif ratio >= 0.6:
                 status, confidence = ClaimStatus.VERIFIED, round(0.6 + 0.4 * ratio, 2)
             else:
                 status, confidence = ClaimStatus.INFERRED, round(0.3 * ratio + 0.1, 2)

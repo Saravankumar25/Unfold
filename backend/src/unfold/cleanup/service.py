@@ -23,6 +23,7 @@ async def cleanup_project(rt: Runtime, project_id: str) -> dict[str, int]:
 
     Stores are cleared before the project row so a failure leaves the row behind and the call can be repeated.
     """
+    project_id = str(uuid.UUID(project_id))  # validate before it becomes a key prefix
     counts: dict[str, int] = {}
     counts["blobs"] = await rt.objects.delete_prefix(project_prefix(project_id))
     evict_project(rt.objects, project_id)
