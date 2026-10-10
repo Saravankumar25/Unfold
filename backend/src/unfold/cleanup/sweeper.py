@@ -24,7 +24,7 @@ from unfold.worker.recovery import requeue_incomplete_jobs
 log = get_logger(__name__)
 
 EXPORT_STALE_AFTER = timedelta(minutes=5)
-BATCH = 20  # per kind and pass: bounded work per run; the next pass continues
+BATCH = 500  # per kind and pass; the scheduled AWS sweeper passes a smaller one (Lambda time bound)
 
 
 @dataclass
@@ -50,15 +50,17 @@ async def sweep(
     *,
     now: datetime | None = None,
     queued_for: timedelta = timedelta(0),
+    batch: int = BATCH,
 ) -> SweepReport:
     """Without a `queue` the jobs and exports that need restarting are left for a pass that has one.
-    `queued_for` is how long a job must have waited before it counts as lost (outbox reconciliation)."""
+    `queued_for` is how long a job must have waited before it counts as lost (outbox reconciliation); `batch`
+    bounds the work per kind in one pass, the next pass continues."""
     now = now or datetime.now(UTC)
     report = SweepReport()
     control = rt.control
 
-    expired: list[SessionRec] = await control.expired_sessions(now, BATCH)
-    doomed: list[str] = [p.id for p in await control.expired_projects(now, BATCH)]
+    expired: list[SessionRec] = await control.expired_sessions(now, batch)
+    doomed: list[str] = [p.id for p in await control.expired_projects(now, batch)]
     for session in expired:
         if session.status != "expired":
 
@@ -70,7 +72,7 @@ async def sweep(
         doomed += [p.id for p, _ in await control.projects_of_session(session.id)]
     report.marked_deleting = await mark_deleting(rt, doomed)
 
-    for project in await control.deleting_projects(BATCH):
+    for project in await control.deleting_projects(batch):
         try:
             counts = await cleanup_project(rt, project.id)
         except Exception as exc:  # one broken project must not stop the rest; its marker keeps it queued
@@ -87,8 +89,10 @@ async def sweep(
     if queue is not None:
         requeue = requeue_incomplete_jobs(rt, queue, now=now, queued_for=queued_for)
         report.jobs_requeued = await _step(report, "jobs", requeue) or 0
-        report.exports_requeued = await _step(report, "exports", restart_stale_exports(rt, queue, now)) or 0
-    report.exports_expired = await _step(report, "expiry", _expire_exports(rt, now)) or 0
+        report.exports_requeued = (
+            await _step(report, "exports", restart_stale_exports(rt, queue, now, batch)) or 0
+        )
+    report.exports_expired = await _step(report, "expiry", _expire_exports(rt, now, batch)) or 0
     log.info("sweep.done", **report.as_dict())
     return report
 
@@ -112,10 +116,10 @@ async def _remove_empty_sessions(rt: Runtime, sessions: list[SessionRec], report
         report.sessions_removed += 1
 
 
-async def restart_stale_exports(rt: Runtime, queue: JobQueue, now: datetime) -> int:
+async def restart_stale_exports(rt: Runtime, queue: JobQueue, now: datetime, batch: int = BATCH) -> int:
     """Pending exports whose enqueue was lost (or whose worker died) are sent again; the job is idempotent."""
     stale = await rt.control.stale_pending_artifacts(
-        created_before=now - EXPORT_STALE_AFTER, now=now, limit=BATCH
+        created_before=now - EXPORT_STALE_AFTER, now=now, limit=batch
     )
     restarted = 0
     for art in stale:
@@ -127,9 +131,9 @@ async def restart_stale_exports(rt: Runtime, queue: JobQueue, now: datetime) -> 
     return restarted
 
 
-async def _expire_exports(rt: Runtime, now: datetime) -> int:
+async def _expire_exports(rt: Runtime, now: datetime, batch: int) -> int:
     expired = 0
-    for art in await rt.control.expired_artifacts(now, BATCH):
+    for art in await rt.control.expired_artifacts(now, batch):
         try:
             if art.object_key:
                 await rt.objects.delete_prefix(art.object_key)

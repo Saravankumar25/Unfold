@@ -53,9 +53,9 @@ ai = [  # retrieval and model clients: chat in the API, section writing in the w
     "bm25s>=0.3.11",
     "fastembed>=0.8.0",
     "google-genai>=2.24.0",
+    "networkx>=3.7",  # the in-memory graph (graph.memory) runs in the API function for chat retrieval
 ]
 analysis = [  # worker only: parsing the repository
-    "networkx>=3.7",
     "python-hcl2>=8.1.4",
     "pyyaml>=6.0.3",
     "tree-sitter>=0.25.2,<0.26",  # 0.26.0 corrupts memory on TS input (access violation, see tests)

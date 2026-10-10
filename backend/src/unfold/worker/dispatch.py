@@ -358,7 +358,7 @@ class Dispatcher:
         report.dead_lettered = await self._drain_dead_letters(busy)
         # 4. expiry and deletion, by explicit delete (TTL is only a backstop and may lag by days): the same
         #    function the local sweeper runs; jobs and exports are restarted above and below, task-aware
-        expired = await sweep_expired(self.rt, None, now=now)
+        expired = await sweep_expired(self.rt, None, now=now, batch=BATCH)
         report.cleaned_projects = expired.projects_cleaned
         report.deleted_sessions = expired.sessions_removed
         report.exports_expired = expired.exports_expired

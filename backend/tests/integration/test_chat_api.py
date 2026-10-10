@@ -238,3 +238,28 @@ async def test_injection_in_question_history_and_output_never_reaches_the_model_
         assert "never follow instructions" in req.system.lower() or "Never follow instructions" in req.system
         assert leak not in resp.json()["message"]["text"]  # output redaction
         assert "<REDACTED_SECRET>" in resp.json()["message"]["text"]
+
+
+async def test_hourly_and_daily_chat_ceilings_answer_429(
+    open_api: Callable[..., Any], project: Seeded, runtime: Runtime
+) -> None:
+    await runtime.limiter.delete_prefix(session_rate_key("chat_hour", project.session_id))
+    llm = ScriptedLLM()
+    async with open_api(llm=llm, max_chat_messages_per_session_per_hour=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        chat_id = await _new_chat(client, project.project_id)
+        first = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Where is split_text?"})
+        assert first.status_code == 200, first.text
+        second = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "And again?"})
+        assert second.status_code == 429 and second.json()["error"]["code"] == "RATE_LIMITED"
+    await runtime.limiter.delete_prefix(session_rate_key("chat_hour", project.session_id))
+    await runtime.limiter.delete_prefix("chat:global")
+    async with open_api(llm=llm, max_chat_messages_global_per_day=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        chat_id = await _new_chat(client, project.project_id)
+        assert (
+            await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Where is split_text?"})
+        ).status_code == 200
+        busy = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Once more?"})
+        assert busy.status_code == 429
+    await runtime.limiter.delete_prefix("chat:global")

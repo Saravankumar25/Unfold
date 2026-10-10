@@ -15,7 +15,16 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import RedirectResponse
 
-from unfold.api.deps import API_PREFIX, RuntimeDep, SessionDep, owned_chat, owned_project, parse_uuid
+from unfold.api.deps import (
+    API_PREFIX,
+    CurrentSession,
+    RuntimeDep,
+    SessionDep,
+    enforce_rate_limit,
+    owned_chat,
+    owned_project,
+    parse_uuid,
+)
 from unfold.api.schemas import ArtifactOut, ErrorEnvelope, ExportCreated
 from unfold.core.errors import Conflict, ErrorCode, NotFound, ProjectNotReady, RateLimited, UnfoldError
 from unfold.core.logging import get_logger
@@ -49,7 +58,12 @@ def _out(row: ArtifactRec) -> ArtifactOut:
 
 
 async def _create(
-    request: Request, rt: Runtime, project: ProjectRec, kind: ArtifactKind, chat_id: str | None
+    request: Request,
+    rt: Runtime,
+    session: CurrentSession,
+    project: ProjectRec,
+    kind: ArtifactKind,
+    chat_id: str | None,
 ) -> ExportCreated:
     cfg = rt.settings
     now = datetime.now(UTC)
@@ -59,6 +73,7 @@ async def _create(
         return ExportCreated(artifact_id=existing.id)
     if not await rt.limiter.hit(project_rate_key("export", project.id), cfg.max_exports_per_hour, 3600):
         raise RateLimited(f"At most {cfg.max_exports_per_hour} exports per project per hour.")
+    await enforce_rate_limit(rt, session, "export", cfg.max_exports_per_session_per_hour, 3600)
     rec = ArtifactRec(
         id=str(uuid.uuid4()),
         project_id=project.id,
@@ -87,7 +102,7 @@ async def export_guide(
     if not any(sec.content for sec in await rt.control.sections(project.id)):
         raise ProjectNotReady("The guide is not ready yet.")
     kind = ArtifactKind.GUIDE_PDF if format == "pdf" else ArtifactKind.GUIDE_MD
-    return await _create(request, rt, project, kind, None)
+    return await _create(request, rt, session, project, kind, None)
 
 
 @router.post("/chats/{chat_id}/exports", status_code=202, response_model=ExportCreated)
@@ -98,7 +113,7 @@ async def export_chat(
     if not chat.message_count:
         raise Conflict("The chat has no messages yet.")
     kind = ArtifactKind.CHAT_PDF if format == "pdf" else ArtifactKind.CHAT_MD
-    return await _create(request, rt, project, kind, chat.id)
+    return await _create(request, rt, session, project, kind, chat.id)
 
 
 async def _owned_artifact(rt: Runtime, session_id: str, artifact_id: str) -> ArtifactRec:

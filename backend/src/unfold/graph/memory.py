@@ -136,7 +136,10 @@ class MemoryGraph:
                 nodes[uid].props["subsystem_id"] = sid
         merged = {k: v for k, v in g.inferred.items() if k not in g.det}
         merged.update(g.det)  # deterministic facts are never replaced by inferred ones
-        edges = {k: {"source": v.get("source"), "confidence": v.get("confidence")} for k, v in merged.items()}
+        edges = {
+            k: {"source": v.get("source"), "confidence": v.get("confidence"), "proof": v.get("proof")}
+            for k, v in merged.items()
+        }
         return cls(ir.project.project_id, nodes, edges)
 
     # --- helpers ---------------------------------------------------------------------------------------------

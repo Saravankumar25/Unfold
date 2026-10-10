@@ -79,6 +79,10 @@ def settings(migrated_database: str) -> Settings:
         # the shared test database keeps `queued` jobs from earlier runs; the caps have their own tests
         max_active_jobs_per_session=100_000,
         max_queued_jobs_global=100_000,
+        # per-session chat and export ceilings have their own tests (they override these)
+        max_chat_messages_per_session_per_hour=100_000,
+        max_chat_messages_global_per_day=100_000,
+        max_exports_per_session_per_hour=100_000,
     )
 
 
@@ -105,9 +109,9 @@ from datetime import UTC, datetime, timedelta  # noqa: E402
 from typing import Any  # noqa: E402
 
 from unfold.core.ids import new_session_token, token_hash  # noqa: E402
+from unfold.domain.records import JobRec, ProjectRec  # noqa: E402
 from unfold.evaluation.scripted import ScriptedLLM  # noqa: E402
 from unfold.orchestration.pipeline import run_analysis  # noqa: E402
-from unfold.domain.records import JobRec, ProjectRec  # noqa: E402
 
 FIXTURE_REPO = BACKEND.parent / "evals" / "fixtures" / "repos" / "fastapi_rag"
 

@@ -31,7 +31,7 @@ from unfold.api.schemas import (
 )
 from unfold.chat.models import ChatEvent
 from unfold.chat.service import require_ready, run_turn
-from unfold.core.errors import ErrorCode, UnfoldError
+from unfold.core.errors import ErrorCode, RateLimited, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ChatMode
 from unfold.domain.models import EvidenceRef
@@ -159,7 +159,13 @@ async def post_message(
 ) -> ChatReplyOut | StreamingResponse:
     chat, project = await owned_chat(rt, session, chat_id)
     require_ready(project)
-    await enforce_rate_limit(rt, session, "chat", rt.settings.max_chat_messages_per_minute, 60)
+    cfg = rt.settings
+    await enforce_rate_limit(rt, session, "chat", cfg.max_chat_messages_per_minute, 60)
+    await enforce_rate_limit(rt, session, "chat_hour", cfg.max_chat_messages_per_session_per_hour, 3600)
+    if not await rt.limiter.hit("chat:global", cfg.max_chat_messages_global_per_day, 86_400):
+        raise RateLimited(
+            "The service is busy; try again later."
+        )  # the daily ceiling protects the model quota
     events = run_turn(
         rt,
         chat,

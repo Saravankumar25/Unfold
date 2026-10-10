@@ -23,7 +23,7 @@ from unfold.evaluation.scripted import ScriptedLLM
 from unfold.exports.pdf import PdfRenderer
 from unfold.exports.service import export_key, run_export
 from unfold.persistence.postgres.models import ArtifactRow
-from unfold.ports import project_rate_key
+from unfold.ports import project_rate_key, session_rate_key
 from unfold.runtime import Runtime
 from unfold.worker import run as worker_run
 
@@ -274,3 +274,26 @@ async def test_presigned_download_hands_back_a_working_url(
             fetched = await direct.get(resp.headers["location"])
         assert fetched.status_code == 200 and fetched.text.startswith("# fastapi_rag")
         assert "attachment" in fetched.headers["content-disposition"]
+
+
+async def test_a_session_has_its_own_hourly_export_ceiling(
+    open_api: Callable[..., Any], project: Seeded, runtime: Runtime
+) -> None:
+    await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
+    await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))
+
+    def finished(art: ArtifactRec) -> bool:
+        art.status = "failed"  # earlier tests left pending exports, which a new request would reuse uncounted
+        return True
+
+    for art in await runtime.control.artifacts_of_project(project.project_id):
+        await runtime.control.update_artifact(art.id, finished)
+    async with open_api(max_exports_per_session_per_hour=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        base = f"{API}/projects/{project.project_id}"
+        assert (await client.post(f"{base}/exports/guide?format=md")).status_code == 202
+        # a different kind is a new export and counts against the session
+        over = await client.post(f"{base}/exports/guide?format=pdf")
+        assert over.status_code == 429 and over.json()["error"]["code"] == "RATE_LIMITED"
+    await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
+    await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))

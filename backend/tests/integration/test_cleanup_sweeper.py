@@ -94,19 +94,26 @@ def _total(inv: dict[str, int]) -> int:
 
 
 async def _artifact(
-    rt: Runtime, project_id: str, status: str, key: str | None, expires_at: datetime, created_at: datetime
+    rt: Runtime,
+    project_id: str,
+    status: str,
+    key: str | None,
+    expires_at: datetime,
+    created_at: datetime,
+    kind: str = "guide_md",
 ) -> str:
     rec = ArtifactRec(
         id=str(uuid.uuid4()),
         project_id=project_id,
-        kind="guide_md",
+        kind=kind,
         created_at=created_at,
         expires_at=expires_at,
         status=status,
         object_key=key,
         content_type="text/markdown",
     )
-    await rt.control.add_artifact(rec, reuse_since=created_at - timedelta(days=1))
+    stored = await rt.control.add_artifact(rec, reuse_since=created_at - timedelta(days=1))
+    assert stored.id == rec.id  # a same-kind pending export would have been reused instead
     return rec.id
 
 
@@ -206,7 +213,13 @@ async def test_expired_project_of_a_live_session_and_expired_exports_are_swept(
         expired_key = f"{project_prefix(kept.project_id)}exports/old.md"
         await runtime.objects.put_bytes(expired_key, b"old", "text/markdown")
         stale_pending = await _artifact(
-            runtime, kept.project_id, "pending", None, datetime.now(UTC) + timedelta(hours=1), old
+            runtime,
+            kept.project_id,
+            "pending",
+            None,
+            datetime.now(UTC) + timedelta(hours=1),
+            old,
+            "guide_pdf",
         )
         expired = await _artifact(
             runtime, kept.project_id, "ready", expired_key, datetime.now(UTC) - timedelta(minutes=1), old
