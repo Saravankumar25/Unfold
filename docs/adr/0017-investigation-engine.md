@@ -36,3 +36,13 @@ is not used to plan or to research. Documentation quality is therefore bounded b
   plain loop plateaus.
 - **LLM-only verification:** costly and unreliable; deterministic checks first.
 - **Bigger context window with more chunks:** raises cost and noise, does not trace execution.
+
+## As built (phase 3B, 2026-10-11)
+
+- `REVISING_GUIDE` is the 21st stage; verification and repair run per chapter and `guide_sections.verification` is
+  the per-chapter checkpoint. Critique and rewrite are priority P2 so the per-job budget refuses them before the
+  writer; a refusal degrades to deterministic qualify-or-remove, it never fails the job.
+- Regeneration is an `analysis_jobs` row of kind `regenerate` on the existing queue port, not a new port or store; it
+  is invisible to the project's own status, so a failed regeneration cannot brick a finished guide.
+- Two measured runs per repository passed the gate (`evals/baselines/pipeline-v2/`, `docs/design/quality-report.md`).
+  Human review of readability and judged depth is not done.
