@@ -260,7 +260,7 @@ Top five improvements, ranked by value over effort (all phase 3B, in this order)
 | 2 | Deterministic citation verification (path, line, symbol, excerpt, edge) and bounded revision | high | M | 3.7 |
 | 3 | Adaptive plan from an architecture model (questions, targets, dependencies, depth) | high | M | 3.3, 3.4 |
 | 4 | Rubric and recorded baseline so improvement is measured, not asserted | high | S | 3.1, 3.9 |
-| 5 | Chapter `input_hash`, single-chapter regeneration, commit-pinned compact citations | medium | S | 3.8 |
+| 5 | Single-chapter regeneration, commit-pinned compact citations (input-hash reuse dropped: unreachable) | medium | S | 3.8 |
 
 First milestone (3.1 + 3.2): baseline run on two repos preserved under `evals/baselines/pipeline-v1/`, and `RepoMap`
 symbol lookup with edge `proof` labels. Acceptance: fixture-repo tests assert known definitions, importers and call
