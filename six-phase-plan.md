@@ -46,7 +46,9 @@ regressed and hardened in phase 5 and verified live in phase 6. It adds no phase
 
 Phases 1-2 are complete and unchanged by the quality strategy. Phase 3 (3A features, 3B engine) is built,
 reviewed, gated and merged to `main`; the v2 rubric gate holds (`docs/design/quality-report.md`); human review sheets are
-unfilled. The phase 4 branch holds stages A-F plus a review pass and is unmerged.
+unfilled. The phase 4 branch holds stages A-F, a review pass and (2026-10-11) the merge of phase 3: chat, exports,
+regeneration and the investigation engine run on both persistence profiles behind the same ports. It is built,
+reviewed and gated, and stays unmerged until the owner merges it; nothing is deployed.
 
 ---
 
@@ -156,10 +158,14 @@ Stages (each ends in a committed artifact; implementation does not start before 
   env/secrets, limits, performance, reliability and recovery, cost for five scenarios (zero month, occasional use,
   interview demo, moderate, spike) split by cost type with stated assumptions, scaling, known limitations.
 
-Status (2026-10-10, branch `phase-4-aws`): stages A to F are implemented and verified locally; nothing was applied.
-Evidence and open items: `docs/infra/operations.md` sections 7 and 8, deployment `docs/infra/deployment.md`, cost
-`docs/infra/cost.md`. Remaining before phase 6: merge with phase 3 (chat/export records behind `ControlStore`), the
-rubric gate on the embedded backends, and the "requires AWS" acceptance list.
+Status (2026-10-11, branch `phase-4-aws`): stages A to F are implemented and verified locally; nothing was applied.
+Phase 3 is merged in: chat messages, export artifacts, the delete marker, typed jobs and chapter regeneration are behind
+`ControlStore` on the Postgres and the DynamoDB adapters (one contract suite), the dispatcher starts `export` tasks, the
+sweeper is one function for both profiles, and an architecture test keeps the investigator, verifier and reviser out of
+the API. Evidence and open items: `docs/infra/operations.md` sections 7 and 8, deployment `docs/infra/deployment.md`,
+cost `docs/infra/cost.md`. Remaining before phase 6: the "requires AWS" acceptance list (including Fargate memory and
+wall clock of the 21-stage pipeline and the exporter image pull), the exporter image size (3.28 GB, a known limitation),
+and the owner's authorization to apply anything.
 
 Pipeline support (no new services; the engine runs on the ports and the phase 4 backends):
 - Retrieval-backend swaps (embedded dense, in-memory graph, S3 Vectors, Neo4j removal) are gated by the phase 3 rubric

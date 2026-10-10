@@ -1,0 +1,40 @@
+{
+ "backend": "dynamodb (moto) + S3 (moto) + embedded dense + in-memory graph",
+ "attempts": 1,
+ "wall_seconds": 400.4,
+ "tokens_in": 42617,
+ "tokens_out": 12295,
+ "calls": 20,
+ "by_model": {
+  "gemini-3.5-flash-lite": {
+   "calls": 20,
+   "input_tokens": 42617,
+   "output_tokens": 12295
+  }
+ },
+ "by_purpose": {
+  "guide.plan": {
+   "calls": 1,
+   "input_tokens": 1597,
+   "output_tokens": 965
+  },
+  "guide.section": {
+   "calls": 6,
+   "input_tokens": 19966,
+   "output_tokens": 7784
+  },
+  "guide.critique": {
+   "calls": 6,
+   "input_tokens": 6146,
+   "output_tokens": 478
+  },
+  "guide.revise": {
+   "calls": 7,
+   "input_tokens": 14908,
+   "output_tokens": 3068
+  }
+ },
+ "retries": 1,
+ "rate_limited": 2,
+ "stage_progress_degraded": []
+}
