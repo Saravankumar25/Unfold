@@ -8,17 +8,30 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from unfold.core.errors import Conflict, NotFound, RateLimited
-from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec, SessionRec, SummaryRec
+from unfold.domain.records import (
+    ArtifactRec,
+    ChatMessageRec,
+    ChatRec,
+    DiagramRec,
+    JobRec,
+    ProjectRec,
+    SectionRec,
+    SessionRec,
+    SummaryRec,
+)
 from unfold.persistence.postgres.db import Database
 from unfold.persistence.postgres.models import (
     AnalysisJobRow,
+    ArtifactRow,
+    ChatMessageRow,
+    ChatSessionRow,
     DiagramRow,
     GuidePlanRow,
     GuideSectionRow,
@@ -46,8 +59,11 @@ _PROJECT_FIELDS = [
     "lexical_object_key",
     "created_at",
     "expires_at",
+    "deleting_at",
 ]
 _JOB_FIELDS = [
+    "kind",
+    "section_key",
     "status",
     "current_stage",
     "stage_progress",
@@ -68,8 +84,21 @@ _SECTION_FIELDS = [
     "claims",
     "evidence_summary",
     "quality_scores",
+    "research",
+    "verification",
     "version",
 ]
+_ARTIFACT_FIELDS = [
+    "kind",
+    "status",
+    "object_key",
+    "content_type",
+    "size_bytes",
+    "error",
+    "created_at",
+    "expires_at",
+]
+_MESSAGE_FIELDS = ["seq", "role", "mode", "content", "evidence", "model_metadata", "created_at"]
 _SUMMARY_FIELDS = ["title", "facts", "semantic", "members", "content_hash", "prompt_version", "model"]
 _NON_TERMINAL = ("queued", "running")
 
@@ -121,6 +150,32 @@ def _summary(row: SummaryRow) -> SummaryRec:
         level=row.level,
         key=row.key,
         **{f: getattr(row, f) for f in _SUMMARY_FIELDS},
+    )
+
+
+def _chat(row: ChatSessionRow, count: int) -> ChatRec:
+    return ChatRec(
+        id=str(row.id),
+        project_id=str(row.project_id),
+        title=row.title,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        message_count=count,
+    )
+
+
+def _message(row: ChatMessageRow) -> ChatMessageRec:
+    return ChatMessageRec(
+        id=str(row.id), chat_id=str(row.chat_session_id), **{f: getattr(row, f) for f in _MESSAGE_FIELDS}
+    )
+
+
+def _artifact(row: ArtifactRow) -> ArtifactRec:
+    return ArtifactRec(
+        id=str(row.id),
+        project_id=str(row.project_id),
+        chat_id=None if row.chat_session_id is None else str(row.chat_session_id),
+        **{f: getattr(row, f) for f in _ARTIFACT_FIELDS},
     )
 
 
@@ -252,6 +307,32 @@ class PostgresControlStore(ControlStore):
             await self._enforce_caps(s, str(project.session_id), max_active_per_session, max_queued_global)
             s.add(AnalysisJobRow(id=_u(job.id), project_id=_u(job.project_id), **_job_values(job)))
 
+    async def add_regeneration(
+        self, job: JobRec, *, max_active_per_session: int = 0, max_queued_global: int = 0
+    ) -> tuple[JobRec, bool]:
+        async with self._db.transaction() as s:
+            # the project row lock serialises concurrent requests and refuses a project deleted since the lookup
+            project = await s.get(ProjectRow, _u(job.project_id), with_for_update=True)
+            if project is None or project.deleting_at is not None:
+                raise NotFound("Project not found.")
+            running = (
+                await s.execute(
+                    select(AnalysisJobRow)
+                    .where(
+                        AnalysisJobRow.project_id == project.id,
+                        AnalysisJobRow.kind == "regenerate",
+                        AnalysisJobRow.status.in_(_NON_TERMINAL),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if running is not None:
+                return _job(running, str(project.session_id)), False
+            await self._enforce_caps(s, str(project.session_id), max_active_per_session, max_queued_global)
+            s.add(AnalysisJobRow(id=_u(job.id), project_id=project.id, **_job_values(job)))
+        job.session_id = str(project.session_id)
+        return job, True
+
     async def get_project(self, project_id: str) -> ProjectRec | None:
         async with self._db.session() as s:
             row = await s.get(ProjectRow, _u(project_id))
@@ -273,7 +354,10 @@ class PostgresControlStore(ControlStore):
             rows = (
                 await s.execute(
                     select(ProjectRow, AnalysisJobRow)
-                    .outerjoin(AnalysisJobRow, AnalysisJobRow.project_id == ProjectRow.id)
+                    .outerjoin(
+                        AnalysisJobRow,
+                        (AnalysisJobRow.project_id == ProjectRow.id) & (AnalysisJobRow.kind == "analysis"),
+                    )
                     .where(ProjectRow.session_id == _u(session_id))
                     .order_by(ProjectRow.created_at.desc(), AnalysisJobRow.created_at.desc())
                 )
@@ -290,7 +374,18 @@ class PostgresControlStore(ControlStore):
     async def expired_projects(self, now: datetime, limit: int) -> list[ProjectRec]:
         async with self._db.session() as s:
             rows = (
-                await s.execute(select(ProjectRow).where(ProjectRow.expires_at <= now).limit(limit))
+                await s.execute(
+                    select(ProjectRow)
+                    .where(ProjectRow.expires_at <= now, ProjectRow.deleting_at.is_(None))
+                    .limit(limit)
+                )
+            ).scalars()
+            return [_project(r) for r in rows]
+
+    async def deleting_projects(self, limit: int) -> list[ProjectRec]:
+        async with self._db.session() as s:
+            rows = (
+                await s.execute(select(ProjectRow).where(ProjectRow.deleting_at.is_not(None)).limit(limit))
             ).scalars()
             return [_project(r) for r in rows]
 
@@ -304,17 +399,26 @@ class PostgresControlStore(ControlStore):
             row = await s.get(AnalysisJobRow, _u(job_id))
         return None if row is None else _job(row)
 
-    async def latest_job(self, project_id: str) -> JobRec | None:
+    async def latest_job(self, project_id: str, kind: str | None = None) -> JobRec | None:
+        stmt = select(AnalysisJobRow).where(AnalysisJobRow.project_id == _u(project_id))
+        if kind is not None:
+            stmt = stmt.where(AnalysisJobRow.kind == kind)
         async with self._db.session() as s:
             row = (
+                await s.execute(stmt.order_by(AnalysisJobRow.created_at.desc()).limit(1))
+            ).scalar_one_or_none()
+        return None if row is None else _job(row)
+
+    async def jobs_of_project(self, project_id: str) -> list[JobRec]:
+        async with self._db.session() as s:
+            rows = (
                 await s.execute(
                     select(AnalysisJobRow)
                     .where(AnalysisJobRow.project_id == _u(project_id))
-                    .order_by(AnalysisJobRow.created_at.desc())
-                    .limit(1)
+                    .order_by(AnalysisJobRow.created_at)
                 )
-            ).scalar_one_or_none()
-        return None if row is None else _job(row)
+            ).scalars()
+            return [_job(r) for r in rows]
 
     async def update_job(self, job_id: str, fn: Mutator) -> JobRec:
         async with self._db.transaction() as s:
@@ -340,7 +444,12 @@ class PostgresControlStore(ControlStore):
         queued = (AnalysisJobRow.status == "queued") & (AnalysisJobRow.created_at < queued_before)
         async with self._db.session() as s:
             rows = (
-                await s.execute(select(AnalysisJobRow).where(or_(queued, stale_running)).limit(limit))
+                await s.execute(
+                    select(AnalysisJobRow)
+                    .join(ProjectRow, ProjectRow.id == AnalysisJobRow.project_id)
+                    .where(or_(queued, stale_running), ProjectRow.deleting_at.is_(None))
+                    .limit(limit)
+                )
             ).scalars()
             return [_job(r) for r in rows]
 
@@ -473,6 +582,206 @@ class PostgresControlStore(ControlStore):
         if row is None or str(row.project_id) != str(_u(project_id)):
             return None
         return _diagram(row)
+
+    # --- chats ------------------------------------------------------------------------------------------
+
+    async def create_chat(self, chat: ChatRec, *, max_per_project: int) -> None:
+        pid = _u(chat.project_id)
+        async with self._db.transaction() as s:
+            # the project row lock serialises concurrent creates, so the per-project cap holds
+            project = await s.get(ProjectRow, pid, with_for_update=True)
+            if project is None or project.deleting_at is not None:
+                raise NotFound("Project not found.")
+            count = await s.scalar(
+                select(func.count()).select_from(ChatSessionRow).where(ChatSessionRow.project_id == pid)
+            )
+            if (count or 0) >= max_per_project:
+                raise Conflict(
+                    f"A project can have at most {max_per_project} chats.", detail={"limit": max_per_project}
+                )
+            s.add(
+                ChatSessionRow(
+                    id=_u(chat.id),
+                    project_id=pid,
+                    title=chat.title,
+                    created_at=chat.created_at,
+                    updated_at=chat.updated_at,
+                )
+            )
+
+    @staticmethod
+    async def _message_count(s: AsyncSession, chat_id: uuid.UUID) -> int:
+        n = await s.scalar(
+            select(func.count()).select_from(ChatMessageRow).where(ChatMessageRow.chat_session_id == chat_id)
+        )
+        return int(n or 0)
+
+    async def get_chat(self, chat_id: str) -> ChatRec | None:
+        cid = _u(chat_id)
+        async with self._db.session() as s:
+            row = await s.get(ChatSessionRow, cid)
+            return None if row is None else _chat(row, await self._message_count(s, cid))
+
+    async def chats_of_project(self, project_id: str) -> list[ChatRec]:
+        async with self._db.session() as s:
+            rows = (
+                await s.execute(
+                    select(ChatSessionRow, func.count(ChatMessageRow.id))
+                    .outerjoin(ChatMessageRow, ChatMessageRow.chat_session_id == ChatSessionRow.id)
+                    .where(ChatSessionRow.project_id == _u(project_id))
+                    .group_by(ChatSessionRow.id)
+                    .order_by(ChatSessionRow.updated_at.desc())
+                )
+            ).all()
+        return [_chat(chat, int(n)) for chat, n in rows]
+
+    async def chat_messages(
+        self, chat_id: str, *, after_seq: int = 0, last: int | None = None
+    ) -> list[ChatMessageRec]:
+        stmt = select(ChatMessageRow).where(
+            ChatMessageRow.chat_session_id == _u(chat_id), ChatMessageRow.seq > after_seq
+        )
+        if last is None:
+            stmt = stmt.order_by(ChatMessageRow.seq)
+        else:
+            stmt = stmt.order_by(ChatMessageRow.seq.desc()).limit(max(0, last))
+        async with self._db.session() as s:
+            rows = list((await s.execute(stmt)).scalars())
+        return [_message(r) for r in (reversed(rows) if last is not None else rows)]
+
+    async def append_turn(
+        self, chat_id: str, user: ChatMessageRec, assistant: ChatMessageRec, *, title_chars: int
+    ) -> int:
+        cid = _u(chat_id)
+        async with self._db.transaction() as s:
+            chat = await s.get(ChatSessionRow, cid, with_for_update=True)  # serialises seq per chat
+            if chat is None:
+                raise NotFound("Chat not found.")
+            last = int(
+                await s.scalar(
+                    select(func.coalesce(func.max(ChatMessageRow.seq), 0)).where(
+                        ChatMessageRow.chat_session_id == cid
+                    )
+                )
+                or 0
+            )
+            for offset, msg in enumerate((user, assistant), start=1):
+                s.add(
+                    ChatMessageRow(
+                        id=_u(msg.id),
+                        chat_session_id=cid,
+                        **{f: getattr(msg, f) for f in _MESSAGE_FIELDS if f != "seq"},
+                        seq=last + offset,
+                    )
+                )
+            chat.updated_at = datetime.now(UTC)  # the thread list orders by recent activity
+            if not chat.title:
+                chat.title = " ".join(str(user.content.get("text", "")).split())[:title_chars]
+        return last + 2
+
+    # --- exports ----------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _pending_like(project_id: uuid.UUID, kind: str, chat_id: str | None, since: datetime) -> Any:
+        stmt = select(ArtifactRow).where(
+            ArtifactRow.project_id == project_id,
+            ArtifactRow.kind == kind,
+            ArtifactRow.status == "pending",
+            ArtifactRow.created_at > since,
+        )
+        return stmt.where(
+            ArtifactRow.chat_session_id.is_(None)
+            if chat_id is None
+            else ArtifactRow.chat_session_id == _u(chat_id)
+        ).limit(1)
+
+    async def pending_artifact(
+        self, project_id: str, kind: str, chat_id: str | None, since: datetime
+    ) -> ArtifactRec | None:
+        async with self._db.session() as s:
+            row = (
+                await s.execute(self._pending_like(_u(project_id), kind, chat_id, since))
+            ).scalar_one_or_none()
+        return None if row is None else _artifact(row)
+
+    async def add_artifact(self, rec: ArtifactRec, *, reuse_since: datetime) -> ArtifactRec:
+        pid = _u(rec.project_id)
+        async with self._db.transaction() as s:
+            # the project row lock serialises concurrent creates and refuses a project deleted since the lookup
+            project = await s.get(ProjectRow, pid, with_for_update=True)
+            if project is None or project.deleting_at is not None:
+                raise NotFound("Project not found.")
+            raced = (
+                await s.execute(self._pending_like(pid, rec.kind, rec.chat_id, reuse_since))
+            ).scalar_one_or_none()
+            if raced is not None:
+                return _artifact(raced)
+            s.add(
+                ArtifactRow(
+                    id=_u(rec.id),
+                    project_id=pid,
+                    chat_session_id=None if rec.chat_id is None else _u(rec.chat_id),
+                    **{f: getattr(rec, f) for f in _ARTIFACT_FIELDS},
+                )
+            )
+        return rec
+
+    async def get_artifact(self, artifact_id: str) -> ArtifactRec | None:
+        async with self._db.session() as s:
+            row = await s.get(ArtifactRow, _u(artifact_id))
+        return None if row is None else _artifact(row)
+
+    async def artifacts_of_project(self, project_id: str) -> list[ArtifactRec]:
+        async with self._db.session() as s:
+            rows = (
+                await s.execute(
+                    select(ArtifactRow)
+                    .where(ArtifactRow.project_id == _u(project_id))
+                    .order_by(ArtifactRow.created_at.desc())
+                )
+            ).scalars()
+            return [_artifact(r) for r in rows]
+
+    async def update_artifact(self, artifact_id: str, fn: Mutator) -> ArtifactRec:
+        async with self._db.transaction() as s:
+            row = await s.get(ArtifactRow, _u(artifact_id), with_for_update=True)
+            if row is None:
+                raise NotFound("Export not found.")
+            rec = _artifact(row)
+            if fn(rec) is not False:
+                for f in _ARTIFACT_FIELDS:
+                    setattr(row, f, getattr(rec, f))
+            return rec
+
+    async def delete_artifact(self, artifact_id: str) -> None:
+        async with self._db.transaction() as s:
+            await s.execute(delete(ArtifactRow).where(ArtifactRow.id == _u(artifact_id)))
+
+    async def expired_artifacts(self, now: datetime, limit: int) -> list[ArtifactRec]:
+        async with self._db.session() as s:
+            rows = (
+                await s.execute(select(ArtifactRow).where(ArtifactRow.expires_at <= now).limit(limit))
+            ).scalars()
+            return [_artifact(r) for r in rows]
+
+    async def stale_pending_artifacts(
+        self, *, created_before: datetime, now: datetime, limit: int
+    ) -> list[ArtifactRec]:
+        async with self._db.session() as s:
+            rows = (
+                await s.execute(
+                    select(ArtifactRow)
+                    .join(ProjectRow, ProjectRow.id == ArtifactRow.project_id)
+                    .where(
+                        ArtifactRow.status == "pending",
+                        ArtifactRow.created_at <= created_before,
+                        ArtifactRow.expires_at > now,
+                        ProjectRow.deleting_at.is_(None),
+                    )
+                    .limit(limit)
+                )
+            ).scalars()
+            return [_artifact(r) for r in rows]
 
 
 def _job_values(job: JobRec) -> dict[str, Any]:

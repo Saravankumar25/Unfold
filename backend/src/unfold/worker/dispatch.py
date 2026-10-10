@@ -9,6 +9,10 @@ because SQS and EventBridge deliver at least once:
 * the claim at the start of the job is the real mutual exclusion, so a rare duplicate task exits harmlessly;
 * the sweeper is the outbox reconciliation: whatever is `queued` or stale gets (re-)sent, DLQ'd messages fail
   their job with a typed error, expired data is deleted explicitly (never left to TTL), counters are healed.
+
+Three kinds of work reach the dispatcher: `analysis` (also a single-chapter `regenerate`: the same task, the job
+record says which), `export` (its own task definition with Chromium) and `cleanup` (inline, no task). The
+investigator, verifier and reviser run only inside the analysis task, never in the API function.
 """
 
 from __future__ import annotations
@@ -25,9 +29,11 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from unfold.cleanup.service import cleanup_project
+from unfold.cleanup.sweeper import sweep as sweep_expired
 from unfold.core.config import Settings, get_settings
 from unfold.core.errors import ErrorCode, UnfoldError
 from unfold.core.logging import configure_logging, get_logger
+from unfold.exports.status import mark_failed
 from unfold.orchestration.constants import ALIVE_WITHIN, RETRY_EXIT_CODE
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
@@ -38,8 +44,11 @@ log = get_logger(__name__)
 
 OUTBOX_AGE = timedelta(minutes=10)  # `queued` for this long with no task: the enqueue was lost
 OVERAGE_SLACK = timedelta(minutes=5)  # a task this far past the job timeout is stopped
-EXPIRY_BATCH = 20  # projects cleaned inline per sweep (Lambda time bound; the next run continues)
+EXPORT_PREFIX = "export-"  # `startedBy` of an export task; analysis tasks carry the bare job id
+EXPORT_RETRY_WINDOW = timedelta(minutes=15)  # an export still pending after this is failed, not retried
 HEARTBEAT_NAMESPACE = "Unfold"
+BATCH = 20  # exports re-sent per sweep (Lambda time bound; the next run continues)
+EXPORT_RESEND_AFTER = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,7 @@ class RunningTask:
 class TaskRunner(Protocol):
     async def running(self) -> list[RunningTask]: ...
     async def start(self, job_id: str, client_token: str) -> str: ...
+    async def start_export(self, export_id: str, client_token: str) -> str: ...
     async def stop(self, task_arn: str, reason: str) -> None: ...
 
 
@@ -108,14 +118,29 @@ class FargateRunner:
         return out
 
     async def start(self, job_id: str, client_token: str) -> str:
+        return await self._run(job_id, "analysis", job_id, self._s.task_definition_analysis, client_token)
+
+    async def start_export(self, export_id: str, client_token: str) -> str:
+        if not self._s.task_definition_export:
+            raise UnfoldError(
+                "PDF export is not available on this deployment.",
+                code=ErrorCode.QUEUE_UNAVAILABLE,
+                retryable=False,
+                http_status=503,
+            )
+        return await self._run(
+            f"{EXPORT_PREFIX}{export_id}", "export", export_id, self._s.task_definition_export, client_token
+        )
+
+    async def _run(self, started_by: str, task: str, ref: str, definition: str, client_token: str) -> str:
         s = self._s
         resp = await self._call(
             "run_task",
             cluster=s.ecs_cluster_arn,
-            taskDefinition=s.task_definition_analysis,
+            taskDefinition=definition,
             launchType="FARGATE",
             count=1,
-            startedBy=job_id,
+            startedBy=started_by,
             clientToken=client_token[:64],
             networkConfiguration={
                 "awsvpcConfiguration": {
@@ -124,7 +149,7 @@ class FargateRunner:
                     "assignPublicIp": "ENABLED",
                 }
             },
-            overrides={"containerOverrides": [{"name": "worker", "command": ["analysis", job_id]}]},
+            overrides={"containerOverrides": [{"name": "worker", "command": [task, ref]}]},
         )
         if resp.get("failures") or not resp.get("tasks"):
             reason = (resp.get("failures") or [{}])[0].get("reason", "no task started")
@@ -146,6 +171,8 @@ class SweepReport:
     stopped: int = 0
     cleaned_projects: int = 0
     deleted_sessions: int = 0
+    exports_resent: int = 0
+    exports_expired: int = 0
     dead_lettered: int = 0
     queued: int = 0
     running: int = 0
@@ -168,6 +195,8 @@ class Dispatcher:
             counts = await cleanup_project(self.rt, ref)
             log.info("cleanup.done", project_id=ref, **counts)
             return "cleaned"
+        if kind == "export":
+            return await self._dispatch_export(message_id, ref)
         if kind != "analysis":
             log.warning("dispatch.unknown_message", type=kind)
             return "ignored"
@@ -181,7 +210,7 @@ class Dispatcher:
         running = await self.runner.running()
         if any(t.job_id == job_id for t in running):
             return "duplicate"
-        if len(running) >= max(1, self.s.max_concurrent_jobs):
+        if len(_analysis(running)) >= max(1, self.s.max_concurrent_jobs):
             # No slot. Drop the message: a stopped task or the sweeper re-sends `queued` jobs, so waiting here
             # would only burn receives toward the DLQ.
             log.info("dispatch.deferred", job_id=job_id, running=len(running))
@@ -190,14 +219,36 @@ class Dispatcher:
         log.info("dispatch.started", job_id=job_id, task=arn.rsplit("/", 1)[-1])
         return "started"
 
+    async def _dispatch_export(self, message_id: str, export_id: str) -> str:
+        art = await self.rt.control.get_artifact(export_id)
+        project = await self.rt.control.get_project(art.project_id) if art else None
+        if art is None or art.status != "pending" or project is None or project.deleting_at is not None:
+            log.info("dispatch.skipped", export_id=export_id, reason="missing_finished_or_deleted")
+            return "skipped"
+        if not self.s.task_definition_export:  # no exporter task in this environment: say so, do not retry
+            await mark_failed(self.rt, export_id, "Export is not available on this deployment.")
+            return "failed"
+        running = await self.runner.running()
+        if any(t.job_id == f"{EXPORT_PREFIX}{export_id}" for t in running):
+            return "duplicate"
+        if len(_exports(running)) >= max(1, self.s.max_concurrent_exports):
+            # same policy as analysis: the sweeper and the next stopped export re-send what is still pending
+            log.info("dispatch.deferred", export_id=export_id, running=len(_exports(running)))
+            return "deferred"
+        arn = await self.runner.start_export(export_id, message_id)
+        log.info("dispatch.started", export_id=export_id, task=arn.rsplit("/", 1)[-1])
+        return "started"
+
     # --- ECS task state change --------------------------------------------------------------------------
 
     async def handle_task_stopped(self, detail: dict[str, Any]) -> str:
         command = _command(detail)
-        if len(command) < 2 or command[0] != "analysis":
+        if len(command) < 2 or command[0] not in ("analysis", "export"):
             return "ignored"
-        job_id = command[1]
         exit_code = _exit_code(detail)
+        if command[0] == "export":
+            return await self._export_stopped(command[1], exit_code, detail)
+        job_id = command[1]
         job = await self.rt.control.get_job(job_id)
         outcome = "ok"
         if job is not None and not job.terminal and exit_code != 0:
@@ -224,11 +275,36 @@ class Dispatcher:
         await self._requeue_waiting(exclude={job_id})
         return outcome
 
+    async def _export_stopped(self, export_id: str, exit_code: int, detail: dict[str, Any]) -> str:
+        """A finished export recorded itself. One that is still pending after a failure is retried until the
+        retry window closes (the artifact's age bounds the attempts), then failed with a typed message."""
+        art = await self.rt.control.get_artifact(export_id)
+        if art is None or art.status != "pending":
+            return "ok"
+        if exit_code == 0:  # exited cleanly without a result: the sweeper restarts it if it stays pending
+            return "ok"
+        if datetime.now(UTC) - art.created_at > EXPORT_RETRY_WINDOW:
+            await mark_failed(self.rt, export_id, "The export could not be produced. Please try again.")
+            outcome = "abandoned"
+        else:
+            retryable = exit_code == RETRY_EXIT_CODE
+            await self.queue.enqueue_export(export_id, defer_s=5.0 if retryable else 15.0)
+            outcome = "retry" if retryable else "crashed"
+        log.warning(
+            "task.stopped",
+            export_id=export_id,
+            exit_code=exit_code,
+            stop_code=detail.get("stopCode"),
+            reason=str(detail.get("stoppedReason", ""))[:200],
+            outcome=outcome,
+        )
+        return outcome
+
     async def _requeue_waiting(self, exclude: set[str] = frozenset()) -> int:  # type: ignore[assignment]
         """A slot just opened: hand it to the oldest jobs that are waiting (dropped earlier for capacity).
         `exclude` holds the job whose retry was just scheduled with its own backoff."""
         running = await self.runner.running()
-        free = max(1, self.s.max_concurrent_jobs) - len(running)
+        free = max(1, self.s.max_concurrent_jobs) - len(_analysis(running))
         if free <= 0:
             return 0
         now = datetime.now(UTC)
@@ -241,6 +317,20 @@ class Dispatcher:
             if job.id not in busy and sent < free:
                 await self.queue.enqueue_analysis(job.id, job.attempt + 1)
                 sent += 1
+        return sent
+
+    async def _resend_exports(self, running: list[RunningTask], now: datetime) -> int:
+        """Pending exports that have waited (their message was lost, dropped for capacity, or their task died
+        without the stopped event reaching us) are sent again; one with a task running is left alone."""
+        busy = {t.job_id for t in running}
+        sent = 0
+        for art in await self.rt.control.stale_pending_artifacts(
+            created_before=now - EXPORT_RESEND_AFTER, now=now, limit=BATCH
+        ):
+            if f"{EXPORT_PREFIX}{art.id}" in busy:
+                continue
+            await self.queue.enqueue_export(art.id)
+            sent += 1
         return sent
 
     # --- scheduled sweeper ------------------------------------------------------------------------------
@@ -266,14 +356,13 @@ class Dispatcher:
                 report.stopped += 1
         # 3. jobs whose message died in the DLQ
         report.dead_lettered = await self._drain_dead_letters(busy)
-        # 4. expiry, by explicit delete (TTL is only a backstop and may lag by days)
-        for project in await self.rt.control.expired_projects(now, EXPIRY_BATCH):
-            await cleanup_project(self.rt, project.id)
-            report.cleaned_projects += 1
-        for session in await self.rt.control.expired_sessions(now, EXPIRY_BATCH):
-            if not await self.rt.control.projects_of_session(session.id):
-                await self.rt.control.delete_session(session.token_hash)
-                report.deleted_sessions += 1
+        # 4. expiry and deletion, by explicit delete (TTL is only a backstop and may lag by days): the same
+        #    function the local sweeper runs; jobs and exports are restarted above and below, task-aware
+        expired = await sweep_expired(self.rt, None, now=now)
+        report.cleaned_projects = expired.projects_cleaned
+        report.deleted_sessions = expired.sessions_removed
+        report.exports_expired = expired.exports_expired
+        report.exports_resent = await self._resend_exports(running, now)
         # 5. counters healed from the job records
         report.queued, report.running = await self.rt.control.active_job_counts()
         log.info("sweep.done", **report.__dict__)
@@ -307,6 +396,8 @@ class Dispatcher:
                         )
                     elif body.get("type") == "cleanup":
                         await cleanup_project(self.rt, ref)
+                    elif body.get("type") == "export" and f"{EXPORT_PREFIX}{ref}" not in busy:
+                        await mark_failed(self.rt, ref, "The export could not be started. Please try again.")
                 except (ValueError, AttributeError):  # unreadable body or id: drop it, never wedge the sweep
                     log.warning("dlq.unreadable_message", message_id=m.get("MessageId"))
                 await asyncio.to_thread(
@@ -314,6 +405,14 @@ class Dispatcher:
                 )
                 handled += 1
         return handled
+
+
+def _analysis(running: list[RunningTask]) -> list[RunningTask]:
+    return [t for t in running if not t.job_id.startswith(EXPORT_PREFIX)]
+
+
+def _exports(running: list[RunningTask]) -> list[RunningTask]:
+    return [t for t in running if t.job_id.startswith(EXPORT_PREFIX)]
 
 
 def _command(detail: dict[str, Any]) -> list[str]:

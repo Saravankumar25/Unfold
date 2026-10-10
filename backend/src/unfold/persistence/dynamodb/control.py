@@ -18,14 +18,45 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from unfold.core.errors import Conflict, NotFound, RateLimited, StoreUnavailable
-from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec, SessionRec, SummaryRec
+from unfold.domain.records import (
+    ArtifactRec,
+    ChatMessageRec,
+    ChatRec,
+    DiagramRec,
+    JobRec,
+    ProjectRec,
+    SectionRec,
+    SessionRec,
+    SummaryRec,
+)
 from unfold.persistence.dynamodb.table import ConditionFailed, DynamoTable
 from unfold.ports import ControlStore, Mutator
 
-_DT_FIELDS = {"created_at", "last_active_at", "expires_at", "started_at", "completed_at", "heartbeat_at"}
+_DT_FIELDS = {
+    "created_at",
+    "last_active_at",
+    "expires_at",
+    "started_at",
+    "completed_at",
+    "heartbeat_at",
+    "deleting_at",
+    "updated_at",
+}
 _RETRIES = 8
 _TTL_GRACE = timedelta(days=1)
 _JOB = "JOB#"
+
+
+def _alive(pk: str) -> dict[str, Any]:
+    """Transaction condition: the project exists and carries no delete marker."""
+    return {
+        "check": {
+            "pk": pk,
+            "sk": "META",
+            "condition": "attribute_exists(PK) AND attribute_not_exists(#dl)",
+            "names": {"#dl": "deleting"},
+        }
+    }
 
 
 def ts(dt: datetime) -> str:
@@ -77,13 +108,18 @@ def _set_expr(
 
 
 def _project_attrs(rec: ProjectRec) -> dict[str, Any]:
-    return {
+    """A project with the delete marker moves from the `PROJECTS` expiry index to `DELETING`, so the sweeper
+    finds exactly the unfinished deletes; `deleting` is the flag transactions check."""
+    attrs: dict[str, Any] = {
         "GSI1PK": f"S#{rec.session_id}",
         "GSI1SK": ts(rec.created_at),
         "GSI3PK": "PROJECTS",
         "GSI3SK": ts(rec.expires_at),
         "ttl": _epoch(rec.expires_at),
     }
+    if rec.deleting_at is not None:
+        attrs.update({"GSI3PK": "DELETING", "GSI3SK": ts(rec.deleting_at), "deleting": ts(rec.deleting_at)})
+    return attrs
 
 
 def _job_item(rec: JobRec) -> dict[str, Any]:
@@ -349,7 +385,8 @@ class DynamoControlStore(ControlStore):
         def index(
             _old: ProjectRec | None, new: ProjectRec
         ) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
-            return _project_attrs(new), [], []
+            attrs = _project_attrs(new)
+            return attrs, [] if "deleting" in attrs else ["deleting"], []
 
         return await self._mutate(f"P#{project_id}", "META", ProjectRec, fn, extra=index, label="Project")
 
@@ -358,7 +395,7 @@ class DynamoControlStore(ControlStore):
         out: list[tuple[ProjectRec, JobRec | None]] = []
         for it in items:
             project = decode(ProjectRec, it["d"])
-            out.append((project, await self.latest_job(project.id)))
+            out.append((project, await self.latest_job(project.id, "analysis")))
         return out
 
     async def expired_projects(self, now: datetime, limit: int) -> list[ProjectRec]:
@@ -370,10 +407,24 @@ class DynamoControlStore(ControlStore):
                 out.append(decode(ProjectRec, item["d"]))
         return out
 
+    async def deleting_projects(self, limit: int) -> list[ProjectRec]:
+        keys = await self._t.query("DELETING", sk_lt="9", index="GSI3", limit=limit)
+        out: list[ProjectRec] = []
+        for k in keys:
+            item = await self._t.get(k["PK"], "META")
+            if item is not None:
+                out.append(decode(ProjectRec, item["d"]))
+        return out
+
     async def delete_project_data(self, project_id: str) -> int:
         pk = f"P#{project_id}"
         items = await self._t.query(pk, consistent=True)
         jobs = [decode(JobRec, i["d"]) for i in items if i["SK"].startswith(_JOB)]
+        pointers = [(f"H#{decode(ChatRec, i['d']).id}", "META") for i in items if i["SK"].startswith("CHAT#")]
+        pointers += [
+            (f"A#{decode(ArtifactRec, i['d']).id}", "META") for i in items if i["SK"].startswith("ART#")
+        ]
+        await self._t.batch_write(deletes=pointers)
         for job in jobs:
             if not job.terminal:  # release the caps the job still holds
                 delta = _counter_delta(job, dataclasses.replace(job, status="failed"))
@@ -420,16 +471,62 @@ class DynamoControlStore(ControlStore):
         item = await self._t.get(*loc) if loc else None
         return None if item is None else decode(JobRec, item["d"])
 
-    async def latest_job(self, project_id: str) -> JobRec | None:
+    async def latest_job(self, project_id: str, kind: str | None = None) -> JobRec | None:
+        # newest first; a project has one analysis and a handful of regenerations, so a kind filter reads few items
         items = await self._t.query(
-            f"P#{project_id}", sk_prefix=_JOB, forward=False, limit=1, consistent=True
+            f"P#{project_id}",
+            sk_prefix=_JOB,
+            forward=False,
+            limit=1 if kind is None else None,
+            consistent=True,
         )
-        return decode(JobRec, items[0]["d"]) if items else None
+        for item in items:
+            job = decode(JobRec, item["d"])
+            if kind is None or job.kind == kind:
+                return job
+        return None
+
+    async def jobs_of_project(self, project_id: str) -> list[JobRec]:
+        items = await self._t.query(f"P#{project_id}", sk_prefix=_JOB, consistent=True)
+        return [decode(JobRec, i["d"]) for i in items]
+
+    async def add_regeneration(
+        self, job: JobRec, *, max_active_per_session: int = 0, max_queued_global: int = 0
+    ) -> tuple[JobRec, bool]:
+        pk, marker = f"P#{job.project_id}", "REGEN"
+        for _ in range(3):
+            project = await self.get_project(job.project_id)
+            if project is None or project.deleting_at is not None:
+                raise NotFound("Project not found.")
+            held = await self._t.get(pk, marker)
+            if held is not None:
+                running = await self.get_job(str(held["job_id"]))
+                if running is not None and not running.terminal:
+                    return running, False
+                await self._t.delete(pk, marker)  # left by a job that is gone: nothing owns it
+            job.session_id = project.session_id
+            ops = [
+                {
+                    "put": {
+                        "item": {"PK": pk, "SK": marker, "job_id": job.id},
+                        "condition": "attribute_not_exists(PK)",
+                    }
+                },
+                _alive(pk),
+            ]
+            try:
+                await self._write_new_job(job, ops, max_active_per_session, max_queued_global)
+            except Conflict:
+                continue  # a concurrent request took the marker, or the project was just marked deleting
+            return job, True
+        raise Conflict("A regeneration is being created for this project; try again.")
 
     async def update_job(self, job_id: str, fn: Mutator) -> JobRec:
         loc = await self._locate(job_id)
         if loc is None:
             raise NotFound("Analysis job not found.")
+
+        new_pk = loc[0]
 
         def extra(old: JobRec | None, new: JobRec) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
             assert old is not None
@@ -437,6 +534,8 @@ class DynamoControlStore(ControlStore):
             sets = dict(index)
             removes = [a for a in ("GSI2PK", "GSI2SK") if a not in index]
             ops: list[dict[str, Any]] = []
+            if new.kind == "regenerate" and new.terminal and not old.terminal:
+                ops.append({"delete": {"pk": new_pk, "sk": "REGEN"}})  # the next regeneration may start
             delta = _counter_delta(old, new)
             for key, amount in ((f"active#{new.session_id}", delta["active"]), ("queued", delta["queued"])):
                 if amount:
@@ -460,7 +559,13 @@ class DynamoControlStore(ControlStore):
     ) -> list[JobRec]:
         queued = await self._t.query("JOB#queued", sk_lt=ts(queued_before), index="GSI2", limit=limit)
         running = await self._t.query("JOB#running", sk_lt=ts(heartbeat_before), index="GSI2", limit=limit)
-        return [decode(JobRec, i["d"]) for i in [*queued, *running]][:limit]
+        out: list[JobRec] = []
+        for item in [*queued, *running]:
+            job = decode(JobRec, item["d"])
+            project = await self.get_project(job.project_id)  # a deleting project's jobs are not restarted
+            if project is not None and project.deleting_at is None:
+                out.append(job)
+        return out[:limit]
 
     async def active_job_counts(self) -> tuple[int, int]:
         queued = await self._t.query("JOB#queued", index="GSI2")
@@ -543,3 +648,234 @@ class DynamoControlStore(ControlStore):
     async def get_diagram(self, project_id: str, diagram_id: str) -> DiagramRec | None:
         item = await self._t.get(f"P#{project_id}", f"DIAG#{diagram_id}")
         return None if item is None else decode(DiagramRec, item["d"])
+
+    # --- chats ------------------------------------------------------------------------------------------
+
+    async def _chat_project(self, chat_id: str) -> str | None:
+        pointer = await self._t.get(f"H#{chat_id}", "META")
+        return None if pointer is None else str(pointer["project_id"])
+
+    @staticmethod
+    def _msg_sk(chat_id: str, seq: int) -> str:
+        return f"MSG#{chat_id}#{seq:08d}"
+
+    async def create_chat(self, chat: ChatRec, *, max_per_project: int) -> None:
+        pk = f"P#{chat.project_id}"
+        counter: dict[str, Any] = {
+            "pk": pk,
+            "sk": "CHATS",
+            "expression": "ADD #n :one",
+            "names": {"#n": "n"},
+            "values": {":one": 1},
+        }
+        if max_per_project > 0:
+            counter["condition"] = "attribute_not_exists(#n) OR #n < :cap"
+            counter["values"][":cap"] = max_per_project
+        try:
+            await self._t.transact(
+                [
+                    _alive(pk),
+                    {"update": counter},
+                    {
+                        "put": {
+                            "item": {"PK": pk, "SK": f"CHAT#{chat.id}", "d": encode(chat), "ver": 1},
+                            "condition": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {"put": {"item": {"PK": f"H#{chat.id}", "SK": "META", "project_id": chat.project_id}}},
+                ]
+            )
+        except ConditionFailed as exc:
+            if exc.reasons[:1] == ["ConditionalCheckFailed"]:
+                raise NotFound("Project not found.") from exc
+            raise Conflict(
+                f"A project can have at most {max_per_project} chats.", detail={"limit": max_per_project}
+            ) from exc
+
+    async def get_chat(self, chat_id: str) -> ChatRec | None:
+        project_id = await self._chat_project(chat_id)
+        item = None if project_id is None else await self._t.get(f"P#{project_id}", f"CHAT#{chat_id}")
+        return None if item is None else decode(ChatRec, item["d"])
+
+    async def chats_of_project(self, project_id: str) -> list[ChatRec]:
+        items = await self._t.query(f"P#{project_id}", sk_prefix="CHAT#", consistent=True)
+        chats = [decode(ChatRec, i["d"]) for i in items]
+        return sorted(chats, key=lambda c: c.updated_at, reverse=True)
+
+    async def chat_messages(
+        self, chat_id: str, *, after_seq: int = 0, last: int | None = None
+    ) -> list[ChatMessageRec]:
+        project_id = await self._chat_project(chat_id)
+        if project_id is None or last == 0:
+            return []
+        pk = f"P#{project_id}"
+        newest_first = last is not None
+        if after_seq > 0:
+            items = await self._t.query(
+                pk,
+                sk_between=(self._msg_sk(chat_id, after_seq + 1), self._msg_sk(chat_id, 99_999_999)),
+                consistent=True,
+                forward=not newest_first,
+                limit=last,
+            )
+        else:
+            items = await self._t.query(
+                pk, sk_prefix=f"MSG#{chat_id}#", consistent=True, forward=not newest_first, limit=last
+            )
+        msgs = [decode(ChatMessageRec, i["d"]) for i in items]
+        return msgs[::-1] if newest_first else msgs
+
+    async def append_turn(
+        self, chat_id: str, user: ChatMessageRec, assistant: ChatMessageRec, *, title_chars: int
+    ) -> int:
+        project_id = await self._chat_project(chat_id)
+        if project_id is None:
+            raise NotFound("Chat not found.")
+        pk, sk = f"P#{project_id}", f"CHAT#{chat_id}"
+        for _ in range(_RETRIES):
+            item = await self._t.get(pk, sk)
+            if item is None:
+                raise NotFound("Chat not found.")
+            chat = decode(ChatRec, item["d"])
+            first = chat.message_count
+            chat.message_count = first + 2
+            chat.updated_at = datetime.now(UTC)  # the thread list orders by recent activity
+            if not chat.title:
+                chat.title = " ".join(str(user.content.get("text", "")).split())[:title_chars]
+            expr, names, values = _set_expr({"d": encode(chat), "ver": int(item["ver"]) + 1})
+            names["#ver"] = "ver"
+            values[":seen"] = int(item["ver"])
+            ops: list[dict[str, Any]] = [
+                {
+                    "update": {
+                        "pk": pk,
+                        "sk": sk,
+                        "expression": expr,
+                        "names": names,
+                        "values": values,
+                        "condition": "#ver = :seen",  # also what serialises seq between concurrent turns
+                    }
+                }
+            ]
+            for offset, msg in enumerate((user, assistant), start=1):
+                msg.seq = first + offset
+                msg.chat_id = chat_id
+                ops.append(
+                    {
+                        "put": {
+                            "item": {
+                                "PK": pk,
+                                "SK": self._msg_sk(chat_id, msg.seq),
+                                "d": encode(msg),
+                            },
+                            "condition": "attribute_not_exists(PK)",
+                        }
+                    }
+                )
+            try:
+                await self._t.transact(ops)
+            except ConditionFailed:
+                continue
+            return first + 2
+        raise StoreUnavailable("The chat is being updated too often; try again.")
+
+    # --- exports ----------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _artifact_attrs(rec: ArtifactRec) -> dict[str, Any]:
+        # `ARTIFACTS` is the expiry index; `ttl` only bounds storage (the sweeper deletes explicitly first)
+        return {"GSI3PK": "ARTIFACTS", "GSI3SK": ts(rec.expires_at), "ttl": _epoch(rec.expires_at)}
+
+    async def _artifact_project(self, artifact_id: str) -> str | None:
+        pointer = await self._t.get(f"A#{artifact_id}", "META")
+        return None if pointer is None else str(pointer["project_id"])
+
+    async def pending_artifact(
+        self, project_id: str, kind: str, chat_id: str | None, since: datetime
+    ) -> ArtifactRec | None:
+        items = await self._t.query(f"P#{project_id}", sk_prefix="ART#", consistent=True)
+        for item in items:
+            rec = decode(ArtifactRec, item["d"])
+            if (
+                rec.kind == kind
+                and rec.chat_id == chat_id
+                and rec.status == "pending"
+                and rec.created_at > since
+            ):
+                return rec
+        return None
+
+    async def add_artifact(self, rec: ArtifactRec, *, reuse_since: datetime) -> ArtifactRec:
+        project = await self.get_project(rec.project_id)
+        if project is None or project.deleting_at is not None:
+            raise NotFound("Project not found.")
+        # shortcut: two simultaneous requests can both create a pending export (Postgres serialises them);
+        # both are valid and the per-project export rate limit bounds the cost.
+        raced = await self.pending_artifact(rec.project_id, rec.kind, rec.chat_id, reuse_since)
+        if raced is not None:
+            return raced
+        pk = f"P#{rec.project_id}"
+        item = {"PK": pk, "SK": f"ART#{rec.id}", "d": encode(rec), "ver": 1, **self._artifact_attrs(rec)}
+        try:
+            await self._t.transact(
+                [
+                    _alive(pk),
+                    {"put": {"item": item, "condition": "attribute_not_exists(PK)"}},
+                    {"put": {"item": {"PK": f"A#{rec.id}", "SK": "META", "project_id": rec.project_id}}},
+                ]
+            )
+        except ConditionFailed as exc:
+            raise NotFound("Project not found.") from exc
+        return rec
+
+    async def get_artifact(self, artifact_id: str) -> ArtifactRec | None:
+        project_id = await self._artifact_project(artifact_id)
+        item = None if project_id is None else await self._t.get(f"P#{project_id}", f"ART#{artifact_id}")
+        return None if item is None else decode(ArtifactRec, item["d"])
+
+    async def artifacts_of_project(self, project_id: str) -> list[ArtifactRec]:
+        items = await self._t.query(f"P#{project_id}", sk_prefix="ART#", consistent=True)
+        recs = [decode(ArtifactRec, i["d"]) for i in items]
+        return sorted(recs, key=lambda r: r.created_at, reverse=True)
+
+    async def update_artifact(self, artifact_id: str, fn: Mutator) -> ArtifactRec:
+        project_id = await self._artifact_project(artifact_id)
+        if project_id is None:
+            raise NotFound("Export not found.")
+        return await self._mutate(f"P#{project_id}", f"ART#{artifact_id}", ArtifactRec, fn, label="Export")
+
+    async def delete_artifact(self, artifact_id: str) -> None:
+        project_id = await self._artifact_project(artifact_id)
+        if project_id is not None:
+            await self._t.delete(f"P#{project_id}", f"ART#{artifact_id}")
+        await self._t.delete(f"A#{artifact_id}", "META")
+
+    async def _artifacts_from_index(self, keys: list[dict[str, Any]]) -> list[ArtifactRec]:
+        out: list[ArtifactRec] = []
+        for k in keys:
+            item = await self._t.get(k["PK"], k["SK"])
+            if item is not None:
+                out.append(decode(ArtifactRec, item["d"]))
+        return out
+
+    async def expired_artifacts(self, now: datetime, limit: int) -> list[ArtifactRec]:
+        keys = await self._t.query("ARTIFACTS", sk_lt=ts(now), index="GSI3", limit=limit)
+        return await self._artifacts_from_index(keys)
+
+    async def stale_pending_artifacts(
+        self, *, created_before: datetime, now: datetime, limit: int
+    ) -> list[ArtifactRec]:
+        # Live artifacts are bounded by their TTL and the per-project rate limit, so reading the whole
+        # (not yet expired) part of the index is small. shortcut: a very large export backlog would need a
+        # pending-only index.
+        keys = await self._t.query("ARTIFACTS", sk_between=(ts(now), "9"), index="GSI3")
+        out: list[ArtifactRec] = []
+        for rec in await self._artifacts_from_index(keys):
+            if rec.status != "pending" or rec.created_at > created_before:
+                continue
+            project = await self.get_project(rec.project_id)
+            if project is not None and project.deleting_at is None:
+                out.append(rec)
+            if len(out) >= limit:
+                break
+        return out

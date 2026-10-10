@@ -38,8 +38,9 @@ def steps(args: argparse.Namespace) -> list[tuple[str, list[str], Path]]:
             ("unit + security + contract tests", [*uv, "pytest"], BACKEND),
             ("migrations in sync", [*uv, "alembic", "check"], BACKEND),
         ]
-        if (BACKEND / "src" / "unfold" / "evaluation" / "offline.py").exists():
-            out.append(("offline evals (gated)", [*uv, "python", "-m", "unfold.evaluation.offline", "--gate"], BACKEND))
+        out.append(
+            ("offline evals (gated)", [*uv, "python", "-m", "unfold.evaluation.offline", "--gate"], BACKEND)
+        )
         if args.integration:
             out.append(("integration tests", [*uv, "pytest", "-m", "integration"], BACKEND))
     if args.only in (None, "infra") and shutil.which("terraform"):

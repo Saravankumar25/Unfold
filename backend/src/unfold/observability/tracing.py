@@ -52,6 +52,9 @@ stage_duration = meter.create_histogram(
 llm_calls = meter.create_counter("unfold.llm.calls", description="LLM calls by provider/model/outcome")
 llm_tokens = meter.create_counter("unfold.llm.tokens", description="LLM tokens by provider/model/direction")
 retrieval_latency = meter.create_histogram("unfold.retrieval.latency", unit="s")
+chat_first_token = meter.create_histogram(
+    "unfold.chat.first_token", unit="s", description="Chat request start to first answer token"
+)
 tool_calls = meter.create_counter("unfold.agent.tool_calls", description="Agent tool calls by agent/tool")
 
 

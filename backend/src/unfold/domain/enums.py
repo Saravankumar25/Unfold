@@ -11,6 +11,14 @@ class TechnicalLevel(StrEnum):
     EXPERIENCED = "experienced"
 
 
+class Proof(StrEnum):
+    """How an edge or fact is known. `INFERRED` is never drawn as a diagram edge (investigation engine §4)."""
+
+    STATIC = "static"  # parser saw it: import, decorator route, class definition
+    HEURISTIC = "heuristic"  # name-resolution match or framework convention
+    INFERRED = "inferred"  # LLM or retrieval proximity only
+
+
 class InputType(StrEnum):
     GITHUB = "github"
     ZIP = "zip"
@@ -38,8 +46,10 @@ class JobStage(StrEnum):
     DISCOVERING_SUBSYSTEMS = "DISCOVERING_SUBSYSTEMS"
     INVESTIGATING_PROJECT = "INVESTIGATING_PROJECT"
     PLANNING_GUIDE = "PLANNING_GUIDE"
+    RESEARCHING_GUIDE = "RESEARCHING_GUIDE"
     GENERATING_GUIDE = "GENERATING_GUIDE"
     VERIFYING_GUIDE = "VERIFYING_GUIDE"
+    REVISING_GUIDE = "REVISING_GUIDE"
     GENERATING_VISUALS = "GENERATING_VISUALS"
     FINALIZING = "FINALIZING"
     READY = "READY"
@@ -83,8 +93,10 @@ PIPELINE: list[JobStage] = [
     JobStage.DISCOVERING_SUBSYSTEMS,
     JobStage.INVESTIGATING_PROJECT,
     JobStage.PLANNING_GUIDE,
+    JobStage.RESEARCHING_GUIDE,
     JobStage.GENERATING_GUIDE,
     JobStage.VERIFYING_GUIDE,
+    JobStage.REVISING_GUIDE,
     JobStage.GENERATING_VISUALS,
     JobStage.FINALIZING,
     JobStage.READY,
@@ -106,8 +118,10 @@ USER_LABELS: dict[JobStage, str] = {
     JobStage.DISCOVERING_SUBSYSTEMS: "Understanding major subsystems",
     JobStage.INVESTIGATING_PROJECT: "Reconstructing workflows",
     JobStage.PLANNING_GUIDE: "Planning your guide",
+    JobStage.RESEARCHING_GUIDE: "Researching each chapter",
     JobStage.GENERATING_GUIDE: "Writing your guide",
     JobStage.VERIFYING_GUIDE: "Verifying explanations",
+    JobStage.REVISING_GUIDE: "Fixing unsupported statements",
     JobStage.GENERATING_VISUALS: "Generating diagrams",
     JobStage.FINALIZING: "Finalizing Project Guide",
     JobStage.READY: "Ready",
@@ -210,7 +224,21 @@ class ChatMode(StrEnum):
 
 class ArtifactKind(StrEnum):
     GUIDE_PDF = "guide_pdf"
+    GUIDE_MD = "guide_md"
     CHAT_PDF = "chat_pdf"
+    CHAT_MD = "chat_md"
+
+    @property
+    def is_guide(self) -> bool:
+        return self in (ArtifactKind.GUIDE_PDF, ArtifactKind.GUIDE_MD)
+
+    @property
+    def extension(self) -> str:
+        return "pdf" if self in (ArtifactKind.GUIDE_PDF, ArtifactKind.CHAT_PDF) else "md"
+
+    @property
+    def content_type(self) -> str:
+        return "application/pdf" if self.extension == "pdf" else "text/markdown; charset=utf-8"
 
 
 class ArtifactStatus(StrEnum):

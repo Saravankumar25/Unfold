@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from unfold.core.logging import get_logger
+from unfold.domain.enums import Proof
 from unfold.graph.models import (
     INFERRED_NODE_LABELS,
     REL_TYPES,
@@ -263,6 +264,7 @@ def ir_graph(ir: ProjectIR) -> IRGraph:
                 "analyzer": "graph_builder",
                 "analysis_version": ver,
                 "evidence_ids": [],
+                "proof": "static",
             },
         )
     for r in ir.relationships:
@@ -275,6 +277,7 @@ def ir_graph(ir: ProjectIR) -> IRGraph:
             "analyzer": r.provenance.analyzer,
             "analysis_version": ver,
             "evidence_ids": list(r.provenance.evidence_ids)[:50],
+            "proof": Proof.INFERRED.value if r.provenance.source == "inferred" else r.proof.value,
         }
         for k, v in r.properties.items():
             scalar = _scalar(v)
@@ -423,6 +426,7 @@ class GraphBuilder:
                         "analyzer": rel.analyzer,
                         "analysis_version": "inferred",
                         "evidence_ids": list(rel.evidence_ids)[:50],
+                        "proof": Proof.INFERRED.value,
                     },
                 }
             )

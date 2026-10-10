@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api/endpoints";
 import type { JobOut, ProgressPage } from "@/lib/api/types";
-import { nextPollDelay, POLL_MS, useProjectProgress } from "@/lib/hooks/use-project-progress";
+import { nextPollDelay, POLL_MS, useProjectProgress, WAKING_MS } from "@/lib/hooks/use-project-progress";
 
 const job = (over: Partial<JobOut> = {}): JobOut => ({
   id: "j",
@@ -97,5 +97,67 @@ describe("useProjectProgress", () => {
     });
     expect(spy).toHaveBeenCalledTimes(2);
     expect(result.current.connection).toBe("live");
+  });
+
+  it("says the service is waking up when the first poll is slow, then goes live", async () => {
+    let answer: (page: ProgressPage) => void = () => undefined;
+    vi.spyOn(api, "getProgress").mockImplementation(
+      () => new Promise<ProgressPage>((resolve) => (answer = resolve)),
+    );
+    const { result } = renderHook(() => useProjectProgress("p1", job()));
+    expect(result.current.connection).toBe("connecting");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WAKING_MS + 1);
+    });
+    expect(result.current.connection).toBe("waking");
+
+    await act(async () => {
+      answer({ events: [], cursor: 0, job: job() });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.connection).toBe("live");
+  });
+
+  it("backs off between failed polls instead of hammering a cold service", async () => {
+    const spy = vi.spyOn(api, "getProgress").mockRejectedValue(new Error("offline"));
+    renderHook(() => useProjectProgress("p1", job()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0); // first call fails, the next is due in 2x POLL_MS
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 2 - 1);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1); // second call fails, the next is due in 4x POLL_MS
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 4 - 1);
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("waking vs failing", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps showing reconnecting, not waking, when the first poll fails fast", async () => {
+    vi.spyOn(api, "getProgress").mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useProjectProgress("p1", job()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.connection).toBe("reconnecting");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WAKING_MS + 1);
+    });
+    expect(result.current.connection).not.toBe("waking");
   });
 });

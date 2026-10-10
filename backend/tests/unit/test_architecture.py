@@ -112,3 +112,21 @@ def test_infrastructure_sdks_only_in_adapters() -> None:
             root = imp.split(".")[0]
             if root in _ADAPTER_SDKS:
                 assert mod in _ADAPTER_SDKS[root], f"{mod} imports {imp}; go through unfold.ports"
+
+
+def test_evaluation_tooling_is_not_imported_by_production_code() -> None:
+    """`unfold.evaluation` holds scripted models and in-memory stores: test tooling, never a runtime path."""
+    for mod, imports in MODULES.items():
+        if _pkg(mod) == "evaluation":
+            continue
+        for imp in imports:
+            assert not imp.startswith("unfold.evaluation"), f"{mod} imports {imp}"
+
+
+def test_chat_and_exports_reach_models_only_through_the_gateway_contract() -> None:
+    for mod, imports in MODULES.items():
+        if _pkg(mod) in {"chat", "exports", "cleanup"}:
+            for imp in imports:
+                assert imp != "unfold.llm.gateway" and not imp.startswith("unfold.llm.providers"), (
+                    f"{mod} imports {imp}"
+                )

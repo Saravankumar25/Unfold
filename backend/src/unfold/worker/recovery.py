@@ -1,4 +1,4 @@
-"""Re-enqueue jobs whose worker is gone (API restart, crashed host); the AWS sweeper calls it on a schedule."""
+"""Re-enqueue jobs whose worker is gone (API restart, crashed host). One step of `cleanup.sweeper.sweep`."""
 
 from __future__ import annotations
 

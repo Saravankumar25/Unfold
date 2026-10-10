@@ -1,0 +1,270 @@
+{
+ "project": "fastapi_rag",
+ "commit_sha": null,
+ "files": {
+  ".env.example": 5,
+  ".github/workflows/ci.yml": 35,
+  "Dockerfile": 9,
+  "README.md": 30,
+  "app/__init__.py": 0,
+  "app/api/__init__.py": 0,
+  "app/api/deps.py": 22,
+  "app/api/routes/__init__.py": 10,
+  "app/api/routes/documents.py": 50,
+  "app/api/routes/health.py": 11,
+  "app/api/routes/query.py": 21,
+  "app/core/__init__.py": 0,
+  "app/core/config.py": 34,
+  "app/core/logging.py": 13,
+  "app/db/__init__.py": 0,
+  "app/db/models.py": 50,
+  "app/db/session.py": 8,
+  "app/main.py": 40,
+  "app/schemas.py": 40,
+  "app/services/__init__.py": 0,
+  "app/services/chunking.py": 29,
+  "app/services/embeddings.py": 23,
+  "app/services/ingestion.py": 82,
+  "app/services/llm.py": 47,
+  "app/services/retriever.py": 71,
+  "app/services/vector_store.py": 35,
+  "app/workers/__init__.py": 0,
+  "app/workers/tasks.py": 33,
+  "docker-compose.yml": 57,
+  "migrations/versions/0001_initial.py": 35,
+  "pyproject.toml": 29,
+  "tests/test_api.py": 16,
+  "tests/test_chunking.py": 14
+ },
+ "symbols": [
+  "Answer",
+  "Base",
+  "Chunk",
+  "Citation",
+  "DEV_OPENAI_API_KEY",
+  "Document",
+  "DocumentOut",
+  "DocumentStatus",
+  "HybridRetriever",
+  "IngestionService",
+  "LLMClient",
+  "QueryLog",
+  "QueryRequest",
+  "QueryResponse",
+  "RRF_K",
+  "RetrievedChunk",
+  "SYSTEM_PROMPT",
+  "SessionLocal",
+  "Settings",
+  "TextChunk",
+  "VectorStore",
+  "WorkerSettings",
+  "__init__",
+  "_load_chunks",
+  "_make_chunk",
+  "_model",
+  "answer",
+  "answer_query",
+  "api_router",
+  "app",
+  "build_prompt",
+  "client",
+  "configure_logging",
+  "create_app",
+  "delete_document",
+  "dense_search",
+  "down_revision",
+  "downgrade",
+  "embed_query",
+  "embed_texts",
+  "engine",
+  "ensure_collection",
+  "extract_text",
+  "get_db",
+  "get_document",
+  "get_queue",
+  "get_settings",
+  "health",
+  "ingest",
+  "ingest_document",
+  "lexical_search",
+  "lifespan",
+  "list_documents",
+  "logger",
+  "reciprocal_rank_fusion",
+  "register_upload",
+  "revision",
+  "router",
+  "search",
+  "search_vectors",
+  "split_text",
+  "startup",
+  "test_health",
+  "test_query_validation",
+  "test_rrf_prefers_items_ranked_by_both",
+  "test_split_text_overlaps",
+  "upgrade",
+  "upload_document",
+  "upsert_chunks"
+ ],
+ "components": [
+  {
+   "name": "api",
+   "kind": "service",
+   "aliases": []
+  },
+  {
+   "name": "postgres",
+   "kind": "service",
+   "aliases": []
+  },
+  {
+   "name": "qdrant",
+   "kind": "service",
+   "aliases": []
+  },
+  {
+   "name": "redis",
+   "kind": "service",
+   "aliases": []
+  },
+  {
+   "name": "worker",
+   "kind": "service",
+   "aliases": []
+  },
+  {
+   "name": "PostgreSQL",
+   "kind": "datastore",
+   "aliases": []
+  },
+  {
+   "name": "arq",
+   "kind": "queue",
+   "aliases": []
+  },
+  {
+   "name": "app",
+   "kind": "module",
+   "aliases": [
+    "app"
+   ]
+  },
+  {
+   "name": "app/api",
+   "kind": "module",
+   "aliases": [
+    "app.api"
+   ]
+  },
+  {
+   "name": "app/api/routes",
+   "kind": "module",
+   "aliases": [
+    "app.api.routes"
+   ]
+  },
+  {
+   "name": "app/core",
+   "kind": "module",
+   "aliases": [
+    "app.core"
+   ]
+  },
+  {
+   "name": "app/db",
+   "kind": "module",
+   "aliases": [
+    "app.db"
+   ]
+  },
+  {
+   "name": "app/services",
+   "kind": "module",
+   "aliases": [
+    "app.services"
+   ]
+  },
+  {
+   "name": "app/workers",
+   "kind": "module",
+   "aliases": [
+    "app.workers"
+   ]
+  }
+ ],
+ "entry_points": [
+  {
+   "name": "GET /documents",
+   "kind": "endpoint",
+   "aliases": [
+    "/documents",
+    "list_documents"
+   ]
+  },
+  {
+   "name": "POST /documents",
+   "kind": "endpoint",
+   "aliases": [
+    "/documents",
+    "upload_document"
+   ]
+  },
+  {
+   "name": "DELETE /documents/{document_id}",
+   "kind": "endpoint",
+   "aliases": [
+    "/documents/{document_id}",
+    "delete_document"
+   ]
+  },
+  {
+   "name": "GET /documents/{document_id}",
+   "kind": "endpoint",
+   "aliases": [
+    "/documents/{document_id}",
+    "get_document"
+   ]
+  },
+  {
+   "name": "GET /health",
+   "kind": "endpoint",
+   "aliases": [
+    "/health",
+    "health"
+   ]
+  },
+  {
+   "name": "POST /query",
+   "kind": "endpoint",
+   "aliases": [
+    "/query",
+    "answer_query"
+   ]
+  },
+  {
+   "name": "app/main.py",
+   "kind": "entrypoint_file",
+   "aliases": []
+  },
+  {
+   "name": "app/workers/tasks.py",
+   "kind": "entrypoint_file",
+   "aliases": []
+  }
+ ],
+ "counts": {
+  "ai_components": 6,
+  "data_stores": 3,
+  "dependencies": 18,
+  "endpoints": 6,
+  "files": 33,
+  "frameworks": 8,
+  "infrastructure": 3,
+  "modules": 9,
+  "queues": 1,
+  "schemas": 12,
+  "services": 5,
+  "symbols": 78
+ }
+}

@@ -6,8 +6,7 @@ import pytest
 
 from unfold.domain.enums import ClaimKind, ClaimStatus
 from unfold.domain.models import ClaimRecord
-from unfold.guide.generate import grade_claims, normalise_plan
-from unfold.guide.models import GuidePlan, GuideSectionPlan
+from unfold.guide.generate import grade_claims
 from unfold.repo_intel.analyzers.config import ConfigAnalyzer
 from unfold.repo_intel.detect import detect
 from unfold.repo_intel.models import FileAnalysis, ImportRef, InventoryFile
@@ -113,16 +112,6 @@ def test_claims_are_graded_against_the_cited_text_only() -> None:
     ]
     assert quality["claims"] == 6 and quality["verified"] == 1 and quality["unsupported"] == 2
     assert quality["grounded_ratio"] == pytest.approx(0.2)
-
-
-def test_plan_normalisation_makes_keys_unique_and_rejects_tiny_plans() -> None:
-    def sec(key: str) -> GuideSectionPlan:
-        return GuideSectionPlan(key=key, title="Same Title", kind="core", purpose="p", target_minutes=3)
-
-    plan = normalise_plan(GuidePlan(estimated_read_minutes=1, sections=[sec(""), sec(""), sec("Overview!")]))
-    assert [s.key for s in plan.sections] == ["same-title", "same-title-2", "overview"]
-    with pytest.raises(Exception, match="at least"):
-        normalise_plan(GuidePlan(estimated_read_minutes=1, sections=[sec("a")]))
 
 
 # --- hostile input: nothing here may hang or fail the job --------------------------------------------------

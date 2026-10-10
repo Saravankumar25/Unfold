@@ -24,14 +24,17 @@ _DAY = 86_400
 _KEY_REFRESH_S = 60.0
 
 
+def usage_key(job_id: str) -> str:
+    """Counter key of one job's (or chat's) usage; cleanup deletes it with the project."""
+    return f"U#{job_id}"
+
+
 class CounterUsageStore:
     def __init__(self, counters: CounterStore, *, ttl_seconds: int = USAGE_TTL_SECONDS) -> None:
         self._c = counters
         self._ttl = ttl_seconds
 
-    @staticmethod
-    def _key(job_id: str) -> str:
-        return f"U#{job_id}"
+    _key = staticmethod(usage_key)
 
     async def admit(self, job_id: str, *, soft: int, hard: int, priority: int, tokens: int) -> str | None:
         cur = await self._c.get(self._key(job_id))

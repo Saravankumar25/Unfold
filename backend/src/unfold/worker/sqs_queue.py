@@ -1,7 +1,7 @@
 """`JobQueue` on SQS (ADR 0011).
 
-Sends `{"type": "analysis"|"cleanup", "ref": <id>, "attempt": n}` to the jobs queue; the dispatcher Lambda turns
-analysis messages into Fargate tasks. Delivery is at-least-once and a duplicate is harmless: the job claim is a
+Sends `{"type": "analysis"|"export"|"cleanup", "ref": <id>, "attempt": n}` to the jobs queue; the dispatcher
+Lambda turns analysis and export messages into Fargate tasks. Delivery is at-least-once and a duplicate is harmless: the job claim is a
 conditional update and RunTask carries the message id as its client token. A failed send raises a typed error;
 the caller leaves the job `queued` and the sweeper re-sends it (the outbox reconciliation, ADR 0011).
 """
@@ -55,6 +55,9 @@ class SqsJobQueue(JobQueue):
 
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         await self._send({"type": "cleanup", "ref": project_id}, None)
+
+    async def enqueue_export(self, export_id: str, *, defer_s: float | None = None) -> None:
+        await self._send({"type": "export", "ref": export_id}, defer_s)
 
     async def _send(self, body: dict[str, Any], defer_s: float | None) -> None:
         delay = max(0, min(MAX_DELAY_SECONDS, int(defer_s or 0)))

@@ -13,13 +13,37 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec, SessionRec, SummaryRec
+from unfold.domain.records import (
+    ArtifactRec,
+    ChatMessageRec,
+    ChatRec,
+    DiagramRec,
+    JobRec,
+    ProjectRec,
+    SectionRec,
+    SessionRec,
+    SummaryRec,
+)
 from unfold.indexing.models import Chunk
 
 
 def project_prefix(project_id: str) -> str:
     """Key prefix under which every blob of one project lives (cleanup deletes by this prefix)."""
     return f"projects/{project_id}/"
+
+
+# Rate-limit keys. Per-session and per-project keys are removed with their owner (cleanup); per-IP and global
+# counters are fixed windows that carry no owner and expire by TTL alone.
+SESSION_RATE_BUCKETS = ("projects", "chat")
+PROJECT_RATE_BUCKETS = ("export", "regenerate")
+
+
+def session_rate_key(bucket: str, session_id: object) -> str:
+    return f"{bucket}:{session_id}"
+
+
+def project_rate_key(bucket: str, project_id: object) -> str:
+    return f"{bucket}:project:{project_id}"
 
 
 class BlobStore(Protocol):
@@ -31,6 +55,10 @@ class BlobStore(Protocol):
     async def get_bytes(self, key: str) -> bytes: ...
     async def get_file(self, key: str, path: Path) -> Path: ...
     async def delete_prefix(self, prefix: str) -> int: ...
+    async def presigned_get_url(self, key: str, expires_s: int, *, filename: str) -> str:
+        """A time-limited URL a browser can GET directly (S3: presigned GetObject)."""
+        ...
+
     async def ping(self) -> None: ...
 
 
@@ -39,6 +67,7 @@ class JobQueue(Protocol):
 
     async def enqueue_analysis(self, job_id: str, attempt: int, *, defer_s: float | None = None) -> None: ...
     async def enqueue_project_cleanup(self, project_id: str) -> None: ...
+    async def enqueue_export(self, export_id: str, *, defer_s: float | None = None) -> None: ...
     async def aclose(self) -> None: ...
 
 
@@ -107,6 +136,7 @@ class CounterStore(Protocol):
         ttl_seconds: int = 0,
     ) -> dict[str, int] | None: ...
     async def get(self, key: str) -> dict[str, int]: ...
+    async def delete(self, keys: Sequence[str]) -> int: ...
 
 
 # A mutator edits the record in place; returning False means "nothing changed, do not write". It may run more
@@ -141,13 +171,32 @@ class ControlStore(Protocol):
         self, job: JobRec, *, max_active_per_session: int = 0, max_queued_global: int = 0
     ) -> None: ...
     async def projects_of_session(self, session_id: str) -> list[tuple[ProjectRec, JobRec | None]]: ...
-    async def expired_projects(self, now: datetime, limit: int) -> list[ProjectRec]: ...
+    async def expired_projects(self, now: datetime, limit: int) -> list[ProjectRec]:
+        """Live projects (no delete marker yet) whose `expires_at` has passed."""
+        ...
+
+    async def deleting_projects(self, limit: int) -> list[ProjectRec]:
+        """Projects carrying the delete marker: the sweeper finishes their cleanup."""
+        ...
+
     async def delete_project_data(self, project_id: str) -> int:
         """Every record of the project except progress events (the `ProgressStore` owns those). Idempotent."""
         ...
 
     async def get_job(self, job_id: str) -> JobRec | None: ...
-    async def latest_job(self, project_id: str) -> JobRec | None: ...
+    async def latest_job(self, project_id: str, kind: str | None = None) -> JobRec | None:
+        """The newest job of the project, optionally of one `kind` (analysis | regenerate)."""
+        ...
+
+    async def jobs_of_project(self, project_id: str) -> list[JobRec]: ...
+    async def add_regeneration(
+        self, job: JobRec, *, max_active_per_session: int = 0, max_queued_global: int = 0
+    ) -> tuple[JobRec, bool]:
+        """One chapter regeneration per project at a time. Returns (job, True) when `job` was created and
+        (running job, False) when one is already queued or running. Raises `NotFound` for a missing or deleting
+        project and `RateLimited` over a cap (same caps as `add_job`)."""
+        ...
+
     async def update_job(self, job_id: str, fn: Mutator) -> JobRec: ...
     async def recoverable_jobs(
         self, *, queued_before: datetime, heartbeat_before: datetime, limit: int
@@ -174,6 +223,55 @@ class ControlStore(Protocol):
     async def replace_diagrams(self, project_id: str, rows: Sequence[DiagramRec]) -> None: ...
     async def diagrams(self, project_id: str, kind: str | None = None) -> list[DiagramRec]: ...
     async def get_diagram(self, project_id: str, diagram_id: str) -> DiagramRec | None: ...
+    # chats (messages are written as whole turns; `message_count` and `seq` are the store's)
+    async def create_chat(self, chat: ChatRec, *, max_per_project: int) -> None:
+        """Atomic. Raises `Conflict` at the per-project cap and `NotFound` for a missing or deleting project."""
+        ...
+
+    async def get_chat(self, chat_id: str) -> ChatRec | None: ...
+    async def chats_of_project(self, project_id: str) -> list[ChatRec]:
+        """Most recently active first."""
+        ...
+
+    async def chat_messages(
+        self, chat_id: str, *, after_seq: int = 0, last: int | None = None
+    ) -> list[ChatMessageRec]:
+        """Ascending by seq. `after_seq` keeps seq > it; `last` keeps the final N."""
+        ...
+
+    async def append_turn(
+        self, chat_id: str, user: ChatMessageRec, assistant: ChatMessageRec, *, title_chars: int
+    ) -> int:
+        """Write both messages with the next two seq values (one atomic step) and bump the chat's activity time;
+        an untitled chat takes the first `title_chars` of the question. Returns the assistant message's seq."""
+        ...
+
+    # exports
+    async def pending_artifact(
+        self, project_id: str, kind: str, chat_id: str | None, since: datetime
+    ) -> ArtifactRec | None:
+        """A pending artifact of the same kind (and chat) created after `since`."""
+        ...
+
+    async def add_artifact(self, rec: ArtifactRec, *, reuse_since: datetime) -> ArtifactRec:
+        """Insert, or return the pending one of the same kind and chat created after `reuse_since`. Raises
+        `NotFound` for a missing or deleting project."""
+        ...
+
+    async def get_artifact(self, artifact_id: str) -> ArtifactRec | None: ...
+    async def artifacts_of_project(self, project_id: str) -> list[ArtifactRec]:
+        """Newest first."""
+        ...
+
+    async def update_artifact(self, artifact_id: str, fn: Mutator) -> ArtifactRec: ...
+    async def delete_artifact(self, artifact_id: str) -> None: ...
+    async def expired_artifacts(self, now: datetime, limit: int) -> list[ArtifactRec]: ...
+    async def stale_pending_artifacts(
+        self, *, created_before: datetime, now: datetime, limit: int
+    ) -> list[ArtifactRec]:
+        """Pending, not yet expired, created before `created_before`, of projects without a delete marker."""
+        ...
+
     async def ping(self) -> None: ...
 
 

@@ -35,6 +35,7 @@ from unfold.api.schemas import (
     ProjectOut,
     UploadTicket,
 )
+from unfold.cleanup.service import mark_deleting
 from unfold.core.errors import Conflict, ErrorCode, InputError, NotFound, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import InputType, JobStage, JobStatus, TechnicalLevel
@@ -65,16 +66,23 @@ def job_out(job: JobRec) -> JobOut:
         error_message=str(detail.get("message")) if detail.get("message") else None,
         retryable=job.retryable,
         degraded=list((job.stage_progress or {}).get("degraded", [])),
+        kind=job.kind,
+        section_key=job.section_key,
         started_at=job.started_at,
         completed_at=job.completed_at,
     )
 
 
 async def latest_job(rt: Runtime, project_id: str) -> JobRec:
-    job = await rt.control.latest_job(project_id)
+    """The project's analysis job: a failed chapter regeneration never reads as a failed analysis."""
+    job = await rt.control.latest_job(project_id, "analysis")
     if job is None:  # a presigned upload that was never completed
         raise Conflict("The upload for this project was not completed.", code=ErrorCode.PROJECT_NOT_READY)
     return job
+
+
+async def latest_regeneration(rt: Runtime, project_id: str) -> JobRec | None:
+    return await rt.control.latest_job(project_id, "regenerate")
 
 
 async def _enforce_creation_limits(request: Request, rt: Runtime, session: CurrentSession) -> None:
@@ -302,7 +310,7 @@ async def complete_zip_upload(
     store = rt.objects
     if project.input_type != InputType.ZIP.value or not project.upload_object_key:
         raise Conflict("This project has no pending upload.")
-    existing = await rt.control.latest_job(project.id)
+    existing = await rt.control.latest_job(project.id, "analysis")
     if existing is not None:
         return ProjectCreated(project_id=project.id, job_id=existing.id)
     if not isinstance(store, UploadStore):
@@ -324,7 +332,7 @@ async def complete_zip_upload(
             max_queued_global=cfg.max_queued_jobs_global,
         )
     except Conflict:  # a concurrent complete won: one project, one job
-        winner = await rt.control.latest_job(project.id)
+        winner = await rt.control.latest_job(project.id, "analysis")
         if winner is None:
             raise
         return ProjectCreated(project_id=project.id, job_id=winner.id)
@@ -354,20 +362,19 @@ async def get_project(project_id: str, rt: RuntimeDep, session: SessionDep) -> P
     )
 
 
-@router.delete("/{project_id}", status_code=202)
+@router.delete("/{project_id}", status_code=202, response_model=dict[str, str])
 async def delete_project(
     project_id: str, request: Request, rt: RuntimeDep, session: SessionDep
 ) -> dict[str, str]:
     project = await owned_project(rt, session, project_id)
-
-    def tombstone(row: ProjectRec) -> bool:
-        # hidden from every read at once; the sweeper finishes the deletion if the cleanup message is lost
-        row.expires_at = datetime.now(UTC)
-        return True
-
-    await rt.control.update_project(project.id, tombstone)
+    # The marker is the durable part: from here every route 404s, and the sweeper finishes the cleanup even if
+    # the enqueue below is lost (API restart, queue outage).
+    await mark_deleting(rt, [project.id])
     queue: JobQueue = request.app.state.queue
-    await queue.enqueue_project_cleanup(project.id)
+    try:
+        await queue.enqueue_project_cleanup(project.id)
+    except UnfoldError as exc:
+        log.warning("project.cleanup_enqueue_failed", project_id=project.id, code=exc.code.value)
     return {"status": "deleting"}
 
 
@@ -383,5 +390,11 @@ async def project_progress(
     project = await owned_project(rt, session, project_id)
     events = await rt.progress.read_after(project.id, min(after, 2**63 - 1), limit=200)
     job = await latest_job(rt, project.id)
+    regen = await latest_regeneration(rt, project.id)
     items = [ProgressItem(seq=seq, **event) for seq, event in events]
-    return ProgressPage(events=items, cursor=events[-1][0] if events else after, job=job_out(job))
+    return ProgressPage(
+        events=items,
+        cursor=events[-1][0] if events else after,
+        job=job_out(job),
+        regeneration=job_out(regen) if regen else None,
+    )

@@ -25,6 +25,7 @@ from unfold.guide.models import GuideSection
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
+_INIT_DIRECTIVE = re.compile(r"%%\{.*?\}%%", re.S)  # an init directive can sit mid-line
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _CODE_SPAN = re.compile(r"`([^`\n]+)`")
 _BOLD = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
@@ -84,12 +85,12 @@ _HEADING = re.compile(r"^\s*(#{1,6})\s+(.*)$")
 
 def sanitize_mermaid(source: str) -> str:
     """Drop init/config directives and front-matter from untrusted Mermaid so nothing can reconfigure the renderer."""
-    lines = _clean(source).splitlines()
+    lines = _clean(source).lstrip().splitlines()
     if lines and lines[0].strip() == "---":
         end = next((i for i, ln in enumerate(lines[1:], start=1) if ln.strip() == "---"), None)
         lines = lines[end + 1 :] if end is not None else lines[1:]
     kept = [ln for ln in lines if not ln.lstrip().startswith("%%")]
-    return "\n".join(kept).strip()[:20_000]
+    return _INIT_DIRECTIVE.sub("", "\n".join(kept)).strip()[:20_000]
 
 
 def _mermaid_figure(source: str, caption: str | None = None) -> str:

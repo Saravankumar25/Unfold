@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from unfold.core.config import Settings
 from unfold.core.logging import get_logger
+from unfold.indexing.embeddings import length_order
 from unfold.indexing.errors import ModelUnavailable
 
 if TYPE_CHECKING:
@@ -25,17 +26,23 @@ RERANK_BATCH = 16
 
 class CrossEncoderReranker:
     def __init__(
-        self, model_name: str, cache_dir: str | None = None, *, batch_size: int = RERANK_BATCH
+        self,
+        model_name: str,
+        cache_dir: str | None = None,
+        *,
+        batch_size: int = RERANK_BATCH,
+        threads: int | None = None,
     ) -> None:
         self.model_name = model_name
         self.cache_dir = cache_dir
         self.batch_size = batch_size
+        self.threads = threads
         self._model: Any = None
         self._lock = threading.Lock()
 
     @classmethod
     def from_settings(cls, settings: Settings) -> CrossEncoderReranker:
-        return cls(settings.reranker_model, settings.model_cache_dir)
+        return cls(settings.reranker_model, settings.model_cache_dir, threads=settings.model_threads or None)
 
     def _load(self) -> Any:
         if self._model is not None:
@@ -45,7 +52,9 @@ class CrossEncoderReranker:
                 try:
                     from fastembed.rerank.cross_encoder import TextCrossEncoder
 
-                    self._model = TextCrossEncoder(model_name=self.model_name, cache_dir=self.cache_dir)
+                    self._model = TextCrossEncoder(
+                        model_name=self.model_name, cache_dir=self.cache_dir, threads=self.threads
+                    )
                 except Exception as exc:
                     raise ModelUnavailable(
                         f"Reranker model {self.model_name!r} could not be loaded: {type(exc).__name__}",
@@ -57,17 +66,19 @@ class CrossEncoderReranker:
     def _rerank_sync(self, query: str, texts: list[str]) -> list[float]:
         model = self._load()
         try:
-            scores = [float(s) for s in model.rerank(query, texts, batch_size=self.batch_size)]
+            order = length_order(texts)
+            ranked = model.rerank(query, [texts[i] for i in order], batch_size=self.batch_size)
+            got = [float(s) for s in ranked]
         except Exception as exc:
             raise ModelUnavailable(
                 f"Reranker inference failed: {type(exc).__name__}", detail={"model": self.model_name}
             ) from exc
-        if len(scores) != len(texts):
+        if len(got) != len(texts):
             raise ModelUnavailable(
                 "Reranker returned a score count that does not match the input.",
                 detail={"model": self.model_name},
             )
-        return scores
+        return [s for _, s in sorted(zip(order, got, strict=True))]
 
     async def rerank(self, query: str, texts: Sequence[str]) -> list[float]:
         """Relevance logits aligned with `texts` (higher = more relevant)."""

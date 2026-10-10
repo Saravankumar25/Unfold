@@ -1,0 +1,52 @@
+{
+  "repo": "fastapi_rag",
+  "retrieval": [
+    {"q": "Where is reciprocal rank fusion implemented?", "expect": ["app/services/retriever.py"]},
+    {"q": "How are documents split into overlapping chunks?", "expect": ["app/services/chunking.py"]},
+    {"q": "What does the Qdrant vector store wrapper do?", "expect": ["app/services/vector_store.py"]},
+    {"q": "Which background task ingests an uploaded document?", "expect": ["app/workers/tasks.py", "app/services/ingestion.py"]},
+    {"q": "How is the FastAPI application created and which routers are included?", "expect": ["app/main.py"]},
+    {"q": "How does the query endpoint answer a question?", "expect": ["app/api/routes/query.py"]},
+    {"q": "Which database models exist for documents and chunks?", "expect": ["app/db/models.py"]},
+    {"q": "Where are settings such as the Qdrant URL read from the environment?", "expect": ["app/core/config.py"]},
+    {"q": "How is the stack started with docker compose?", "expect": ["docker-compose.yml"]},
+    {"q": "What does the CI workflow run?", "expect": [".github/workflows/ci.yml"]},
+    {"q": "How does the LLM client produce citations?", "expect": ["app/services/llm.py"]}
+  ],
+  "claims": [
+    {"text": "`reciprocal_rank_fusion` fuses ranked id lists using the constant `RRF_K`", "kind": "project_fact", "cite": ["app/services/retriever.py"], "expect": "VERIFIED"},
+    {"text": "`split_text` splits text on paragraph boundaries and keeps an overlap between chunks", "kind": "project_fact", "cite": ["app/services/chunking.py"], "expect": "VERIFIED"},
+    {"text": "`VectorStore.search_vectors` queries Qdrant and returns chunk id and score pairs", "kind": "project_fact", "cite": ["app/services/vector_store.py"], "expect": "VERIFIED"},
+    {"text": "`ingest_document` is a worker task that calls `IngestionService`", "kind": "project_fact", "cite": ["app/workers/tasks.py"], "expect": "VERIFIED"},
+    {"text": "`answer_query` retrieves chunks with `HybridRetriever` and then calls `LLMClient`", "kind": "project_fact", "cite": ["app/api/routes/query.py"], "expect": "VERIFIED"},
+    {"text": "`RedisAnswerCache` stores answers under `answer_cache_key` before the retriever runs", "kind": "project_fact", "cite": ["app/services/retriever.py"], "expect": "INFERRED", "hallucinated": true},
+    {"text": "`rerank_with_cross_encoder` reorders the fused hits", "kind": "project_fact", "cite": ["app/services/retriever.py"], "expect": "INFERRED", "hallucinated": true},
+    {"text": "`split_text` is called by the ingestion service", "kind": "project_fact", "cite": [], "expect": "UNSUPPORTED"},
+    {"text": "`split_text` splits text into chunks", "kind": "project_fact", "cite": ["app/services/vector_store.py"], "expect": "INFERRED", "hallucinated": true},
+    {"text": "Lexical and dense search are kept independent so either can degrade alone", "kind": "inference", "cite": ["app/services/retriever.py"], "expect": "STRONGLY_INFERRED"},
+    {"text": "Consider caching query embeddings", "kind": "improvement", "cite": [], "expect": "PROPOSED"}
+  ],
+  "chat": [
+    "Where is reciprocal rank fusion implemented?",
+    "How are documents split into chunks?",
+    "What does the vector store do?",
+    "How does the query endpoint answer questions?"
+  ],
+  "relations": [
+    {"type": "HANDLES", "source": "answer_query", "target": "POST /query"},
+    {"type": "HANDLES", "source": "upload_document", "target": "POST /documents"},
+    {"type": "PUBLISHES_TO", "source": "upload_document", "target": "arq"},
+    {"type": "CONSUMES_FROM", "source": "worker", "target": "arq"},
+    {"type": "WRITES_TO", "source": "ingest", "target": "Chunk"},
+    {"type": "READS_FROM", "source": "_load_chunks", "target": "Chunk"},
+    {"type": "INHERITS", "source": "Document", "target": "Base"}
+  ],
+  "subsystems": {
+    "together": [
+      ["app/api/routes/documents.py", "app/api/routes/query.py"],
+      ["app/services/retriever.py", "app/services/vector_store.py"],
+      ["app/db/models.py", "app/db/session.py"]
+    ],
+    "apart": [["app/api/routes/query.py", "app/db/models.py"]]
+  }
+}

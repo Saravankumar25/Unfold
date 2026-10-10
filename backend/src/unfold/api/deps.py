@@ -13,8 +13,11 @@ from fastapi import Depends, Request
 from unfold.api import proxy_auth
 from unfold.core.errors import ErrorCode, NotFound, RateLimited, SessionError
 from unfold.core.ids import token_hash
-from unfold.domain.records import ProjectRec
+from unfold.domain.records import ChatRec, ProjectRec
+from unfold.ports import session_rate_key
 from unfold.runtime import Runtime
+
+API_PREFIX = "/api/v1"
 
 
 def get_runtime(request: Request) -> Runtime:
@@ -89,17 +92,34 @@ def parse_uuid(value: str) -> uuid.UUID:
 
 
 async def owned_project(rt: Runtime, session: CurrentSession, project_id: str) -> ProjectRec:
-    """404 (not 403) on foreign ids so project ids are not enumerable. Expired or deleted counts as missing."""
+    """404 (not 403) on foreign ids so project ids are not enumerable. Expired or deleting counts as missing."""
     row = await rt.control.get_project(str(parse_uuid(project_id)))
-    if row is None or row.session_id != session.id or row.expires_at <= datetime.now(UTC):
+    if (
+        row is None
+        or row.session_id != session.id
+        or row.deleting_at is not None
+        or row.expires_at <= datetime.now(UTC)
+    ):
         raise NotFound("Project not found.")
     return row
+
+
+async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tuple[ChatRec, ProjectRec]:
+    """The chat and its project; 404 unless the project is the session's and alive (same rule as projects)."""
+    chat = await rt.control.get_chat(str(parse_uuid(chat_id)))
+    if chat is None:
+        raise NotFound("Chat not found.")
+    try:
+        project = await owned_project(rt, session, chat.project_id)
+    except NotFound:
+        raise NotFound("Chat not found.") from None
+    return chat, project
 
 
 async def enforce_rate_limit(
     rt: Runtime, session: CurrentSession, bucket: str, limit: int, window_s: int
 ) -> None:
-    if not await rt.limiter.hit(f"{bucket}:{session.id}", limit, window_s):
+    if not await rt.limiter.hit(session_rate_key(bucket, session.id), limit, window_s):
         raise RateLimited(f"Too many requests; limit is {limit} per {window_s // 60 or 1} minute(s).")
 
 

@@ -1,0 +1,356 @@
+{
+ "ch:7876872e7e0314ff521e6dde": {
+  "path": "migrations/versions/0001_initial.py",
+  "start_line": 1,
+  "end_line": 12,
+  "text": "migrations/versions/0001_initial.py :: lines 1-12\n\"\"\"initial schema\n\nRevision ID: 0001\n\"\"\"\n\nimport sqlalchemy as sa\nfrom alembic import op\n\nrevision = \"0001\"\ndown_revision = None\n\n"
+ },
+ "ch:fc2b42a1372fc2585bd3442f": {
+  "path": "migrations/versions/0001_initial.py",
+  "start_line": 13,
+  "end_line": 30,
+  "text": "migrations/versions/0001_initial.py :: upgrade\ndef upgrade() -> None:\n    op.create_table(\n        \"documents\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"filename\", sa.String(512), nullable=False),\n        sa.Column(\"content_type\", sa.String(128), nullable=False),\n        sa.Column(\"status\", sa.String(32), nullable=False),\n        sa.Column(\"raw_text\", sa.Text, nullable=True),\n        sa.Column(\"created_at\", sa.DateTime(timezone=True), server_default=sa.func.now()),\n    )\n    op.create_table(\n        \"chunks\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"document_id\", sa.Integer, sa.ForeignKey(\"documents.id\", ondelete=\"CASCADE\")),\n        sa.Column(\"position\", sa.Integer),\n        sa.Column(\"text\", sa.Text),\n        sa.Column(\"token_count\", sa.Integer),\n    )"
+ },
+ "ch:9e3208698369738ef55ae5a6": {
+  "path": "migrations/versions/0001_initial.py",
+  "start_line": 33,
+  "end_line": 35,
+  "text": "migrations/versions/0001_initial.py :: downgrade\ndef downgrade() -> None:\n    op.drop_table(\"chunks\")\n    op.drop_table(\"documents\")"
+ },
+ "ch:3349a6db3a547788b131cf3d": {
+  "path": "app/core/config.py",
+  "start_line": 1,
+  "end_line": 10,
+  "text": "app/core/config.py :: lines 1-10\n\"\"\"Application settings loaded from the environment.\"\"\"\n\nfrom functools import lru_cache\n\nfrom pydantic_settings import BaseSettings, SettingsConfigDict\n\n# Local development fallback only. This value is intentionally fake and exists to exercise secret redaction.\nDEV_OPENAI_API_KEY = \"<REDACTED_SECRET>\"\n\n"
+ },
+ "ch:6f5cadadb69d26bd9564f302": {
+  "path": "app/core/config.py",
+  "start_line": 11,
+  "end_line": 28,
+  "text": "app/core/config.py :: Settings\nclass Settings(BaseSettings):\n    \"\"\"Runtime configuration for the API and the worker.\"\"\"\n\n    model_config = SettingsConfigDict(env_file=\".env\", extra=\"ignore\")\n\n    database_url: str = \"postgresql+asyncpg://docqa:<REDACTED_SECRET>@localhost:5432/docqa\"\n    redis_url: str = \"redis://localhost:6379/0\"\n    qdrant_url: str = \"http://localhost:6333\"\n    collection_name: str = \"docqa_chunks\"\n    openai_api_key: str = DEV_OPENAI_API_KEY\n    chat_model: str = \"gpt-4o-mini\"\n    embedding_model: str = \"sentence-transformers/all-MiniLM-L6-v2\"\n    embedding_dim: int = 384\n    chunk_size: int = 800\n    chunk_overlap: int = 120\n    top_k: int = 8\n    log_level: str = \"INFO\"\n    cors_origins: list[str] = [\"http://localhost:3000\"]"
+ },
+ "ch:4c68b86c8ad01105ca15c6d4": {
+  "path": "app/core/config.py",
+  "start_line": 31,
+  "end_line": 34,
+  "text": "app/core/config.py :: get_settings\n@lru_cache\ndef get_settings() -> Settings:\n    \"\"\"Return the cached settings instance.\"\"\"\n    return Settings()"
+ },
+ "ch:357233aa1e1a740550cda996": {
+  "path": "app/db/models.py",
+  "start_line": 1,
+  "end_line": 8,
+  "text": "app/db/models.py :: lines 1-8\n\"\"\"SQLAlchemy ORM models (PostgreSQL).\"\"\"\n\nfrom datetime import datetime\n\nfrom sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func\nfrom sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship\n\n"
+ },
+ "ch:1b1618e61b236003a82c349d": {
+  "path": "app/db/models.py",
+  "start_line": 9,
+  "end_line": 10,
+  "text": "app/db/models.py :: Base\nclass Base(DeclarativeBase):\n    pass"
+ },
+ "ch:5c9f84cc637412cd46043f22": {
+  "path": "app/db/models.py",
+  "start_line": 28,
+  "end_line": 39,
+  "text": "app/db/models.py :: Chunk\nclass Chunk(Base):\n    \"\"\"A retrievable slice of a document.\"\"\"\n\n    __tablename__ = \"chunks\"\n\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    document_id: Mapped[int] = mapped_column(ForeignKey(\"documents.id\", ondelete=\"CASCADE\"), index=True)\n    position: Mapped[int] = mapped_column(Integer)\n    text: Mapped[str] = mapped_column(Text)\n    token_count: <REDACTED_SECRET> = mapped_column(Integer)\n\n    document: Mapped[\"Document\"] = relationship(back_populates=\"chunks\")"
+ },
+ "ch:3e2a57608972ea1db27c499d": {
+  "path": "app/services/chunking.py",
+  "start_line": 13,
+  "end_line": 25,
+  "text": "app/services/chunking.py :: split_text\ndef split_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[TextChunk]:\n    \"\"\"Split text on paragraph boundaries into chunks of roughly `chunk_size` characters with overlap.\"\"\"\n    paragraphs = [p.strip() for p in text.split(\"\\n\\n\") if p.strip()]\n    chunks: list[TextChunk] = []\n    buffer = \"\"\n    for paragraph in paragraphs:\n        if len(buffer) + len(paragraph) > chunk_size and buffer:\n            chunks.append(_make_chunk(len(chunks), buffer))\n            buffer = buffer[-overlap:]\n        buffer = f\"{buffer}\\n\\n{paragraph}\" if buffer else paragraph\n    if buffer:\n        chunks.append(_make_chunk(len(chunks), buffer))\n    return chunks"
+ },
+ "ch:27ae002b509b29d1b1469cba": {
+  "path": "app/services/chunking.py",
+  "start_line": 28,
+  "end_line": 29,
+  "text": "app/services/chunking.py :: _make_chunk\ndef _make_chunk(position: int, text: str) -> TextChunk:\n    return TextChunk(position=position, text=text, token_count=<REDACTED_SECRET>"
+ },
+ "ch:c40b3f68beef9bef196d6634": {
+  "path": "app/services/embeddings.py",
+  "start_line": 10,
+  "end_line": 12,
+  "text": "app/services/embeddings.py :: _model\n@lru_cache\ndef _model() -> SentenceTransformer:\n    return SentenceTransformer(get_settings().embedding_model)"
+ },
+ "ch:193b5e0074c147562f6b3b78": {
+  "path": "app/services/ingestion.py",
+  "start_line": 17,
+  "end_line": 22,
+  "text": "app/services/ingestion.py :: extract_text\ndef extract_text(filename: str, data: bytes) -> str:\n    \"\"\"Extract plain text from a PDF or Markdown/plain-text upload.\"\"\"\n    if filename.lower().endswith(\".pdf\"):\n        reader = PdfReader(io.BytesIO(data))\n        return \"\\n\\n\".join(page.extract_text() or \"\" for page in reader.pages)\n    return data.decode(\"utf-8\", errors=\"replace\")"
+ },
+ "ch:b19c73c67f256457eb2a1527": {
+  "path": "app/services/ingestion.py",
+  "start_line": 25,
+  "end_line": 27,
+  "text": "app/services/ingestion.py :: IngestionService\nclass IngestionService:\n    \"\"\"Owns the document lifecycle in PostgreSQL and Qdrant.\"\"\"\n\n# members: (self, db: AsyncSession) -> None, (self, filename: str, data: bytes) -> Document, (self) -> list[Document], (self, document_id: int) -> Document | None, (self, document_id: int) -> int, (self, document_id: int) -> None"
+ },
+ "ch:7d7f10dca3acc7fa4d7fde37": {
+  "path": "app/services/ingestion.py",
+  "start_line": 28,
+  "end_line": 32,
+  "text": "app/services/ingestion.py :: IngestionService.__init__\n    def __init__(self, db: AsyncSession) -> None:\n        self.db = db\n        settings = get_settings()\n        self.settings = settings\n        self.store = VectorStore(settings.qdrant_url, settings.collection_name)"
+ },
+ "ch:8867c2ba3359c04406304b84": {
+  "path": "app/workers/tasks.py",
+  "start_line": 23,
+  "end_line": 24,
+  "text": "app/workers/tasks.py :: startup\nasync def startup(ctx: dict) -> None:\n    logger.info(\"worker starting\")"
+ },
+ "ch:86947122bd86a57ee01f12df": {
+  "path": "app/services/ingestion.py",
+  "start_line": 47,
+  "end_line": 49,
+  "text": "app/services/ingestion.py :: IngestionService.list_documents\n    async def list_documents(self) -> list[Document]:\n        result = await self.db.execute(select(Document).order_by(Document.created_at.desc()))\n        return list(result.scalars())"
+ },
+ "ch:24f5310bc8ad57fa2e72973e": {
+  "path": "app/services/ingestion.py",
+  "start_line": 51,
+  "end_line": 55,
+  "text": "app/services/ingestion.py :: IngestionService.get_document\n    async def get_document(self, document_id: int) -> Document | None:\n        result = await self.db.execute(\n            select(Document).options(selectinload(Document.chunks)).where(Document.id == document_id)\n        )\n        return result.scalar_one_or_none()"
+ },
+ "ch:877994c3891890b5d76e7bda": {
+  "path": "app/services/ingestion.py",
+  "start_line": 57,
+  "end_line": 74,
+  "text": "app/services/ingestion.py :: IngestionService.ingest\n    async def ingest(self, document_id: int) -> int:\n        \"\"\"Chunk, embed and index a pending document. Returns the number of chunks.\"\"\"\n        document = await self.get_document(document_id)\n        if document is None or not document.raw_text:\n            return 0\n        pieces = split_text(document.raw_text, self.settings.chunk_size, self.settings.chunk_overlap)\n        rows = [\n            Chunk(document_id=document.id, position=p.position, text=p.text, token_count=<REDACTED_SECRET>\n            for p in pieces\n        ]\n        self.db.add_all(rows)\n        await self.db.flush()\n        vectors = embed_texts([r.text for r in rows])\n        payloads = [{\"document_id\": document.id, \"position\": r.position} for r in rows]\n        await self.store.upsert_chunks([r.id for r in rows], vectors, payloads)\n        document.status = \"ready\"\n        await self.db.commit()\n        return len(rows)"
+ },
+ "ch:4f3fed1bd9b58b73cd85939a": {
+  "path": "app/services/ingestion.py",
+  "start_line": 76,
+  "end_line": 82,
+  "text": "app/services/ingestion.py :: IngestionService.delete_document\n    async def delete_document(self, document_id: int) -> None:\n        document = await self.get_document(document_id)\n        if document is None:\n            return\n        await self.store.delete_document(document_id)\n        await self.db.delete(document)\n        await self.db.commit()"
+ },
+ "ch:90a3d7d60669aa0e9b4c53f3": {
+  "path": "app/services/llm.py",
+  "start_line": 16,
+  "end_line": 19,
+  "text": "app/services/llm.py :: Answer\n@dataclass\nclass Answer:\n    text: str\n    citations: list[Citation] = field(default_factory=list)"
+ },
+ "ch:1d7bc7325f3e94113cd522e8": {
+  "path": "app/services/llm.py",
+  "start_line": 25,
+  "end_line": 28,
+  "text": "app/services/llm.py :: LLMClient.__init__\n    def __init__(self) -> None:\n        settings = get_settings()\n        self.client = AsyncOpenAI(api_key=settings.openai_api_key)\n        self.model = settings.chat_model"
+ },
+ "ch:5325f6c1b2559c3735b699c2": {
+  "path": "app/services/llm.py",
+  "start_line": 35,
+  "end_line": 47,
+  "text": "app/services/llm.py :: LLMClient.answer\n    async def answer(self, question: str, hits: list[RetrievedChunk]) -> Answer:\n        \"\"\"Ask the model for a grounded answer.\"\"\"\n        response = await self.client.chat.completions.create(\n            model=self.model,\n            temperature=0.1,\n            messages=[\n                {\"role\": \"system\", \"content\": SYSTEM_PROMPT},\n                {\"role\": \"user\", \"content\": self.build_prompt(question, hits)},\n            ],\n        )\n        text = response.choices[0].message.content or \"\"\n        citations = [Citation(chunk_id=h.chunk_id, document_id=h.document_id, score=h.score) for h in hits]\n        return Answer(text=text, citations=citations)"
+ },
+ "ch:0b2a7eb0a8139df1161acbb3": {
+  "path": "app/services/retriever.py",
+  "start_line": 1,
+  "end_line": 16,
+  "text": "app/services/retriever.py :: lines 1-16\n\"\"\"Hybrid retrieval: BM25 lexical + dense vector search fused with Reciprocal Rank Fusion.\"\"\"\n\nfrom dataclasses import dataclass\n\nfrom rank_bm25 import BM25Okapi\nfrom sqlalchemy import select\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.core.config import get_settings\nfrom app.db.models import Chunk\nfrom app.services.embeddings import embed_query\nfrom app.services.vector_store import VectorStore\n\nRRF_K = 60\n\n"
+ },
+ "ch:7ca3fc05287d682ae347fcbd": {
+  "path": "app/services/retriever.py",
+  "start_line": 34,
+  "end_line": 36,
+  "text": "app/services/retriever.py :: HybridRetriever\nclass HybridRetriever:\n    \"\"\"Combines BM25 over chunk text with Qdrant vector search.\"\"\"\n\n# members: (self, db: AsyncSession) -> None, (self) -> list[Chunk], (self, question: str, chunks: list[Chunk], limit: int) -> list[int], (self, question: str, limit: int) -> list[int], (self, question: str, top_k: int=8) -> list[RetrievedChunk]"
+ },
+ "ch:4cf5ce566aba56e09df4f079": {
+  "path": "app/services/retriever.py",
+  "start_line": 37,
+  "end_line": 40,
+  "text": "app/services/retriever.py :: HybridRetriever.__init__\n    def __init__(self, db: AsyncSession) -> None:\n        settings = get_settings()\n        self.db = db\n        self.store = VectorStore(settings.qdrant_url, settings.collection_name)"
+ },
+ "ch:30a5aaf4dd08583809270b8e": {
+  "path": "app/services/retriever.py",
+  "start_line": 42,
+  "end_line": 44,
+  "text": "app/services/retriever.py :: HybridRetriever._load_chunks\n    async def _load_chunks(self) -> list[Chunk]:\n        result = await self.db.execute(select(Chunk))\n        return list(result.scalars())"
+ },
+ "ch:89d81e6daa38f699f020653a": {
+  "path": "app/workers/tasks.py",
+  "start_line": 27,
+  "end_line": 33,
+  "text": "app/workers/tasks.py :: WorkerSettings\nclass WorkerSettings:\n    \"\"\"arq worker configuration.\"\"\"\n\n    functions = [ingest_document]\n    on_startup = startup\n    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)\n    max_jobs = 4"
+ },
+ "ch:fc3fd68ae88645b3d19dbbb2": {
+  "path": "app/services/retriever.py",
+  "start_line": 59,
+  "end_line": 71,
+  "text": "app/services/retriever.py :: HybridRetriever.search\n    async def search(self, question: str, top_k: int = 8) -> list[RetrievedChunk]:\n        \"\"\"Run both retrievers and fuse their rankings.\"\"\"\n        chunks = await self._load_chunks()\n        by_id = {c.id: c for c in chunks}\n        lexical = await self.lexical_search(question, chunks, top_k * 4)\n        dense = await self.dense_search(question, top_k * 4)\n        fused = reciprocal_rank_fusion([lexical, dense])\n        best = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:top_k]\n        return [\n            RetrievedChunk(chunk_id=i, document_id=by_id[i].document_id, text=by_id[i].text, score=s)\n            for i, s in best\n            if i in by_id\n        ]"
+ },
+ "ch:bfa9505bfe297b28c56ceac9": {
+  "path": "app/services/vector_store.py",
+  "start_line": 7,
+  "end_line": 9,
+  "text": "app/services/vector_store.py :: VectorStore\nclass VectorStore:\n    \"\"\"Stores and searches chunk embeddings in a Qdrant collection.\"\"\"\n\n# members: (self, url: str, collection: str) -> None, (self, dim: int) -> None, (self, ids: list[int], vectors: list[list[float]], payloads: list[dict]) -> None, (self, vector: list[float], limit: int) -> list[tuple[int, float]], (self, document_id: int) -> None"
+ },
+ "ch:f6999e5c5699bf8aeb4bbbc1": {
+  "path": "app/services/vector_store.py",
+  "start_line": 14,
+  "end_line": 19,
+  "text": "app/services/vector_store.py :: VectorStore.ensure_collection\n    async def ensure_collection(self, dim: int) -> None:\n        \"\"\"Create the collection if it does not exist.\"\"\"\n        if not await self.client.collection_exists(self.collection):\n            await self.client.create_collection(\n                self.collection, vectors_config=VectorParams(size=dim, distance=Distance.COSINE)\n            )"
+ },
+ "ch:74f0fed22fb89b3586d96ae9": {
+  "path": "app/services/vector_store.py",
+  "start_line": 31,
+  "end_line": 35,
+  "text": "app/services/vector_store.py :: VectorStore.delete_document\n    async def delete_document(self, document_id: int) -> None:\n        await self.client.delete(\n            self.collection,\n            points_selector={\"filter\": {\"must\": [{\"key\": \"document_id\", \"match\": {\"value\": document_id}}]}},\n        )"
+ },
+ "ch:8fd17c65d46d80167b2ec0fc": {
+  "path": "app/workers/tasks.py",
+  "start_line": 1,
+  "end_line": 13,
+  "text": "app/workers/tasks.py :: lines 1-13\n\"\"\"arq background worker: document ingestion jobs.\"\"\"\n\nimport logging\n\nfrom arq.connections import RedisSettings\n\nfrom app.core.config import get_settings\nfrom app.db.session import SessionLocal\nfrom app.services.ingestion import IngestionService\n\nlogger = logging.getLogger(__name__)\n\n"
+ },
+ "ch:b1ce9773526648318f6c073f": {
+  "path": "app/workers/tasks.py",
+  "start_line": 14,
+  "end_line": 20,
+  "text": "app/workers/tasks.py :: ingest_document\nasync def ingest_document(ctx: dict, document_id: int) -> int:\n    \"\"\"Chunk, embed and index one uploaded document.\"\"\"\n    async with SessionLocal() as session:\n        service = IngestionService(session)\n        count = await service.ingest(document_id)\n    logger.info(\"ingested document %s into %s chunks\", document_id, count)\n    return count"
+ },
+ "ch:abef5731deda7b10be7edf8a": {
+  "path": "app/api/deps.py",
+  "start_line": 1,
+  "end_line": 12,
+  "text": "app/api/deps.py :: lines 1-12\n\"\"\"Shared FastAPI dependencies.\"\"\"\n\nfrom collections.abc import AsyncIterator\n\nfrom arq import create_pool\nfrom arq.connections import ArqRedis, RedisSettings\nfrom sqlalchemy.ext.asyncio import AsyncSession\n\nfrom app.core.config import get_settings\nfrom app.db.session import SessionLocal\n\n"
+ },
+ "ch:f64334a4eb8c2730b66f82c3": {
+  "path": "app/api/deps.py",
+  "start_line": 13,
+  "end_line": 16,
+  "text": "app/api/deps.py :: get_db\nasync def get_db() -> AsyncIterator[AsyncSession]:\n    \"\"\"Yield a database session per request.\"\"\"\n    async with SessionLocal() as session:\n        yield session"
+ },
+ "ch:c9734fbd5d4654067154412c": {
+  "path": "app/api/deps.py",
+  "start_line": 19,
+  "end_line": 22,
+  "text": "app/api/deps.py :: get_queue\nasync def get_queue() -> ArqRedis:\n    \"\"\"Return an arq Redis pool used to enqueue background jobs.\"\"\"\n    settings = get_settings()\n    return await create_pool(RedisSettings.from_dsn(settings.redis_url))"
+ },
+ "ch:051836284a58fa6e9dc0aaae": {
+  "path": "app/api/routes/documents.py",
+  "start_line": 14,
+  "end_line": 26,
+  "text": "app/api/routes/documents.py :: upload_document\n@router.post(\"\", response_model=DocumentOut, status_code=202)\nasync def upload_document(\n    file: UploadFile = File(...),\n    db: AsyncSession = Depends(get_db),\n    queue: ArqRedis = Depends(get_queue),\n) -> DocumentOut:\n    \"\"\"Store the uploaded file and enqueue background ingestion.\"\"\"\n    if file.content_type not in (\"application/pdf\", \"text/markdown\", \"text/plain\"):\n        raise HTTPException(status_code=415, detail=\"Unsupported document type\")\n    service = IngestionService(db)\n    document = await service.register_upload(file.filename or \"upload\", await file.read())\n    await queue.enqueue_job(\"ingest_document\", document.id)\n    return DocumentOut.model_validate(document)"
+ },
+ "ch:f30739f0bb98c316408cda51": {
+  "path": "app/api/routes/documents.py",
+  "start_line": 29,
+  "end_line": 33,
+  "text": "app/api/routes/documents.py :: list_documents\n@router.get(\"\", response_model=list[DocumentOut])\nasync def list_documents(db: AsyncSession = Depends(get_db)) -> list[DocumentOut]:\n    \"\"\"List uploaded documents with their ingestion status.\"\"\"\n    service = IngestionService(db)\n    return [DocumentOut.model_validate(d) for d in await service.list_documents()]"
+ },
+ "ch:32d7523e940b5cea600ea6e3": {
+  "path": "app/api/routes/documents.py",
+  "start_line": 36,
+  "end_line": 43,
+  "text": "app/api/routes/documents.py :: get_document\n@router.get(\"/{document_id}\", response_model=DocumentStatus)\nasync def get_document(document_id: int, db: AsyncSession = Depends(get_db)) -> DocumentStatus:\n    \"\"\"Return one document and its chunk count.\"\"\"\n    service = IngestionService(db)\n    document = await service.get_document(document_id)\n    if document is None:\n        raise HTTPException(status_code=404, detail=\"Document not found\")\n    return DocumentStatus(id=document.id, status=document.status, chunk_count=len(document.chunks))"
+ },
+ "ch:894c21b0b74c20edd2bf2088": {
+  "path": "app/api/routes/documents.py",
+  "start_line": 46,
+  "end_line": 50,
+  "text": "app/api/routes/documents.py :: delete_document\n@router.delete(\"/{document_id}\", status_code=204)\nasync def delete_document(document_id: int, db: AsyncSession = Depends(get_db)) -> None:\n    \"\"\"Delete a document, its chunks and its vectors.\"\"\"\n    service = IngestionService(db)\n    await service.delete_document(document_id)"
+ },
+ "ch:b65558982cc0d1dbadcc94a2": {
+  "path": "app/api/routes/health.py",
+  "start_line": 8,
+  "end_line": 11,
+  "text": "app/api/routes/health.py :: health\n@router.get(\"/health\")\nasync def health() -> dict[str, str]:\n    \"\"\"Report that the API process is alive.\"\"\"\n    return {\"status\": \"ok\"}"
+ },
+ "ch:bcc6a50cf804d5fe5256ff9e": {
+  "path": "app/api/routes/query.py",
+  "start_line": 14,
+  "end_line": 21,
+  "text": "app/api/routes/query.py :: answer_query\n@router.post(\"\", response_model=QueryResponse)\nasync def answer_query(request: QueryRequest, db: AsyncSession = Depends(get_db)) -> QueryResponse:\n    \"\"\"Retrieve relevant chunks with hybrid search and ask the LLM for a cited answer.\"\"\"\n    retriever = HybridRetriever(db)\n    hits = await retriever.search(request.question, top_k=request.top_k)\n    llm = LLMClient()\n    answer = await llm.answer(request.question, hits)\n    return QueryResponse(answer=answer.text, citations=answer.citations)"
+ },
+ "ch:8b7ec04f77e9aa2144159988": {
+  "path": ".github/workflows/ci.yml",
+  "start_line": 1,
+  "end_line": 1,
+  "text": ".github/workflows/ci.yml :: name\nname: ci"
+ },
+ "ch:a29f2210a3d6e8d318241ab4": {
+  "path": ".github/workflows/ci.yml",
+  "start_line": 3,
+  "end_line": 6,
+  "text": ".github/workflows/ci.yml :: on\non:\n  push:\n    branches: [main]\n  pull_request:"
+ },
+ "ch:73f4009e07c96a4afbfcd330": {
+  "path": ".github/workflows/ci.yml",
+  "start_line": 8,
+  "end_line": 35,
+  "text": ".github/workflows/ci.yml :: jobs\njobs:\n  test:\n    runs-on: ubuntu-latest\n    services:\n      postgres:\n        image: postgres:16\n        env:\n          POSTGRES_PASSWORD: docqa\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: \"3.12\"\n      - run: pip install -e \".[dev]\"\n      - run: ruff check app tests\n      - run: pytest -q\n\n  image:\n    runs-on: ubuntu-latest\n    needs: test\n    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v4\n      - uses: docker/setup-buildx-action@v3\n      - uses: docker/build-push-action@v5\n        with:\n          push: false\n          tags: docqa/api:latest"
+ },
+ "ch:f5b66b1594e1472e3aa3fa03": {
+  "path": "README.md",
+  "start_line": 1,
+  "end_line": 6,
+  "text": "README.md :: DocQA \u2014 retrieval-augmented question answering over your documents\n# DocQA \u2014 retrieval-augmented question answering over your documents\n\nDocQA ingests PDF and Markdown documents, splits them into overlapping chunks, embeds them and stores the vectors in\nQdrant. Questions are answered by a hybrid retriever (BM25 + dense vectors fused with Reciprocal Rank Fusion) and an\nLLM that must cite the retrieved chunks.\n"
+ },
+ "ch:8455635e1fa742d2233457d3": {
+  "path": "README.md",
+  "start_line": 7,
+  "end_line": 14,
+  "text": "README.md :: DocQA \u2014 retrieval-augmented question answering over your documents > Architecture\n## Architecture\n\n- `app/main.py` \u2014 FastAPI application factory and router wiring.\n- `app/api/routes/` \u2014 HTTP endpoints (`/api/v1/documents`, `/api/v1/query`, `/api/v1/health`).\n- `app/services/` \u2014 ingestion, chunking, embeddings, hybrid retrieval and the LLM client.\n- `app/workers/tasks.py` \u2014 arq background jobs that ingest uploaded documents.\n- `app/db/models.py` \u2014 SQLAlchemy models for documents and chunks (PostgreSQL).\n"
+ },
+ "ch:44177863fa191aa6a2056f78": {
+  "path": "README.md",
+  "start_line": 28,
+  "end_line": 30,
+  "text": "README.md :: DocQA \u2014 retrieval-augmented question answering over your documents > Configuration\n## Configuration\n\nAll settings are read from environment variables (see `.env.example`)."
+ },
+ "ch:d502b3ad4058b13d41722aff": {
+  "path": "app/main.py",
+  "start_line": 1,
+  "end_line": 14,
+  "text": "app/main.py :: lines 1-14\n\"\"\"FastAPI application entrypoint: creates the app, wires routers and lifecycle hooks.\"\"\"\n\nfrom contextlib import asynccontextmanager\n\nfrom fastapi import FastAPI\nfrom fastapi.middleware.cors import CORSMiddleware\n\nfrom app.api.routes import api_router\nfrom app.core.config import get_settings\nfrom app.core.logging import configure_logging\nfrom app.db.session import engine\nfrom app.services.vector_store import VectorStore\n\n"
+ },
+ "ch:60a94c45b565b643b7b7b4f4": {
+  "path": "app/main.py",
+  "start_line": 15,
+  "end_line": 23,
+  "text": "app/main.py :: lifespan\n@asynccontextmanager\nasync def lifespan(app: FastAPI):\n    \"\"\"Create the Qdrant collection on startup and dispose the DB engine on shutdown.\"\"\"\n    settings = get_settings()\n    configure_logging(settings.log_level)\n    store = VectorStore(settings.qdrant_url, settings.collection_name)\n    await store.ensure_collection(settings.embedding_dim)\n    yield\n    await engine.dispose()"
+ },
+ "ch:8795448fe8a75b4d92f5be21": {
+  "path": "app/main.py",
+  "start_line": 26,
+  "end_line": 37,
+  "text": "app/main.py :: create_app\ndef create_app() -> FastAPI:\n    \"\"\"Build the FastAPI application.\"\"\"\n    settings = get_settings()\n    application = FastAPI(title=\"DocQA\", version=\"0.3.1\", lifespan=lifespan)\n    application.add_middleware(\n        CORSMiddleware,\n        allow_origins=settings.cors_origins,\n        allow_methods=[\"*\"],\n        allow_headers=[\"*\"],\n    )\n    application.include_router(api_router, prefix=\"/api/v1\")\n    return application"
+ },
+ "ch:61f2d5c8573358fd5c13642f": {
+  "path": "app/schemas.py",
+  "start_line": 1,
+  "end_line": 7,
+  "text": "app/schemas.py :: lines 1-7\n\"\"\"Pydantic request/response schemas.\"\"\"\n\nfrom datetime import datetime\n\nfrom pydantic import BaseModel, ConfigDict, Field\n\n"
+ },
+ "ch:98fe5ce1527cff2b05fbf549": {
+  "path": "app/schemas.py",
+  "start_line": 19,
+  "end_line": 22,
+  "text": "app/schemas.py :: DocumentStatus\nclass DocumentStatus(BaseModel):\n    id: int\n    status: str\n    chunk_count: int"
+ },
+ "ch:2039b05a5b20ad62cc655cb4": {
+  "path": "app/schemas.py",
+  "start_line": 25,
+  "end_line": 29,
+  "text": "app/schemas.py :: QueryRequest\nclass QueryRequest(BaseModel):\n    \"\"\"A user question.\"\"\"\n\n    question: str = Field(min_length=3, max_length=2000)\n    top_k: int = Field(default=8, ge=1, le=50)"
+ },
+ "ch:18a227e5164b2a9e02460594": {
+  "path": "docker-compose.yml",
+  "start_line": 51,
+  "end_line": 54,
+  "text": "docker-compose.yml :: services.qdrant\n  qdrant:\n    image: qdrant/qdrant:v1.9.0\n    ports:\n      - \"6333:6333\""
+ },
+ "ch:ec6ee2f2a7100494ad8d262a": {
+  "path": "pyproject.toml",
+  "start_line": 1,
+  "end_line": 23,
+  "text": "pyproject.toml :: project\n[project]\nname = \"docqa\"\nversion = \"0.3.1\"\ndescription = \"Retrieval-augmented question answering over uploaded documents\"\nrequires-python = \">=3.11\"\ndependencies = [\n  \"fastapi>=0.110\",\n  \"uvicorn[standard]>=0.29\",\n  \"pydantic>=2.6\",\n  \"pydantic-settings>=2.2\",\n  \"sqlalchemy[asyncio]>=2.0\",\n  \"asyncpg>=0.29\",\n  \"alembic>=1.13\",\n  \"qdrant-client>=1.8\",\n  \"openai>=1.30\",\n  \"sentence-transformers>=2.7\",\n  \"rank-bm25>=0.2.2\",\n  \"arq>=0.25\",\n  \"redis>=5.0\",\n  \"pypdf>=4.0\",\n  \"python-multipart>=0.0.9\",\n]\n"
+ },
+ "ch:87ae41d626da98b03b404dae": {
+  "path": "pyproject.toml",
+  "start_line": 24,
+  "end_line": 26,
+  "text": "pyproject.toml :: project.optional-dependencies\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"httpx>=0.27\", \"ruff>=0.4\"]\n"
+ },
+ "ch:7a47f92db941126f570bf1e3": {
+  "path": "tests/test_api.py",
+  "start_line": 14,
+  "end_line": 16,
+  "text": "tests/test_api.py :: test_query_validation\ndef test_query_validation() -> None:\n    response = client.post(\"/api/v1/query\", json={\"question\": \"?\"})\n    assert response.status_code == 422"
+ }
+}

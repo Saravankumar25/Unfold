@@ -30,6 +30,9 @@ class RecordingQueue:
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         self.cleanups.append(project_id)
 
+    async def enqueue_export(self, export_id: str) -> None:
+        return None
+
     async def aclose(self) -> None:
         return None
 
@@ -99,7 +102,7 @@ async def test_github_project_lifecycle_and_ownership(client: httpx.AsyncClient)
     project = (await client.get(f"/api/v1/projects/{pid}")).json()
     assert project["name"] == "Hello-World"
     assert project["job"]["current_stage"] == "RECEIVED"
-    assert project["job"]["stage_total"] == 19
+    assert project["job"]["stage_total"] == 21
 
     current = (await client.get("/api/v1/sessions/current")).json()
     assert [p["id"] for p in current["projects"]] == [pid]

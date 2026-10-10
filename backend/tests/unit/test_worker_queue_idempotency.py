@@ -33,3 +33,24 @@ async def test_same_job_enqueued_twice_is_supervised_once(monkeypatch: pytest.Mo
     await asyncio.sleep(0)
     assert started.count(("analysis", "job-1")) == 2
     await queue.aclose()
+
+
+async def test_same_export_enqueued_twice_is_supervised_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = SubprocessJobQueue(Settings())
+    started: list[tuple[str, str]] = []
+    release = asyncio.Event()
+
+    async def fake_supervise(task: str, ref: str, delay: float) -> None:
+        started.append((task, ref))
+        await release.wait()
+
+    monkeypatch.setattr(queue, "_supervise", fake_supervise)
+    await queue.enqueue_export("art-1")
+    await queue.enqueue_export("art-1")
+    await queue.enqueue_export("art-2")
+    await asyncio.sleep(0)
+    assert sorted(started) == [("export", "art-1"), ("export", "art-2")]
+    release.set()
+    await queue.join()
+    assert queue._tasks == {}
+    await queue.aclose()

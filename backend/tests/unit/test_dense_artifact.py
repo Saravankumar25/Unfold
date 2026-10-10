@@ -172,7 +172,9 @@ def test_backend_setting_selects_the_store() -> None:
 
     qdrant = SimpleNamespace(collection="c")
     cfg = SimpleNamespace(
-        settings=SimpleNamespace(dense_backend="artifact", embedding_model="m", model_cache_dir="."),
+        settings=SimpleNamespace(
+            dense_backend="artifact", embedding_model="m", model_cache_dir=".", model_threads=0
+        ),
         extras={},
         objects=_Blobs(),
         qdrant=qdrant,

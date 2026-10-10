@@ -57,6 +57,7 @@ Pipeline today (`orchestration/pipeline.py:_Run.execute`):
    dimensions that need judgment; its output is a typed list of failing block ids, never a rewrite.
 8. **Dependencies and invalidation.** `input_hash = H(plan_entry, evidence content_hashes, prompt versions, level)`.
    Equal hash => reuse. Chapter `depends_on` is for ordering and reader links only; it never triggers regeneration.
+   **Not built** (see ADR 0017 as-built): nothing can reach it, because a project has one analysis job.
 9. **Keep / simplify / remove.** Keep everything in section 1 marked *exists*. Remove nothing in phase 3. Phase 4
    may drop Qdrant/Neo4j only behind the retrieval evals. No new database, queue or always-on service.
 10. **Smallest architecture with a major improvement.** Five additions in `unfold`: `understand/` (map, flows,
@@ -157,7 +158,7 @@ view. PDF/Markdown exports read the stored canonical content only.
 
 ## 6. Incremental processing (scoped honestly)
 
-- Phase 3 delivers: per-chapter `input_hash` skip, `POST /projects/{id}/sections/{key}/regenerate`, resume at stage and
+- Phase 3 delivers: `POST /projects/{id}/sections/{key}/regenerate`, resume at stage and
   chapter granularity, results tied to `commit_sha`.
 - Not in phase 3: cross-revision reuse of parsed files by content hash and partial graph rebuilds. Recorded as a known
   limitation; correctness over cleverness. Revisit only if phase 5 benchmarks show re-analysis dominating cost.

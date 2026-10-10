@@ -108,6 +108,22 @@ class S3BlobStore(UploadStore):
 
         return await self._call(_delete)
 
+    async def presigned_get_url(self, key: str, expires_s: int, *, filename: str) -> str:
+        def _sign() -> str:
+            return str(
+                self._client.generate_presigned_url(
+                    "get_object",
+                    Params={
+                        "Bucket": self.bucket,
+                        "Key": key,
+                        "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                    },
+                    ExpiresIn=expires_s,
+                )
+            )
+
+        return await self._call(_sign)
+
     async def ping(self) -> None:
         await self._call(
             lambda: self._client.list_objects_v2(Bucket=self.bucket, Prefix="projects/", MaxKeys=1)

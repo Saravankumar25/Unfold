@@ -93,3 +93,135 @@ async def runtime(settings: Settings) -> AsyncIterator[Runtime]:
 @pytest.fixture
 def project_id() -> str:
     return str(uuid.uuid4())
+
+
+# --- shared helpers for the chat / export / cleanup integration tests --------------------------------------
+
+import io  # noqa: E402
+import zipfile  # noqa: E402
+from collections.abc import Awaitable, Callable  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
+from typing import Any  # noqa: E402
+
+from unfold.core.ids import new_session_token, token_hash  # noqa: E402
+from unfold.evaluation.scripted import ScriptedLLM  # noqa: E402
+from unfold.orchestration.pipeline import run_analysis  # noqa: E402
+from unfold.domain.records import JobRec, ProjectRec  # noqa: E402
+
+FIXTURE_REPO = BACKEND.parent / "evals" / "fixtures" / "repos" / "fastapi_rag"
+
+
+def zip_of(root: Path) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and "__pycache__" not in path.parts:
+                zf.write(path, f"{root.name}/{path.relative_to(root).as_posix()}")
+    return buf.getvalue()
+
+
+class RecordingQueue:
+    """`JobQueue` double: records what the API asked for instead of starting worker processes."""
+
+    def __init__(self) -> None:
+        self.analyses: list[str] = []
+        self.cleanups: list[str] = []
+        self.exports: list[str] = []
+
+    async def enqueue_analysis(self, job_id: str, attempt: int, *, defer_s: float | None = None) -> None:
+        self.analyses.append(job_id)
+
+    async def enqueue_project_cleanup(self, project_id: str) -> None:
+        self.cleanups.append(project_id)
+
+    async def enqueue_export(self, export_id: str, *, defer_s: float | None = None) -> None:
+        self.exports.append(export_id)
+
+    async def aclose(self) -> None:
+        return None
+
+
+@dataclass
+class SeededProject:
+    project_id: str
+    job_id: str
+    session_id: str
+    token: str
+
+
+@pytest.fixture(scope="session")
+def seed_project(runtime: Runtime) -> Callable[..., Awaitable[SeededProject]]:
+    """A session + zip project + queued job exactly as `POST /projects/zip` leaves them."""
+
+    async def seed(
+        *, expires_in: timedelta = timedelta(hours=1), session_expires_in: timedelta | None = None
+    ) -> SeededProject:
+        now = datetime.now(UTC)
+        token = new_session_token()
+        project_id = str(uuid.uuid4())
+        key = f"projects/{project_id}/upload/source.zip"
+        await runtime.objects.put_bytes(key, zip_of(FIXTURE_REPO), "application/zip")
+        session = await runtime.control.create_session(
+            token_hash(token), now, now + (session_expires_in or timedelta(hours=1))
+        )
+        project = ProjectRec(
+            id=project_id,
+            session_id=session.id,
+            input_type="zip",
+            technical_level="intermediate",
+            analysis_version="test",
+            created_at=now,
+            expires_at=now + expires_in,
+            source_locator="fastapi_rag.zip",
+            detected_name="fastapi_rag",
+            upload_object_key=key,
+        )
+        job = JobRec(id=str(uuid.uuid4()), project_id=project_id, created_at=now)
+        await runtime.control.create_project(project, job)
+        return SeededProject(project_id, job.id, session.id, token)
+
+    return seed
+
+
+@pytest.fixture(scope="session")
+def analyzed_project(
+    runtime: Runtime, seed_project: Callable[..., Awaitable[SeededProject]]
+) -> Callable[..., Awaitable[SeededProject]]:
+    """Seed and run the whole pipeline (real parsing, indexing, graph, vectors); the double is the model."""
+
+    async def make(**kw: object) -> SeededProject:
+        seeded = await seed_project(**kw)
+        outcome = await run_analysis(runtime, ScriptedLLM(), seeded.job_id)
+        assert outcome.succeeded
+        return seeded
+
+    return make
+
+
+@pytest.fixture
+def recording_queue() -> RecordingQueue:
+    return RecordingQueue()
+
+
+@pytest.fixture
+def open_api(settings: Settings) -> Callable[..., Any]:
+    """`async with open_api(llm=..., queue=..., **setting_overrides) as client` — a real app on real stores."""
+    import contextlib
+
+    import httpx
+
+    from unfold.api.main import create_app
+
+    @contextlib.asynccontextmanager
+    async def _open(
+        *, llm: Any = None, queue: Any = None, **overrides: Any
+    ) -> AsyncIterator[httpx.AsyncClient]:
+        cfg = settings.model_copy(update=overrides) if overrides else settings
+        app = create_app(cfg, queue=queue or RecordingQueue(), llm=llm)
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                yield client
+
+    return _open

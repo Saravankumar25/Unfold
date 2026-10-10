@@ -11,6 +11,9 @@ from unfold.domain.enums import ModelCapability, Priority
 
 T = TypeVar("T", bound=BaseModel)
 
+# Accounting key prefix: the gateway budgets calls and tokens per chat (`chat:<id>`), not per analysis job.
+CHAT_JOB_PREFIX = "chat:"
+
 
 class ToolCall(BaseModel):
     id: str

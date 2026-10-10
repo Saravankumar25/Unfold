@@ -2,16 +2,13 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { isApiError } from "@/lib/api/client";
-import { api, streamPaths } from "@/lib/api/endpoints";
+import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/errors";
-import { parseJSON, postEventStream } from "@/lib/api/sse";
-import type { ChatEvent, ChatMode, PostChatMessage } from "@/lib/api/types";
-import { assistantKey, chatReducer, finalizeIfOpen, initialChatState, type ChatAction, type ChatState } from "@/lib/chat-state";
+import type { ChatMode } from "@/lib/api/types";
+import { assistantKey, chatReducer, initialChatState, type ChatState } from "@/lib/chat-state";
 
-function rootReducer(state: ChatState, action: ChatAction | { type: "finalize"; key: string }): ChatState {
-  if (action.type === "finalize") return finalizeIfOpen(state, action.key);
-  return chatReducer(state, action);
-}
+/** An answer that has not arrived after this long is reported as failed (the server keeps its own limits). */
+export const ANSWER_TIMEOUT_MS = 150_000;
 
 let keyCounter = 0;
 function nextKey(): string {
@@ -22,18 +19,19 @@ function nextKey(): string {
 export interface ChatThread {
   chatId: string | null;
   state: ChatState;
-  streaming: boolean;
+  /** A question is waiting for its answer. */
+  pending: boolean;
   loadingHistory: boolean;
   historyError: unknown;
   send: (text: string, mode: ChatMode, sectionKey?: string | null) => Promise<void>;
-  stop: () => void;
   selectChat: (chatId: string | null) => void;
   reloadHistory: () => void;
 }
 
 /**
- * One chat thread: loads history for `chatId`, streams answers from `POST /chats/{id}/messages`.
- * When no chat exists yet, the first `send` creates one (`POST /projects/{id}/chats`) and reports it via `onCreated`.
+ * One chat thread: loads history for `chatId` and sends questions with `POST /chats/{id}/messages` (one JSON
+ * reply per turn). When no chat exists yet, the first `send` creates one (`POST /projects/{id}/chats`) and
+ * reports it via `onCreated`.
  */
 export function useChatThread(
   projectId: string,
@@ -41,7 +39,7 @@ export function useChatThread(
   onCreated?: (chatId: string) => void,
 ): ChatThread {
   const [chatId, setChatId] = useState<string | null>(initialChatId);
-  const [state, dispatch] = useReducer(rootReducer, initialChatState);
+  const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [historyNonce, setHistoryNonce] = useState(0);
   /** `${chatId}#${nonce}` of the last settled history load, plus its error. */
   const [history, setHistory] = useState<{ key: string | null; error: unknown }>({ key: null, error: null });
@@ -59,7 +57,8 @@ export function useChatThread(
     const controller = new AbortController();
     api.getChat(chatId, controller.signal).then(
       (detail) => {
-        if (controller.signal.aborted) return;
+        // A turn in flight owns the list: loading over it would drop the question and its answer.
+        if (controller.signal.aborted || abortRef.current) return;
         dispatch({ type: "load", messages: detail.messages });
         setHistory({ key, error: null });
       },
@@ -78,50 +77,48 @@ export function useChatThread(
 
   const selectChat = useCallback((id: string | null) => {
     abortRef.current?.abort();
+    abortRef.current = null; // a turn of the chat we are leaving must not block the next send
     dispatch({ type: "reset" });
     setHistoryNonce((n) => n + 1); // force a fresh history load even for a previously loaded id
     setChatId(id);
   }, []);
 
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
   const send = useCallback(
     async (text: string, mode: ChatMode, sectionKey: string | null = null) => {
       const trimmed = text.trim();
-      if (!trimmed || abortRef.current) return;
+      if (!trimmed || abortRef.current || loadingHistory) return;
       const key = nextKey();
       const aKey = assistantKey(key);
       const controller = new AbortController();
       abortRef.current = controller;
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, ANSWER_TIMEOUT_MS);
       dispatch({ type: "send", key, text: trimmed, mode });
       try {
         let id = chatId;
         if (!id) {
           const created = await api.createChat(projectId);
+          if (controller.signal.aborted) return; // the user moved to another chat meanwhile
           id = created.id;
-          setHistory({ key: `${id}#${historyNonce}`, error: null }); // nothing to load: the stream fills it
+          setHistory({ key: `${id}#${historyNonce}`, error: null }); // nothing to load: the reply fills it
           setChatId(id);
           onCreatedRef.current?.(id);
         }
-        const body: PostChatMessage = { text: trimmed, mode, section_key: sectionKey };
-        await postEventStream(
-          streamPaths.chatMessages(id),
-          body,
-          (msg) => {
-            const event = parseJSON<ChatEvent>(msg.data);
-            const type = event?.type || msg.event;
-            dispatch({ type: "event", key: aKey, event: { ...(event ?? {}), type } });
-            return type === "response.completed" || type === "error" ? "stop" : undefined;
-          },
-          { signal: controller.signal },
-        );
-        dispatch({ type: "finalize", key: aKey });
+        const reply = await api.postMessage(id, { text: trimmed, mode, section_key: sectionKey }, controller.signal);
+        if (!controller.signal.aborted) dispatch({ type: "reply", key: aKey, reply });
       } catch (error) {
-        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
-          dispatch({ type: "stop", key: aKey });
-        } else {
+        if (timedOut) {
+          dispatch({
+            type: "fail",
+            key: aKey,
+            code: "ANSWER_TIMEOUT",
+            message: "The answer is taking too long. Try again in a moment.",
+            retryable: true,
+          });
+        } else if (!controller.signal.aborted) {
           dispatch({
             type: "fail",
             key: aKey,
@@ -132,20 +129,20 @@ export function useChatThread(
           });
         }
       } finally {
+        clearTimeout(timer);
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [chatId, projectId, historyNonce],
+    [chatId, projectId, historyNonce, loadingHistory],
   );
 
   return {
     chatId,
     state,
-    streaming: state.streamingKey !== null,
+    pending: state.pendingKey !== null,
     loadingHistory,
     historyError,
     send,
-    stop,
     selectChat,
     reloadHistory: () => setHistoryNonce((n) => n + 1),
   };

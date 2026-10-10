@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from unfold.domain.enums import Proof
 from unfold.domain.models import Provenance
 
 IR_SCHEMA_VERSION = "1"
@@ -178,6 +179,16 @@ class RelationshipIR(BaseModel):
     type: RelType
     provenance: Provenance
     properties: dict[str, Any] = Field(default_factory=dict)
+    proof: Proof = Proof.STATIC  # additive (3.2); old snapshots load as static
+
+
+class UnresolvedCallIR(BaseModel):
+    """A call the analyzers could not resolve to a project symbol (never an edge). Capped by the builder."""
+
+    source_id: str
+    name: str  # dotted callee expression as written
+    path: str
+    line: int
 
 
 class ProjectIR(BaseModel):
@@ -198,6 +209,7 @@ class ProjectIR(BaseModel):
     ai_components: list[AIComponentIR] = Field(default_factory=list)
     dependencies: list[DependencyIR] = Field(default_factory=list)
     relationships: list[RelationshipIR] = Field(default_factory=list)
+    unresolved_calls: list[UnresolvedCallIR] = Field(default_factory=list)
     stats: dict[str, Any] = Field(default_factory=dict)
 
     def entity_index(self) -> dict[str, Entity]:

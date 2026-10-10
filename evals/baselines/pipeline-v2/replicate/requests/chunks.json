@@ -1,0 +1,248 @@
+{
+ "ch:4cf5b04f9833de28509e727c": {
+  "path": "HISTORY.md",
+  "start_line": 118,
+  "end_line": 234,
+  "text": "HISTORY.md :: (preamble) (part 2/17)\n  This may contain minor breaking changes so we advise careful testing and\n  reviewing https://urllib3.readthedocs.io/en/latest/v2-migration-guide.html\n  prior to upgrading.\n\n  Users who wish to stay on urllib3 1.x can pin to `urllib3<2`.\n\n2.29.0 (2023-04-26)\n-------------------\n\n**Improvements**\n\n- Requests now defers chunked requests to the urllib3 implementation to improve\n  standardization. (#6226)\n- Requests relaxes header component requirements to support bytes/str subclasses. (#6356)\n\n2.28.2 (2023-01-12)\n-------------------\n\n**Dependencies**\n\n- Requests now supports charset\\_normalizer 3.x. (#6261)\n\n**Bugfixes**\n\n- Updated MissingSchema exception to suggest https scheme rather than http. (#6188)\n\n2.28.1 (2022-06-29)\n-------------------\n\n**Improvements**\n\n- Speed optimization in `iter_content` with transition to `yield from`. (#6170)\n\n**Dependencies**\n\n- Added support for chardet 5.0.0 (#6179)\n- Added support for charset-normalizer 2.1.0 (#6169)\n\n2.28.0 (2022-06-09)\n-------------------\n\n**Deprecations**\n\n- \u26a0\ufe0f Requests has officially dropped support for Python 2.7. \u26a0\ufe0f (#6091)\n- Requests has officially dropped support for Python 3.6 (including pypy3.6). (#6091)\n\n**Improvements**\n\n- Wrap JSON parsing issues in Request's JSONDecodeError for payloads without\n  an encoding to make `json()` API consistent. (#6097)\n- Parse header components consistently, raising an InvalidHeader error in\n  all invalid cases. (#6154)\n- Added provisional 3.11 support with current beta build. (#6155)\n- Requests got a makeover and we decided to paint it black. (#6095)\n\n**Bugfixes**\n\n- Fixed bug where setting `CURL_CA_BUNDLE` to an empty string would disable\n  cert verification. All Requests 2.x versions before 2.28.0 are affected. (#6074)\n- Fixed urllib3 exception leak, wrapping `urllib3.exceptions.SSLError` with\n  `requests.exceptions.SSLError` for `content` and `iter_content`. (#6057)\n- Fixed issue where invalid Windows registry entries caused proxy resolution\n  to raise an exception rather than ignoring the entry. (#6149)\n- Fixed issue where entire payload could be included in the error message for\n  JSONDecodeError. (#6036)\n\n2.27.1 (2022-01-05)\n-------------------\n\n**Bugfixes**\n\n- Fixed parsing issue that resulted in the `auth` component being\n  dropped from proxy URLs. (#6028)\n\n2.27.0 (2022-01-03)\n-------------------\n\n**Improvements**\n\n- Officially added support for Python 3.10. (#5928)\n\n- Added a `requests.exceptions.JSONDecodeError` to unify JSON exceptions between\n  Python 2 and 3. This gets raised in the `response.json()` method, and is\n  backwards compatible as it inherits from previously thrown exceptions.\n  Can be caught from `requests.exceptions.RequestException` as well. (#5856)\n\n- Improved error text for misnamed `InvalidSchema` and `MissingSchema`\n  exceptions. This is a temporary fix until exceptions can be renamed\n  (Schema->Scheme). (#6017)\n\n- Improved proxy parsing for proxy URLs missing a scheme. This will address\n  recent changes to `urlparse` in Python 3.9+. (#5917)\n\n**Bugfixes**\n\n- Fixed defect in `extract_zipped_paths` which could result in an infinite loop\n  for some paths. (#5851)\n\n- Fixed handling for `AttributeError` when calculating length of files obtained\n  by `Tarfile.extractfile()`. (#5239)\n\n- Fixed urllib3 exception leak, wrapping `urllib3.exceptions.InvalidHeader` with\n  `requests.exceptions.InvalidHeader`. (#5914)\n\n- Fixed bug where two Host headers were sent for chunked requests. (#5391)\n\n- Fixed regression in Requests 2.26.0 where `Proxy-Authorization` was\n  incorrectly stripped from all requests sent with `Session.send`. (#5924)\n\n- Fixed performance regression in 2.26.0 for hosts with a large number of\n  proxies available in the environment. (#5924)\n\n- Fixed idna exception leak, wrapping `UnicodeError` with\n  `requests.exceptions.InvalidURL` for URLs with a leading dot (.) in the\n  domain. (#5414)\n\n**Deprecations**"
+ },
+ "ch:54d1bc37353aabedd801dc3b": {
+  "path": "tests/certs/mtls/client/cert.cnf",
+  "start_line": 1,
+  "end_line": 26,
+  "text": "tests/certs/mtls/client/cert.cnf :: lines 1-26\n[req]\nreq_extensions = v3_req\ndistinguished_name = req_distinguished_name\nprompt=no\n\n[req_distinguished_name]\nC = US\nST = DE\nO = Python Software Foundation\nOU = python-requests\nCN = requests\n\n[v3_req]\n# Extensions to add to a certificate request\nbasicConstraints = CA:FALSE\nkeyUsage = digitalSignature, keyEncipherment\nextendedKeyUsage = clientAuth\nsubjectAltName = @alt_names\n\n[alt_names]\nDNS.1 = *.localhost\nIP.1 = 127.0.0.1\nIP.2 = ::1\nURI.1 = spiffe://trust.python.org/v0/maintainer/sigmavirus24/project/requests/org/psf\nURI.2 = spiffe://trust.python.org/v1/maintainer:sigmavirus24/project:requests/org:psf\nURI.3 = spiffe://trust.python.org/v1/maintainer=sigmavirus24/project=requests/org=psf"
+ },
+ "ch:a915e96e7deb7e0c1cddfea0": {
+  "path": "docs/conf.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "docs/conf.py :: lines 1-60\n# -*- coding: utf-8 -*-\n#\n# Requests documentation build configuration file, created by\n# sphinx-quickstart on Fri Feb 19 00:05:47 2016.\n#\n# This file is execfile()d with the current directory set to its\n# containing dir.\n#\n# Note that not all possible configuration values are present in this\n# autogenerated file.\n#\n# All configuration values have a default; values that are commented out\n# serve to show the default.\n\nimport sys\nimport os\n\n# If extensions (or modules to document with autodoc) are in another directory,\n# add these directories to sys.path here. If the directory is relative to the\n# documentation root, use os.path.abspath to make it absolute, like shown here.\n# sys.path.insert(0, os.path.abspath('.'))\n\n# Insert Requests' path into the system.\nsys.path.insert(0, os.path.abspath(\"..\"))\nsys.path.insert(0, os.path.abspath(\"_themes\"))\n\nimport requests\n\n\n# -- General configuration ------------------------------------------------\n\n# If your documentation needs a minimal Sphinx version, state it here.\n# needs_sphinx = '1.0'\n\n# Add any Sphinx extension module names here, as strings. They can be\n# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom\n# ones.\nextensions = [\n    \"sphinx.ext.autodoc\",\n    \"sphinx.ext.intersphinx\",\n    \"sphinx.ext.todo\",\n    \"sphinx.ext.viewcode\",\n]\n\n# Add any paths that contain templates here, relative to this directory.\ntemplates_path = [\"_templates\"]\n\n# The suffix(es) of source filenames.\n# You can specify multiple suffix as a list of string:\n# source_suffix = ['.rst', '.md']\nsource_suffix = \".rst\"\n\n# The encoding of source files.\n# source_encoding = 'utf-8-sig'\n\n# The master toctree document.\nmaster_doc = \"index\"\n\n# General information about the project.\nproject = u\"Requests\""
+ },
+ "ch:9e009b273b31a05adea7c040": {
+  "path": "docs/conf.py",
+  "start_line": 51,
+  "end_line": 110,
+  "text": "docs/conf.py :: lines 51-110\nsource_suffix = \".rst\"\n\n# The encoding of source files.\n# source_encoding = 'utf-8-sig'\n\n# The master toctree document.\nmaster_doc = \"index\"\n\n# General information about the project.\nproject = u\"Requests\"\ncopyright = u'MMXVIX. A <a href=\"https://kenreitz.org/projects\">Kenneth Reitz</a> Project'\nauthor = u\"Kenneth Reitz\"\n\n# The version info for the project you're documenting, acts as replacement for\n# |version| and |release|, also used in various other places throughout the\n# built documents.\n#\n# The short X.Y version.\nversion = requests.__version__\n# The full version, including alpha/beta/rc tags.\nrelease = requests.__version__\n\n# The language for content autogenerated by Sphinx. Refer to documentation\n# for a list of supported languages.\n#\n# This is also used if you do content translation via gettext catalogs.\n# Usually you set \"language\" from the command line for these cases.\nlanguage = None\n\n# There are two options for replacing |today|: either, you set today to some\n# non-false value, then it is used:\n# today = ''\n# Else, today_fmt is used as the format for a strftime call.\n# today_fmt = '%B %d, %Y'\n\n# List of patterns, relative to source directory, that match files and\n# directories to ignore when looking for source files.\nexclude_patterns = [\"_build\"]\n\n# The reST default role (used for this markup: `text`) to use for all\n# documents.\n# default_role = None\n\n# If true, '()' will be appended to :func: etc. cross-reference text.\nadd_function_parentheses = False\n\n# If true, the current module name will be prepended to all description\n# unit titles (such as .. function::).\nadd_module_names = True\n\n# If true, sectionauthor and moduleauthor directives will be shown in the\n# output. They are ignored by default.\n# show_authors = False\n\n# The name of the Pygments (syntax highlighting) style to use.\npygments_style = \"flask_theme_support.FlaskyStyle\"\n\n# A list of ignored prefixes for module index sorting.\n# modindex_common_prefix = []\n"
+ },
+ "ch:89da166d65704801bd41ea5e": {
+  "path": "docs/user/advanced.rst",
+  "start_line": 969,
+  "end_line": 1007,
+  "text": "docs/user/advanced.rst :: Advanced Usage > Transport Adapters\nTransport Adapters\n------------------\n\nAs of v1.0.0, Requests has moved to a modular internal design. Part of the\nreason this was done was to implement Transport Adapters, originally\n`described here`_. Transport Adapters provide a mechanism to define interaction\nmethods for an HTTP service. In particular, they allow you to apply per-service\nconfiguration.\n\nRequests ships with a single Transport Adapter, the :class:`HTTPAdapter\n<requests.adapters.HTTPAdapter>`. This adapter provides the default Requests\ninteraction with HTTP and HTTPS using the powerful `urllib3`_ library. Whenever\na Requests :class:`Session <requests.Session>` is initialized, one of these is\nattached to the :class:`Session <requests.Session>` object for HTTP, and one\nfor HTTPS.\n\nRequests enables users to create and use their own Transport Adapters that\nprovide specific functionality. Once created, a Transport Adapter can be\nmounted to a Session object, along with an indication of which web services\nit should apply to.\n\n::\n\n    >>> s = requests.Session()\n    >>> s.mount('https://github.com/', MyAdapter())\n\nThe mount call registers a specific instance of a Transport Adapter to a\nprefix. Once mounted, any HTTP request made using that session whose URL starts\nwith the given prefix will use the given Transport Adapter.\n\n.. note:: The adapter will be chosen based on a longest prefix match. Be mindful\n   prefixes such as ``http://localhost`` will also match ``http://localhost.other.com``\n   or ``http://localhost@other.com``. It's recommended to terminate full hostnames with a ``/``.\n\nMany of the details of implementing a Transport Adapter are beyond the scope of\nthis documentation, but take a look at the next example for a simple SSL use-\ncase. For more than that, you might look at subclassing the\n:class:`BaseAdapter <requests.adapters.BaseAdapter>`.\n"
+ },
+ "ch:8bcb0142d50f107ab0161f2e": {
+  "path": ".readthedocs.yaml",
+  "start_line": 8,
+  "end_line": 13,
+  "text": ".readthedocs.yaml :: build\nbuild:\n  os: ubuntu-22.04\n  tools:\n    python: \"3.12\"\n\n# Build documentation in the \"docs/\" directory with Sphinx"
+ },
+ "ch:9e90b5d6305ae971f25a7e28": {
+  "path": ".coveragerc",
+  "start_line": 1,
+  "end_line": 2,
+  "text": ".coveragerc :: lines 1-2\n[run]\nomit = requests/packages/*"
+ },
+ "ch:c1d9c0a2daff52fbf88eaf2b": {
+  "path": ".github/workflows/codeql-analysis.yml",
+  "start_line": 20,
+  "end_line": 73,
+  "text": ".github/workflows/codeql-analysis.yml :: jobs\njobs:\n  analyze:\n    permissions:\n      actions: read  # for github/codeql-action/init to get workflow details\n      contents: read  # for actions/checkout to fetch code\n      security-events: write  # for github/codeql-action/autobuild to send a status report\n    name: Analyze\n    runs-on: ubuntu-latest\n\n    strategy:\n      fail-fast: false\n\n\n    steps:\n    - name: Checkout repository\n      uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0\n      with:\n        # We must fetch at least the immediate parents so that if this is\n        # a pull request then we can checkout the head.\n        fetch-depth: 2\n\n    # If this run was triggered by a pull request event, then checkout\n    # the head of the pull request instead of the merge commit.\n    - run: git checkout HEAD^2\n      if: ${{ github.event_name == 'pull_request' }}\n\n    # Initializes the CodeQL tools for scanning.\n    - name: Initialize CodeQL\n      uses: github/codeql-action/init@df5a14dc28094dc936e103b37d749c6628682b60 # v3.25.0\n      with:\n        languages: \"python\"\n        # If you wish to specify custom queries, you can do so here or in a config file.\n        # By default, queries listed here will override any specified in a config file.\n        # Prefix the list here with \"+\" to use these queries and those in the config file.\n        # queries: ./path/to/local/query, your-org/your-repo/queries@main\n\n    # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).\n    # If this step fails, then you should remove it and run the build manually (see below)\n    - name: Autobuild\n      uses: github/codeql-action/autobuild@df5a14dc28094dc936e103b37d749c6628682b60 # v3.25.0\n\n    # \u2139\ufe0f Command-line programs to run using the OS shell.\n    # \ud83d\udcda https://git.io/JvXDl\n\n    # \u270f\ufe0f If the Autobuild fails above, remove it and uncomment the following three lines\n    #    and modify them (or add more) to build your code if your project\n    #    uses a compiled language\n\n    #- run: |\n    #   make bootstrap\n    #   make release\n\n    - name: Perform CodeQL Analysis\n      uses: github/codeql-action/analyze@df5a14dc28094dc936e103b37d749c6628682b60 # v3.25.0"
+ },
+ "ch:7f79cc771ab8e7d0050feb8c": {
+  "path": ".github/workflows/lint.yml",
+  "start_line": 1,
+  "end_line": 1,
+  "text": ".github/workflows/lint.yml :: name\nname: Lint code"
+ },
+ "ch:761f427af816daaa14b59ed8": {
+  "path": ".github/workflows/lint.yml",
+  "start_line": 3,
+  "end_line": 3,
+  "text": ".github/workflows/lint.yml :: on\non: [push, pull_request]"
+ },
+ "ch:4905fc64cb9095218af2d972": {
+  "path": ".readthedocs.yaml",
+  "start_line": 19,
+  "end_line": 25,
+  "text": ".readthedocs.yaml :: formats\nformats:\n  - pdf\n  - epub\n\n# Optional but recommended, declare the Python requirements required\n# to build your documentation\n# See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html"
+ },
+ "ch:e3836df087efcd18f628b299": {
+  "path": ".github/workflows/run-tests.yml",
+  "start_line": 3,
+  "end_line": 3,
+  "text": ".github/workflows/run-tests.yml :: on\non: [push, pull_request]"
+ },
+ "ch:bab755ecec79ce6d94efbf67": {
+  "path": "MANIFEST.in",
+  "start_line": 1,
+  "end_line": 3,
+  "text": "MANIFEST.in :: lines 1-3\ninclude README.md LICENSE NOTICE HISTORY.md requirements-dev.txt\nrecursive-include tests *.py\nrecursive-include tests/certs *"
+ },
+ "ch:9ea2d979b5f74d2cf32bec81": {
+  "path": "setup.py",
+  "start_line": 1,
+  "end_line": 30,
+  "text": "setup.py :: lines 1-30\n#!/usr/bin/env python\nimport os\nimport sys\nfrom codecs import open\n\nfrom setuptools import setup\nfrom setuptools.command.test import test as TestCommand\n\nCURRENT_PYTHON = sys.version_info[:2]\nREQUIRED_PYTHON = (3, 8)\n\nif CURRENT_PYTHON < REQUIRED_PYTHON:\n    sys.stderr.write(\n        \"\"\"\n==========================\nUnsupported Python version\n==========================\nThis version of Requests requires at least Python {}.{}, but\nyou're trying to install it on Python {}.{}. To resolve this,\nconsider upgrading to a supported Python version.\n\nIf you can't upgrade your Python version, you'll need to\npin to an older version of Requests (<2.32.0).\n\"\"\".format(\n            *(REQUIRED_PYTHON + CURRENT_PYTHON)\n        )\n    )\n    sys.exit(1)\n\n"
+ },
+ "ch:2f7ddda492064968d329aef9": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 1,
+  "end_line": 24,
+  "text": "src/requests/_internal_utils.py :: lines 1-24\n\"\"\"\nrequests._internal_utils\n~~~~~~~~~~~~~~\n\nProvides utility functions that are consumed internally by Requests\nwhich depend on extremely few external helpers (such as compat)\n\"\"\"\nimport re\n\nfrom .compat import builtin_str\n\n_VALID_HEADER_NAME_RE_BYTE = re.compile(rb\"^[^:\\s][^:\\r\\n]*$\")\n_VALID_HEADER_NAME_RE_STR = re.compile(r\"^[^:\\s][^:\\r\\n]*$\")\n_VALID_HEADER_VALUE_RE_BYTE = re.compile(rb\"^\\S[^\\r\\n]*$|^$\")\n_VALID_HEADER_VALUE_RE_STR = re.compile(r\"^\\S[^\\r\\n]*$|^$\")\n\n_HEADER_VALIDATORS_STR = (_VALID_HEADER_NAME_RE_STR, _VALID_HEADER_VALUE_RE_STR)\n_HEADER_VALIDATORS_BYTE = (_VALID_HEADER_NAME_RE_BYTE, _VALID_HEADER_VALUE_RE_BYTE)\nHEADER_VALIDATORS = {\n    bytes: _HEADER_VALIDATORS_BYTE,\n    str: _HEADER_VALIDATORS_STR,\n}\n\n"
+ },
+ "ch:976ca1a96fb93aeb85b0dc89": {
+  "path": "src/requests/__init__.py",
+  "start_line": 58,
+  "end_line": 90,
+  "text": "src/requests/__init__.py :: check_compatibility\ndef check_compatibility(urllib3_version, chardet_version, charset_normalizer_version):\n    urllib3_version = urllib3_version.split(\".\")\n    assert urllib3_version != [\"dev\"]  # Verify urllib3 isn't installed from git.\n\n    # Sometimes, urllib3 only reports its version as 16.1.\n    if len(urllib3_version) == 2:\n        urllib3_version.append(\"0\")\n\n    # Check urllib3 for compatibility.\n    major, minor, patch = urllib3_version  # noqa: F811\n    major, minor, patch = int(major), int(minor), int(patch)\n    # urllib3 >= 1.21.1\n    assert major >= 1\n    if major == 1:\n        assert minor >= 21\n\n    # Check charset_normalizer for compatibility.\n    if chardet_version:\n        major, minor, patch = chardet_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # chardet_version >= 3.0.2, < 6.0.0\n        assert (3, 0, 2) <= (major, minor, patch) < (6, 0, 0)\n    elif charset_normalizer_version:\n        major, minor, patch = charset_normalizer_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # charset_normalizer >= 2.0.0 < 4.0.0\n        assert (2, 0, 0) <= (major, minor, patch) < (4, 0, 0)\n    else:\n        warnings.warn(\n            \"Unable to find acceptable character detection dependency \"\n            \"(chardet or charset_normalizer).\",\n            RequestsDependencyWarning,\n        )"
+ },
+ "ch:89af87884ac1ba1b685ae050": {
+  "path": "src/requests/__init__.py",
+  "start_line": 105,
+  "end_line": 164,
+  "text": "src/requests/__init__.py :: lines 105-164\n\n\n# Check imported dependencies for compatibility.\ntry:\n    check_compatibility(\n        urllib3.__version__, chardet_version, charset_normalizer_version\n    )\nexcept (AssertionError, ValueError):\n    warnings.warn(\n        \"urllib3 ({}) or chardet ({})/charset_normalizer ({}) doesn't match a supported \"\n        \"version!\".format(\n            urllib3.__version__, chardet_version, charset_normalizer_version\n        ),\n        RequestsDependencyWarning,\n    )\n\n# Attempt to enable urllib3's fallback for SNI support\n# if the standard library doesn't support SNI or the\n# 'ssl' library isn't available.\ntry:\n    try:\n        import ssl\n    except ImportError:\n        ssl = None\n\n    if not getattr(ssl, \"HAS_SNI\", False):\n        from urllib3.contrib import pyopenssl\n\n        pyopenssl.inject_into_urllib3()\n\n        # Check cryptography version\n        from cryptography import __version__ as cryptography_version\n\n        _check_cryptography(cryptography_version)\nexcept ImportError:\n    pass\n\n# urllib3's DependencyWarnings should be silenced.\nfrom urllib3.exceptions import DependencyWarning\n\nwarnings.simplefilter(\"ignore\", DependencyWarning)\n\n# Set default logging handler to avoid \"No handler found\" warnings.\nimport logging\nfrom logging import NullHandler\n\nfrom . import packages, utils\nfrom .__version__ import (\n    __author__,\n    __author_email__,\n    __build__,\n    __cake__,\n    __copyright__,\n    __description__,\n    __license__,\n    __title__,\n    __url__,\n    __version__,\n)\nfrom .api import delete, get, head, options, patch, post, put, request"
+ },
+ "ch:90e088e0357cc514750d61e9": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 25,
+  "end_line": 35,
+  "text": "src/requests/_internal_utils.py :: to_native_string\ndef to_native_string(string, encoding=\"ascii\"):\n    \"\"\"Given a string object, regardless of type, returns a representation of\n    that string in the native string type, encoding and decoding where\n    necessary. This assumes ASCII unless told otherwise.\n    \"\"\"\n    if isinstance(string, builtin_str):\n        out = string\n    else:\n        out = string.decode(encoding)\n\n    return out"
+ },
+ "ch:bbe8a14ebe779adc4ec49612": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 38,
+  "end_line": 50,
+  "text": "src/requests/_internal_utils.py :: unicode_is_ascii\ndef unicode_is_ascii(u_string):\n    \"\"\"Determine if unicode string only contains ASCII characters.\n\n    :param str u_string: unicode string to check. Must be unicode\n        and not Python 2 `str`.\n    :rtype: bool\n    \"\"\"\n    assert isinstance(u_string, str)\n    try:\n        u_string.encode(\"ascii\")\n        return True\n    except UnicodeEncodeError:\n        return False"
+ },
+ "ch:f24f1a451718bd2382de3be2": {
+  "path": "src/requests/adapters.py",
+  "start_line": 63,
+  "end_line": 64,
+  "text": "src/requests/adapters.py :: SOCKSProxyManager\n    def SOCKSProxyManager(*args, **kwargs):\n        raise InvalidSchema(\"Missing dependencies for SOCKS support.\")"
+ },
+ "ch:48ce4ddc8b0c6be1f29d580d": {
+  "path": "src/requests/adapters.py",
+  "start_line": 137,
+  "end_line": 139,
+  "text": "src/requests/adapters.py :: BaseAdapter\nclass BaseAdapter:\n    \"\"\"The Base Transport Adapter\"\"\"\n\n# members: (self), (self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None), (self)"
+ },
+ "ch:71786bc73e099e86e86e6452": {
+  "path": "src/requests/adapters.py",
+  "start_line": 167,
+  "end_line": 201,
+  "text": "src/requests/adapters.py :: HTTPAdapter\nclass HTTPAdapter(BaseAdapter):\n    \"\"\"The built-in HTTP Adapter for urllib3.\n\n    Provides a general-case interface for Requests sessions to contact HTTP and\n    HTTPS urls by implementing the Transport Adapter interface. This class will\n    usually be created by the :class:`Session <Session>` class under the\n    covers.\n\n    :param pool_connections: The number of urllib3 connection pools to cache.\n    :param pool_maxsize: The maximum number of connections to save in the pool.\n    :param max_retries: The maximum number of retries each connection\n        should attempt. Note, this applies only to failed DNS lookups, socket\n        connections and connection timeouts, never to requests where data has\n        made it to the server. By default, Requests does not retry failed\n        connections. If you need granular control over the conditions under\n        which we retry a request, import urllib3's ``Retry`` class and pass\n        that instead.\n    :param pool_block: Whether the connection pool should block for connections.\n\n    Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> a = requests.adapters.HTTPAdapter(max_retries=3)\n      >>> s.mount('http://', a)\n    \"\"\"\n\n    __attrs__ = [\n        \"max_retries\",\n        \"config\",\n        \"_pool_connections\",\n        \"_pool_maxsize\",\n        \"_pool_block\",\n    ]\n\n# members: (self, pool_connections=DEFAULT_POOLSIZE, pool_maxsize=DEFAULT_POOLSIZE, max_retries=DEFAULT_RETRIES, pool_block=DEFAULT, (self), (self, state), (self, connections, maxsize, block=DEFAULT_POOLBLOCK, **pool_kwargs), (self, proxy, **proxy_kwargs), (self, conn, url, verify, cert), (self, req, resp), (self, request, verify, cert=None), (self, request, verify, proxies=None, cert=None), (self, url, proxies=None), (self), (self, request, proxies), (self, request, **kwargs), (self, proxy), (self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None)"
+ },
+ "ch:524dcbc10aef5be83ae028cf": {
+  "path": "src/requests/compat.py",
+  "start_line": 18,
+  "end_line": 27,
+  "text": "src/requests/compat.py :: _resolve_char_detection\ndef _resolve_char_detection():\n    \"\"\"Find supported character detection libraries.\"\"\"\n    chardet = None\n    for lib in (\"chardet\", \"charset_normalizer\"):\n        if chardet is None:\n            try:\n                chardet = importlib.import_module(lib)\n            except ImportError:\n                pass\n    return chardet"
+ },
+ "ch:0159cb4ef5fe68d64088ec03": {
+  "path": "src/requests/adapters.py",
+  "start_line": 578,
+  "end_line": 590,
+  "text": "src/requests/adapters.py :: HTTPAdapter.add_headers\n    def add_headers(self, request, **kwargs):\n        \"\"\"Add any headers needed by the connection. As of v2.0 this does\n        nothing by default, but is left for overriding by users that subclass\n        the :class:`HTTPAdapter <requests.adapters.HTTPAdapter>`.\n\n        This should not be called from user code, and is only exposed for use\n        when subclassing the\n        :class:`HTTPAdapter <requests.adapters.HTTPAdapter>`.\n\n        :param request: The :class:`PreparedRequest <PreparedRequest>` to add headers to.\n        :param kwargs: The keyword arguments from the call to send().\n        \"\"\"\n        pass"
+ },
+ "ch:584b92f7c2dee7885c75ec2a": {
+  "path": "src/requests/auth.py",
+  "start_line": 241,
+  "end_line": 283,
+  "text": "src/requests/auth.py :: HTTPDigestAuth.handle_401\n    def handle_401(self, r, **kwargs):\n        \"\"\"\n        Takes the given response and tries digest-auth, if needed.\n\n        :rtype: requests.Response\n        \"\"\"\n\n        # If response is not 4xx, do not auth\n        # See https://github.com/psf/requests/issues/3772\n        if not 400 <= r.status_code < 500:\n            self._thread_local.num_401_calls = 1\n            return r\n\n        if self._thread_local.pos is not None:\n            # Rewind the file position indicator of the body to where\n            # it was to resend the request.\n            r.request.body.seek(self._thread_local.pos)\n        s_auth = <REDACTED_SECRET>\"www-authenticate\", \"\")\n\n        if \"digest\" in s_auth.lower() and self._thread_local.num_401_calls < 2:\n            self._thread_local.num_401_calls += 1\n            pat = re.compile(r\"digest \", flags=re.IGNORECASE)\n            self._thread_local.chal = parse_dict_header(pat.sub(\"\", s_auth, count=1))\n\n            # Consume content and release the original connection\n            # to allow our new request to reuse the same one.\n            r.content\n            r.close()\n            prep = r.request.copy()\n            extract_cookies_to_jar(prep._cookies, r.request, r.raw)\n            prep.prepare_cookies(prep._cookies)\n\n            prep.headers[\"Authorization\"] = self.build_digest_header(\n                prep.method, prep.url\n            )\n            _r = r.connection.send(prep, **kwargs)\n            _r.history.append(r)\n            _r.request = prep\n\n            return _r\n\n        self._thread_local.num_401_calls = 1\n        return r"
+ },
+ "ch:9311fb0420884f12293999c1": {
+  "path": "src/requests/certs.py",
+  "start_line": 1,
+  "end_line": 17,
+  "text": "src/requests/certs.py :: lines 1-17\n#!/usr/bin/env python\n\n\"\"\"\nrequests.certs\n~~~~~~~~~~~~~~\n\nThis module returns the preferred default CA certificate bundle. There is\nonly one \u2014 the one from the certifi package.\n\nIf you are packaging Requests, e.g., for a Linux distribution or a managed\nenvironment, you can change the definition of where() to return a separately\npackaged CA bundle.\n\"\"\"\nfrom certifi import where\n\nif __name__ == \"__main__\":\n    print(where())"
+ },
+ "ch:2bd49559c7559b18c0e4164b": {
+  "path": "src/requests/cookies.py",
+  "start_line": 176,
+  "end_line": 193,
+  "text": "src/requests/cookies.py :: RequestsCookieJar\nclass RequestsCookieJar(cookielib.CookieJar, MutableMapping):\n    \"\"\"Compatibility class; is a http.cookiejar.CookieJar, but exposes a dict\n    interface.\n\n    This is the CookieJar we create by default for requests and sessions that\n    don't specify one, since some clients may expect response.cookies and\n    session.cookies to support dict operations.\n\n    Requests does not use the dict interface internally; it's just for\n    compatibility with external client code. All requests code should work\n    out of the box with externally provided instances of ``CookieJar``, e.g.\n    ``LWPCookieJar`` and ``FileCookieJar``.\n\n    Unlike a regular CookieJar, this class is pickleable.\n\n    .. warning:: dictionary operations that are normally O(1) may be O(n).\n    \"\"\"\n\n# members: (self, name, default=None, domain=None, path=None), (self, name, value, **kwargs), (self), (self), (self), (self), (self), (self), (self), (self), (self), (self, domain=None, path=None), (self, name), (self, name), (self, name, value), (self, name), (self, cookie, *args, **kwargs), (self, other), (self, name, domain=None, path=None), (self, name, domain=None, path=None), (self), (self, state), (self), (self)"
+ },
+ "ch:664d2a12d489290ed1b4706c": {
+  "path": "src/requests/cookies.py",
+  "start_line": 268,
+  "end_line": 275,
+  "text": "src/requests/cookies.py :: RequestsCookieJar.items\n    def items(self):\n        \"\"\"Dict-like items() that returns a list of name-value tuples from the\n        jar. Allows client-code to call ``dict(RequestsCookieJar)`` and get a\n        vanilla python dict of key value pairs.\n\n        .. seealso:: keys() and values().\n        \"\"\"\n        return list(self.iteritems())"
+ },
+ "ch:75078d5351d1cd87f84e5e24": {
+  "path": "src/requests/cookies.py",
+  "start_line": 306,
+  "end_line": 319,
+  "text": "src/requests/cookies.py :: RequestsCookieJar.get_dict\n    def get_dict(self, domain=None, path=None):\n        \"\"\"Takes as an argument an optional domain and path and returns a plain\n        old Python dict of name-value pairs of cookies that meet the\n        requirements.\n\n        :rtype: dict\n        \"\"\"\n        dictionary = {}\n        for cookie in iter(self):\n            if (domain is None or cookie.domain == domain) and (\n                path is None or cookie.path == path\n            ):\n                dictionary[cookie.name] = cookie.value\n        return dictionary"
+ },
+ "ch:15030d2fee24cc50a41373a6": {
+  "path": "src/requests/help.py",
+  "start_line": 34,
+  "end_line": 66,
+  "text": "src/requests/help.py :: _implementation\ndef _implementation():\n    \"\"\"Return a dict with the Python implementation and version.\n\n    Provide both the name and the version of the Python implementation\n    currently running. For example, on CPython 3.10.3 it will return\n    {'name': 'CPython', 'version': '3.10.3'}.\n\n    This function works best on CPython and PyPy: in particular, it probably\n    doesn't work for Jython or IronPython. Future investigation should be done\n    to work out the correct shape of the code for those platforms.\n    \"\"\"\n    implementation = platform.python_implementation()\n\n    if implementation == \"CPython\":\n        implementation_version = platform.python_version()\n    elif implementation == \"PyPy\":\n        implementation_version = \"{}.{}.{}\".format(\n            sys.pypy_version_info.major,\n            sys.pypy_version_info.minor,\n            sys.pypy_version_info.micro,\n        )\n        if sys.pypy_version_info.releaselevel != \"final\":\n            implementation_version = \"\".join(\n                [implementation_version, sys.pypy_version_info.releaselevel]\n            )\n    elif implementation == \"Jython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    elif implementation == \"IronPython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    else:\n        implementation_version = \"Unknown\"\n\n    return {\"name\": implementation, \"version\": implementation_version}"
+ },
+ "ch:3510507ed718df8ca7f0629b": {
+  "path": "src/requests/help.py",
+  "start_line": 69,
+  "end_line": 125,
+  "text": "src/requests/help.py :: info\ndef info():\n    \"\"\"Generate information for a bug report.\"\"\"\n    try:\n        platform_info = {\n            \"system\": platform.system(),\n            \"release\": platform.release(),\n        }\n    except OSError:\n        platform_info = {\n            \"system\": \"Unknown\",\n            \"release\": \"Unknown\",\n        }\n\n    implementation_info = _implementation()\n    urllib3_info = {\"version\": urllib3.__version__}\n    charset_normalizer_info = {\"version\": None}\n    chardet_info = {\"version\": None}\n    if charset_normalizer:\n        charset_normalizer_info = {\"version\": charset_normalizer.__version__}\n    if chardet:\n        chardet_info = {\"version\": chardet.__version__}\n\n    pyopenssl_info = {\n        \"version\": None,\n        \"openssl_version\": \"\",\n    }\n    if OpenSSL:\n        pyopenssl_info = {\n            \"version\": OpenSSL.__version__,\n            \"openssl_version\": f\"{OpenSSL.SSL.OPENSSL_VERSION_NUMBER:x}\",\n        }\n    cryptography_info = {\n        \"version\": getattr(cryptography, \"__version__\", \"\"),\n    }\n    idna_info = {\n        \"version\": getattr(idna, \"__version__\", \"\"),\n    }\n\n    system_ssl = ssl.OPENSSL_VERSION_NUMBER\n    system_ssl_info = {\"version\": f\"{system_ssl:x}\" if system_ssl is not None else \"\"}\n\n    return {\n        \"platform\": platform_info,\n        \"implementation\": implementation_info,\n        \"system_ssl\": system_ssl_info,\n        \"using_pyopenssl\": pyopenssl is not None,\n        \"using_charset_normalizer\": chardet is None,\n        \"pyOpenSSL\": pyopenssl_info,\n        \"urllib3\": urllib3_info,\n        \"chardet\": chardet_info,\n        \"charset_normalizer\": charset_normalizer_info,\n        \"cryptography\": cryptography_info,\n        \"idna\": idna_info,\n        \"requests\": {\n            \"version\": requests_version,\n        },\n    }"
+ },
+ "ch:d2a52a2f873af7dfab2482cd": {
+  "path": "src/requests/help.py",
+  "start_line": 128,
+  "end_line": 130,
+  "text": "src/requests/help.py :: main\ndef main():\n    \"\"\"Pretty-print the bug information as JSON.\"\"\"\n    print(json.dumps(info(), sort_keys=True, indent=2))"
+ },
+ "ch:78c632e3923da4dca9269e96": {
+  "path": "src/requests/sessions.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "src/requests/sessions.py :: lines 1-60\n\"\"\"\nrequests.sessions\n~~~~~~~~~~~~~~~~~\n\nThis module provides a Session object to manage and persist settings across\nrequests (cookies, auth, proxies).\n\"\"\"\nimport os\nimport sys\nimport time\nfrom collections import OrderedDict\nfrom datetime import timedelta\n\nfrom ._internal_utils import to_native_string\nfrom .adapters import HTTPAdapter\nfrom .auth import _basic_auth_str\nfrom .compat import Mapping, cookielib, urljoin, urlparse\nfrom .cookies import (\n    RequestsCookieJar,\n    cookiejar_from_dict,\n    extract_cookies_to_jar,\n    merge_cookies,\n)\nfrom .exceptions import (\n    ChunkedEncodingError,\n    ContentDecodingError,\n    InvalidSchema,\n    TooManyRedirects,\n)\nfrom .hooks import default_hooks, dispatch_hook\n\n# formerly defined here, reexposed here for backward compatibility\nfrom .models import (  # noqa: F401\n    DEFAULT_REDIRECT_LIMIT,\n    REDIRECT_STATI,\n    PreparedRequest,\n    Request,\n)\nfrom .status_codes import codes\nfrom .structures import CaseInsensitiveDict\nfrom .utils import (  # noqa: F401\n    DEFAULT_PORTS,\n    default_headers,\n    get_auth_from_url,\n    get_environ_proxies,\n    get_netrc_auth,\n    requote_uri,\n    resolve_proxies,\n    rewind_body,\n    should_bypass_proxies,\n    to_key_val_list,\n)\n\n# Preferred clock, based on which one is more accurate on a given system.\nif sys.platform == \"win32\":\n    preferred_clock = time.perf_counter\nelse:\n    preferred_clock = time.time\n\n"
+ },
+ "ch:61f4f453c0670e63aea966d8": {
+  "path": "src/requests/sessions.py",
+  "start_line": 500,
+  "end_line": 591,
+  "text": "src/requests/sessions.py :: Session.request\n    def request(\n        self,\n        method,\n        url,\n        params=None,\n        data=None,\n        headers=None,\n        cookies=None,\n        files=None,\n        auth=None,\n        timeout=None,\n        allow_redirects=True,\n        proxies=None,\n        hooks=None,\n        stream=None,\n        verify=None,\n        cert=None,\n        json=None,\n    ):\n        \"\"\"Constructs a :class:`Request <Request>`, prepares it and sends it.\n        Returns :class:`Response <Response>` object.\n\n        :param method: method for the new :class:`Request` object.\n        :param url: URL for the new :class:`Request` object.\n        :param params: (optional) Dictionary or bytes to be sent in the query\n            string for the :class:`Request`.\n        :param data: (optional) Dictionary, list of tuples, bytes, or file-like\n            object to send in the body of the :class:`Request`.\n        :param json: (optional) json to send in the body of the\n            :class:`Request`.\n        :param headers: (optional) Dictionary of HTTP Headers to send with the\n            :class:`Request`.\n        :param cookies: (optional) Dict or CookieJar object to send with the\n            :class:`Request`.\n        :param files: (optional) Dictionary of ``'filename': file-like-objects``\n            for multipart encoding upload.\n        :param auth: <REDACTED_SECRET> Auth tuple or callable to enable\n            Basic/Digest/Custom HTTP Auth.\n        :param timeout: (optional) How long to wait for the server to send\n            data before giving up, as a float, or a :ref:`(connect timeout,\n            read timeout) <timeouts>` tuple.\n        :type timeout: float or tuple\n        :param allow_redirects: (optional) Set to True by default.\n        :type allow_redirects: bool\n        :param proxies: (optional) Dictionary mapping protocol or protocol and\n            hostname to the URL of the proxy.\n        :param hooks: (optional) Dictionary mapping hook name to one event or\n            list of events, event must be callable.\n        :param stream: (optional) whether to immediately download the response\n            content. Defaults to ``False``.\n        :param verify: (optional) Either a boolean, in which case it controls whether we verify\n            the server's TLS certificate, or a string, in which case it must be a path\n            to a CA bundle to use. Defaults to ``True``. When set to\n            ``False``, requests will accept any TLS certificate presented by\n            the server, and will ignore hostname mismatches and/or expired\n            certificates, which will make your application vulnerable to\n            man-in-the-middle (MitM) attacks. Setting verify to ``False``\n            may be useful during local development or testing.\n        :param cert: (optional) if String, path to ssl client cert file (.pem).\n            If Tuple, ('cert', 'key') pair.\n        :rtype: requests.Response\n        \"\"\"\n        # Create the Request.\n        req = Request(\n            method=method.upper(),\n            url=url,\n            headers=headers,\n            files=files,\n            data=data or {},\n            json=json,\n            params=params or {},\n            auth=auth,\n            cookies=cookies,\n            hooks=hooks,\n        )\n        prep = self.prepare_request(req)\n\n        proxies = proxies or {}\n\n        settings = self.merge_environment_settings(\n            prep.url, proxies, stream, verify, cert\n        )\n\n        # Send the request.\n        send_kwargs = {\n            \"timeout\": timeout,\n            \"allow_redirects\": allow_redirects,\n        }\n        send_kwargs.update(settings)\n        resp = self.send(prep, **send_kwargs)\n\n        return resp"
+ },
+ "ch:371649d76becc52532150bf6": {
+  "path": "src/requests/sessions.py",
+  "start_line": 356,
+  "end_line": 389,
+  "text": "src/requests/sessions.py :: Session\nclass Session(SessionRedirectMixin):\n    \"\"\"A Requests session.\n\n    Provides cookie persistence, connection-pooling, and configuration.\n\n    Basic Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> s.get('https://httpbin.org/get')\n      <Response [200]>\n\n    Or as a context manager::\n\n      >>> with requests.Session() as s:\n      ...     s.get('https://httpbin.org/get')\n      <Response [200]>\n    \"\"\"\n\n    __attrs__ = [\n        \"headers\",\n        \"cookies\",\n        \"auth\",\n        \"proxies\",\n        \"hooks\",\n        \"params\",\n        \"verify\",\n        \"cert\",\n        \"adapters\",\n        \"stream\",\n        \"trust_env\",\n        \"max_redirects\",\n    ]\n\n# members: (self), (self), (self, *args), (self, request), (self, method, url, params=None, data=None, headers=None, cookies=None, files=None, auth=None, timeout=None, allow_redir, (self, url, **kwargs), (self, url, **kwargs), (self, url, **kwargs), (self, url, data=None, json=None, **kwargs), (self, url, data=None, **kwargs), (self, url, data=None, **kwargs), (self, url, **kwargs), (self, request, **kwargs), (self, url, proxies, stream, verify, cert), (self, url), (self), (self, prefix, adapter), (self), (self, state)"
+ },
+ "ch:ca39b0de7893d46a8c0db767": {
+  "path": "tests/compat.py",
+  "start_line": 14,
+  "end_line": 23,
+  "text": "tests/compat.py :: u\ndef u(s):\n    warnings.warn(\n        (\n            \"This helper function is no longer relevant in Python 3. \"\n            \"Usage of this alias should be discontinued as it will be \"\n            \"removed in a future release of Requests.\"\n        ),\n        DeprecationWarning,\n    )\n    return s"
+ },
+ "ch:fc0460512c5951e0b5f161fd": {
+  "path": "tests/test_requests.py",
+  "start_line": 80,
+  "end_line": 82,
+  "text": "tests/test_requests.py :: TestRequests\nclass TestRequests:\n    digest_auth_algo = (\"MD5\", \"SHA-256\", \"SHA-512\")\n\n# members: (self), (self, exception, url), (self), (self, httpbin, method), (self, httpbin, method), (self, httpbin, method), (self, httpbin), (self), (self, url, expected), (self), (self), (self), (self), (self, httpbin, scheme), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin, key), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin, username, password), (self), (self, url, exception), (self), (self, httpbin, httpbin_secure), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin) (+121 more)"
+ },
+ "ch:db3b3ec4e160f40de67d0447": {
+  "path": "tests/test_requests.py",
+  "start_line": 2864,
+  "end_line": 2895,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_expired_cert\n    def test_different_connection_pool_for_tls_settings_verify_bundle_expired_cert(\n        self,\n    ):\n        def response_handler(sock):\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=3,\n            cert_chain=\"tests/certs/expired/server/server.pem\",\n            keyfile=\"tests/certs/expired/server/server.key\",\n        )\n\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False)\n            assert r1.status_code == 200\n\n            # Has right trust bundle, but certificate expired\n            with pytest.raises(requests.exceptions.SSLError):\n                s.get(url, verify=\"tests/certs/expired/ca/ca.crt\")\n\n            close_server.set()\n        assert 2 == len(s.adapters[\"https://\"].poolmanager.pools)"
+ },
+ "ch:44c02d8053928e2d545a10f8": {
+  "path": "tests/test_requests.py",
+  "start_line": 2897,
+  "end_line": 2927,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert\n    def test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert(\n        self,\n    ):\n        def response_handler(sock):\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=3,\n            cert_chain=\"tests/certs/valid/server/server.pem\",\n            keyfile=\"tests/certs/valid/server/server.key\",\n        )\n\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False)\n            assert r1.status_code == 200\n\n            r2 = s.get(url, verify=\"tests/certs/valid/ca/ca.crt\")\n            assert r2.status_code == 200\n\n            close_server.set()\n        assert 2 == len(s.adapters[\"https://\"].poolmanager.pools)"
+ },
+ "ch:6d0a11d0ae2e3be06e84408a": {
+  "path": "tests/test_requests.py",
+  "start_line": 2929,
+  "end_line": 2966,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_mtls_settings\n    def test_different_connection_pool_for_mtls_settings(self):\n        client_cert = None\n\n        def response_handler(sock):\n            nonlocal client_cert\n            client_cert = sock.getpeercert()\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=2,\n            cert_chain=\"tests/certs/expired/server/server.pem\",\n            keyfile=\"tests/certs/expired/server/server.key\",\n            mutual_tls=True,\n            cacert=\"tests/certs/expired/ca/ca.crt\",\n        )\n\n        cert = (\n            \"tests/certs/mtls/client/client.pem\",\n            \"tests/certs/mtls/client/client.key\",\n        )\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False, cert=cert)\n            assert r1.status_code == 200\n            with pytest.raises(requests.exceptions.SSLError):\n                s.get(url, cert=cert)\n            close_server.set()\n\n        assert client_cert is not None"
+ },
+ "ch:4776c53304980d91759bb2df": {
+  "path": "tests/test_utils.py",
+  "start_line": 685,
+  "end_line": 694,
+  "text": "tests/test_utils.py :: test_to_native_string\n@pytest.mark.parametrize(\n    \"value, expected\",\n    (\n        (\"T\", \"T\"),\n        (b\"T\", \"T\"),\n        (\"T\", \"T\"),\n    ),\n)\ndef test_to_native_string(value, expected):\n    assert to_native_string(value) == expected"
+ }
+}

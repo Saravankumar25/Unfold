@@ -1,8 +1,8 @@
 """`JobQueue` adapter for local runs (HLD D2): one one-shot worker process per job.
 
-`python -m unfold.worker.run analysis <job_id>` is exactly what a Fargate task runs in the AWS adapter; only the
-launcher differs. No long-lived worker loop exists. The job row in Postgres is the durable queue; this adapter just
-starts processes (bounded by `MAX_CONCURRENT_JOBS`) and restarts a job whose worker asked to be retried or died.
+`python -m unfold.worker.run analysis <job_id>` (or `export <id>`, `cleanup <id>`) is exactly what a Fargate task
+runs in the AWS adapter; only the launcher differs. No long-lived worker loop exists. The job row in Postgres is the
+durable queue; this adapter just starts processes (bounded by `MAX_CONCURRENT_JOBS`) and restarts a job whose worker asked to be retried or died.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import sys
 
 from unfold.core.config import Settings
 from unfold.core.logging import get_logger
+from unfold.exports.status import mark_failed
 from unfold.orchestration.constants import ALIVE_WITHIN, RETRY_EXIT_CODE
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
@@ -28,6 +29,7 @@ class SubprocessJobQueue(JobQueue):
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._slots = asyncio.Semaphore(max(1, settings.max_concurrent_jobs))
+        self._export_slots = asyncio.Semaphore(1)  # one Chromium at a time
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     @classmethod
@@ -47,11 +49,21 @@ class SubprocessJobQueue(JobQueue):
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         self._spawn(f"cleanup:{project_id}", "cleanup", project_id, 0.0)
 
+    async def enqueue_export(self, export_id: str, *, defer_s: float | None = None) -> None:
+        self._spawn(f"export:{export_id}", "export", export_id, defer_s or 0.0)
+
+    async def join(self) -> None:
+        """Wait for every supervised task (a one-shot caller such as `worker.run sweep` needs this)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks.values()), return_exceptions=True)
+
     def _spawn(self, key: str, task: str, ref: str, delay: float) -> None:
         if key in self._tasks and not self._tasks[key].done():
             return  # idempotent: the same job is never supervised twice
         supervised = asyncio.create_task(self._supervise(task, ref, delay), name=key)
-        supervised.add_done_callback(lambda _t: self._tasks.pop(key, None))
+        supervised.add_done_callback(
+            lambda t: self._tasks.pop(key, None) if self._tasks.get(key) is t else None
+        )
         self._tasks[key] = supervised
 
     async def _supervise(self, task: str, ref: str, delay: float) -> None:
@@ -61,7 +73,7 @@ class SubprocessJobQueue(JobQueue):
             await asyncio.sleep(delay)
         hard_limit = self._settings.job_timeout_seconds + 60.0
         for attempt in range(1, self._settings.max_job_attempts + 1):
-            slot = self._slots if task == "analysis" else contextlib.nullcontext()
+            slot = {"analysis": self._slots, "export": self._export_slots}.get(task, contextlib.nullcontext())
             async with slot:
                 try:
                     proc = await asyncio.create_subprocess_exec(
@@ -80,19 +92,24 @@ class SubprocessJobQueue(JobQueue):
             if code == 0:
                 return
             if attempt < self._settings.max_job_attempts:
-                await asyncio.sleep(
-                    min(30.0, 5.0 * attempt) if code == RETRY_EXIT_CODE else CRASH_RETRY_SECONDS
-                )
+                # Only an analysis has a heartbeat guard to wait out after a crash; exports retry on a short backoff.
+                quick = code == RETRY_EXIT_CODE or task != "analysis"
+                await asyncio.sleep(min(30.0, 5.0 * attempt) if quick else CRASH_RETRY_SECONDS)
         log.error("worker.gave_up", task=task, ref=ref)
-        if task == "analysis":
-            await self._record_abandoned(ref)
+        if task in ("analysis", "export"):
+            await self._record_abandoned(task, ref)
 
-    async def _record_abandoned(self, job_id: str) -> None:
-        """Mark the job failed (the workers could not), through a short-lived runtime of our own."""
+    async def _record_abandoned(self, task: str, ref: str) -> None:
+        """Mark the job or export failed (the workers could not), through a short-lived runtime of our own."""
         rt = Runtime.create(self._settings, db_pool_size=1)
         try:
-            await fail_abandoned_job(rt, job_id)
+            if task == "analysis":
+                await fail_abandoned_job(rt, ref)
+            else:
+                await mark_failed(
+                    rt, ref, "The export worker stopped repeatedly and the export was abandoned."
+                )
         except Exception as exc:
-            log.error("worker.abandon_not_recorded", job_id=job_id, error_type=type(exc).__name__)
+            log.error("worker.abandon_not_recorded", task=task, ref=ref, error_type=type(exc).__name__)
         finally:
             await rt.aclose()

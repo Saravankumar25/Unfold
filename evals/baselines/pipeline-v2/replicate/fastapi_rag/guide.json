@@ -1,0 +1,1574 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Overview of FastAPI RAG service",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "This chapter provides an overview of the FastAPI RAG service, explaining its core purpose in retrieval-augmented generation and how its main architectural components fit together.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Overview of FastAPI RAG service",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "DocQA is a retrieval-augmented question answering system over your documents [E16]."
+     },
+     {
+      "type": "heading",
+      "text": "Core Architecture and Services",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The application relies on several external services and internal components configured through runtime settings. The Settings class defines variables for database connections, Redis, Qdrant, and model parameters [E4]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Settings(BaseSettings):\n    \"\"\"Runtime configuration for the API and the worker.\"\"\"\n\n    model_config = SettingsConfigDict(env_file=\".env\", extra=\"ignore\")\n\n    database_url: str = \"postgresql+asyncpg://docqa:<REDACTED_SECRET>@localhost:5432/docqa\"\n    redis_url: str = \"redis://localhost:6379/0\"\n    qdrant_url: str = \"http://localhost:6333\"\n    collection_name: str = \"docqa_chunks\"\n    openai_api_key: str = DEV_OPENAI_API_KEY\n    chat_model: str = \"gpt-4o-mini\"\n    embedding_model: str = \"sentence-transformers/all-MiniLM-L6-v2\"\n    embedding_dim: int = 384\n    chunk_size: int = 800\n    chunk_overlap: int = 120\n    top_k: int = 8\n    log_level: str = \"INFO\"\n    cors_origins: list[str] = [\"http://localhost:3000\"]",
+      "path": "app/core/config.py",
+      "start_line": 11,
+      "caption": "Runtime configuration settings"
+     },
+     {
+      "type": "paragraph",
+      "text": "To interact with data stores and process uploads, IngestionService owns the document lifecycle in PostgreSQL and Qdrant [E6]. Text extraction from uploaded documents handles PDF, Markdown, and plain text formats [E13]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def extract_text(filename: str, data: bytes) -> str:\n    \"\"\"Extract plain text from a PDF or Markdown/plain-text upload.\"\"\"\n    if filename.lower().endswith(\".pdf\"):\n        reader = PdfReader(io.BytesIO(data))\n        return \"\\n\\n\".join(page.extract_text() or \"\" for page in reader.pages)\n    return data.decode(\"utf-8\", errors=\"replace\")",
+      "path": "app/services/ingestion.py",
+      "start_line": 17,
+      "caption": "extract_text function"
+     },
+     {
+      "type": "heading",
+      "text": "Execution Flows",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "When a client uploads a document, the request flows through dependency injection and services to enqueue background processing [E3]."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "upload_document endpoint receives the file [E3].",
+       "get_db yields an asynchronous database session [E1].",
+       "Redis and SessionLocal are initialized [E2].",
+       "get_queue creates an arq Redis pool for background jobs [E2].",
+       "get_settings loads the cached application configuration [E5].",
+       "Settings provides configuration parameters [E4].",
+       "IngestionService initializes with the database session and vector store [E6][E14]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "paragraph",
+      "text": "Listing documents follows a direct database retrieval path using IngestionService [E7][E8]."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "list_documents endpoint is called [E7].",
+       "get_db provides the database session [E1].",
+       "IngestionService queries PostgreSQL for documents ordered by creation date [E8]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "callout",
+      "tone": "note",
+      "text": "For details on specific HTTP endpoints, see Request lifecycle and endpoints. Persistence is detailed in Data and persistence layer, background workers in Background work and workers, configuration in Configuration and deployment, and migrations in Versions and migrations."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:1ddda4a030a5597d",
+      "caption": "fastapi_rag architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The Settings class defines variables for database connections, Redis, Qdrant, and model parameters.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:6d88ab6587752885bd3447a0"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "IngestionService owns the document lifecycle in PostgreSQL and Qdrant.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:24673f03369b17e2e545f655"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Text extraction from uploaded documents handles PDF, Markdown, and plain text formats.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:09a1e8db8a52269443f3f657"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "DocQA is a retrieval-augmented question answering system over your documents.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:6f6647e692531152f0e158f8"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/api/deps.py",
+     "symbol": "get_db",
+     "chunk_id": "ch:d8a11f0601062c5cf938e832",
+     "end_line": 16,
+     "start_line": 13
+    },
+    "E2": {
+     "path": "app/api/deps.py",
+     "symbol": "get_queue",
+     "chunk_id": "ch:9a300cc8ce8c7df2b5a47e88",
+     "end_line": 22,
+     "start_line": 19
+    },
+    "E3": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "upload_document",
+     "chunk_id": "ch:9966f0ccdc63e66eb26ffad9",
+     "end_line": 26,
+     "start_line": 14
+    },
+    "E4": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:6d88ab6587752885bd3447a0",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E5": {
+     "path": "app/core/config.py",
+     "symbol": "get_settings",
+     "chunk_id": "ch:a209f1303c1b1f15d3d48d76",
+     "end_line": 34,
+     "start_line": 31
+    },
+    "E6": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:24673f03369b17e2e545f655",
+     "end_line": 27,
+     "start_line": 25
+    },
+    "E7": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "list_documents",
+     "chunk_id": "ch:848d3da1ad595c9b20f29d19",
+     "end_line": 33,
+     "start_line": 29
+    },
+    "E8": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.list_documents",
+     "chunk_id": "ch:830d4f19085c418160e4373d",
+     "end_line": 49,
+     "start_line": 47
+    },
+    "E9": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "get_document",
+     "chunk_id": "ch:7ebfb13966908cad9812f8aa",
+     "end_line": 43,
+     "start_line": 36
+    },
+    "E10": {
+     "path": "app/schemas.py",
+     "symbol": "DocumentStatus",
+     "chunk_id": "ch:49525c8f7b5e0aa72af6c6d2",
+     "end_line": 22,
+     "start_line": 19
+    },
+    "E11": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:0eec1c97f938b76681d7a1bd",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E12": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Running locally",
+     "chunk_id": "ch:fac75d8525fbee6f6fea5be6",
+     "end_line": 23,
+     "start_line": 15
+    },
+    "E13": {
+     "path": "app/services/ingestion.py",
+     "symbol": "extract_text",
+     "chunk_id": "ch:09a1e8db8a52269443f3f657",
+     "end_line": 22,
+     "start_line": 17
+    },
+    "E14": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.__init__",
+     "chunk_id": "ch:9164bc8230c2355e22f05a9c",
+     "end_line": 32,
+     "start_line": 28
+    },
+    "E15": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:e20bff36d22d28163e268539",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E16": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents",
+     "chunk_id": "ch:6f6647e692531152f0e158f8",
+     "end_line": 6,
+     "start_line": 1
+    },
+    "E17": {
+     "path": "app/workers/tasks.py",
+     "symbol": "WorkerSettings",
+     "chunk_id": "ch:59cdf303cc2e04a8d82ad31c",
+     "end_line": 33,
+     "start_line": 27
+    },
+    "E18": {
+     "path": "app/core/config.py",
+     "symbol": null,
+     "chunk_id": "ch:ab9f0c6634c6470742c08b2f",
+     "end_line": 10,
+     "start_line": 1
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 4,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 2,
+    "unsupported": 0,
+    "grounded_ratio": 0.5,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 2
+   }
+  },
+  {
+   "key": "request-lifecycle",
+   "title": "Request lifecycle and endpoints",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter traces incoming requests from API route entry points through dependency injection and business services to their final responses.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Request lifecycle and endpoints",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on the Overview of FastAPI RAG service, we examine how incoming HTTP requests flow through the application routes, invoke dependencies like database sessions, and trigger domain services."
+     },
+     {
+      "type": "heading",
+      "text": "Route Handlers and Entry Points",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The FastAPI service exposes several routes for managing documents and executing queries [E1, E2, E3, E8]. For instance, listing uploaded documents is handled by `list_documents` [E3]:"
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "@router.get(\"\", response_model=list[DocumentOut])\nasync def list_documents(db: AsyncSession = Depends(get_db)) -> list[DocumentOut]:\n    \"\"\"List uploaded documents with their ingestion status.\"\"\"\n    service = IngestionService(db)\n    return [DocumentOut.model_validate(d) for d in await service.list_documents()]",
+      "path": "app/api/routes/documents.py",
+      "start_line": 29,
+      "caption": "list_documents route handler"
+     },
+     {
+      "type": "paragraph",
+      "text": "Similarly, uploading a document validates its content type, registers the upload via `IngestionService`, and enqueues a background job [E2]:"
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "@router.post(\"\", response_model=DocumentOut, status_code=202)\nasync def upload_document(\n    file: UploadFile = File(...),\n    db: AsyncSession = Depends(get_db),\n    queue: ArqRedis = Depends(get_queue),\n) -> DocumentOut:\n    \"\"\"Store the uploaded file and enqueue background ingestion.\"\"\"\n    if file.content_type not in (\"application/pdf\", \"text/markdown\", \"text/plain\"):\n        raise HTTPException(status_code=415, detail=\"Unsupported document type\")\n    service = IngestionService(db)\n    document = await service.register_upload(file.filename or \"upload\", await file.read())\n    await queue.enqueue_job(\"ingest_document\", document.id)\n    return DocumentOut.model_validate(document)",
+      "path": "app/api/routes/documents.py",
+      "start_line": 14,
+      "caption": "Upload document route implementation"
+     },
+     {
+      "type": "heading",
+      "text": "Request Flows",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "When a client requests the deletion of a document, the request follows an established path from the endpoint down to the database and vector store [E1, E4, E5, E6, E7]:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "delete_document endpoint in app/api/routes/documents.py receives the DELETE request",
+       "get_db dependency yields a database session via SessionLocal in app/api/deps.py",
+       "IngestionService is instantiated with the database session in app/services/ingestion.py",
+       "IngestionService.delete_document fetches the document and removes it from PostgreSQL and Qdrant"
+      ],
+      "ordered": true
+     },
+     {
+      "type": "heading",
+      "text": "Database Dependencies",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Database sessions are managed per request using FastAPI's dependency injection system [E4]:"
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "async def get_db() -> AsyncIterator[AsyncSession]:\n    \"\"\"Yield a database session per request.\"\"\"\n    async with SessionLocal() as session:\n        yield session",
+      "path": "app/api/deps.py",
+      "start_line": 13,
+      "caption": "get_db dependency provider"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show how validation errors, dependency failures, or store connection failures are handled globally."
+     },
+     {
+      "type": "paragraph",
+      "text": "Other aspects such as the underlying data models and persistence stores are covered in the Data and persistence layer chapter, while background queues are discussed in Background work and workers."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:84c4b8c0367a0453",
+      "caption": "Request flow"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The list_documents endpoint retrieves uploaded documents using the IngestionService.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:848d3da1ad595c9b20f29d19"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The upload_document endpoint validates file content types, registers the upload, and enqueues a background ingestion job.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:9966f0ccdc63e66eb26ffad9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Database sessions are yielded per request via the get_db dependency.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:d8a11f0601062c5cf938e832"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The upload_document route accepts a file, checks its content type, registers the upload via IngestionService, and enqueues background ingestion.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:9966f0ccdc63e66eb26ffad9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "delete_document",
+     "chunk_id": "ch:3b732577b566f6528566f223",
+     "end_line": 50,
+     "start_line": 46
+    },
+    "E2": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "upload_document",
+     "chunk_id": "ch:9966f0ccdc63e66eb26ffad9",
+     "end_line": 26,
+     "start_line": 14
+    },
+    "E3": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "list_documents",
+     "chunk_id": "ch:848d3da1ad595c9b20f29d19",
+     "end_line": 33,
+     "start_line": 29
+    },
+    "E4": {
+     "path": "app/api/deps.py",
+     "symbol": "get_db",
+     "chunk_id": "ch:d8a11f0601062c5cf938e832",
+     "end_line": 16,
+     "start_line": 13
+    },
+    "E5": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:24673f03369b17e2e545f655",
+     "end_line": 27,
+     "start_line": 25
+    },
+    "E6": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:0eec1c97f938b76681d7a1bd",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E7": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.delete_document",
+     "chunk_id": "ch:eb3d0f868c4cd009930905b9",
+     "end_line": 82,
+     "start_line": 76
+    },
+    "E8": {
+     "path": "app/api/routes/query.py",
+     "symbol": "answer_query",
+     "chunk_id": "ch:360a20fa870c905048b31e38",
+     "end_line": 21,
+     "start_line": 14
+    },
+    "E9": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever",
+     "chunk_id": "ch:3a3d6fcc459d99c63ff433c3",
+     "end_line": 36,
+     "start_line": 34
+    },
+    "E10": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever._load_chunks",
+     "chunk_id": "ch:deb48422da730ecf751376ad",
+     "end_line": 44,
+     "start_line": 42
+    },
+    "E11": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.search",
+     "chunk_id": "ch:c68a241bb80b58066411177b",
+     "end_line": 71,
+     "start_line": 59
+    },
+    "E12": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.delete_document",
+     "chunk_id": "ch:d95efa5da9288582d4b1f005",
+     "end_line": 35,
+     "start_line": 31
+    },
+    "E13": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "get_document",
+     "chunk_id": "ch:7ebfb13966908cad9812f8aa",
+     "end_line": 43,
+     "start_line": 36
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 4,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 4,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "data-persistence",
+   "title": "Data and persistence layer",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the data and persistence layer of fastapi_rag, detailing its PostgreSQL models, Qdrant vector store, and how services read and write data.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Data and Persistence Layer",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on the architectural concepts introduced in the overview of FastAPI RAG service, this chapter focuses specifically on data models and persistence stores."
+     },
+     {
+      "type": "heading",
+      "text": "Relational Models and Vector Storage",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses PostgreSQL via SQLAlchemy for relational storage and Qdrant for vector embeddings [E7, E8]. The Document model is defined as an uploaded source document with fields like id, filename, content_type, status, raw_text, and created_at [E8]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Document(Base):\n    \"\"\"An uploaded source document.\"\"\"\n\n    __tablename__ = \"documents\"\n\n    id: Mapped[int] = mapped_column(Integer, primary_key=True)\n    filename: Mapped[str] = mapped_column(String(512))\n    content_type: Mapped[str] = mapped_column(String(128))\n    status: Mapped[str] = mapped_column(String(32), default=\"pending\")\n    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)\n    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())\n\n    chunks: Mapped[list[\"Chunk\"]] = relationship(back_populates=\"document\", cascade=\"all, delete-orphan\")",
+      "path": "app/db/models.py",
+      "start_line": 13,
+      "caption": "Document SQLAlchemy model definition"
+     },
+     {
+      "type": "paragraph",
+      "text": "The relational database schema includes tables for documents and chunks [E17]."
+     },
+     {
+      "type": "heading",
+      "text": "Reading and Writing Sessions",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Services such as HybridRetriever and IngestionService accept an AsyncSession and initialize a VectorStore using application settings [E1, E2]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "    def __init__(self, db: AsyncSession) -> None:\n        settings = get_settings()\n        self.db = db\n        self.store = VectorStore(settings.qdrant_url, settings.collection_name)",
+      "path": "app/services/retriever.py",
+      "start_line": 37,
+      "caption": "HybridRetriever initialization with database session"
+     },
+     {
+      "type": "paragraph",
+      "text": "The codebase uses services like IngestionService and HybridRetriever, both of which accept an AsyncSession and interact with the VectorStore backed by Qdrant [E1, E2, E15]. In addition, the upload endpoint uses an AsyncSession and an ArqRedis queue to register uploads and enqueue background jobs [E4]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:633a3fb230ae9e73",
+      "caption": "Data model"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The project uses PostgreSQL via SQLAlchemy for relational storage and Qdrant for vector embeddings.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:e20bff36d22d28163e268539",
+      "ch:75f336368fe699265ad1af12"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The Document model is defined as an uploaded source document with fields like id, filename, content_type, status, raw_text, and created_at.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:75f336368fe699265ad1af12"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Services such as HybridRetriever and IngestionService accept an AsyncSession and initialize a VectorStore using application settings.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a7a5795ade027ff83a79d6eb",
+      "ch:9164bc8230c2355e22f05a9c"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The relational database schema is initialized using Alembic migrations, starting with the initial revision.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:cbc258fae6c9658f478a375a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The codebase uses IngestionService and HybridRetriever, both of which accept an AsyncSession and interact with the VectorStore backed by Qdrant.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a7a5795ade027ff83a79d6eb",
+      "ch:9164bc8230c2355e22f05a9c",
+      "ch:196e2bd3c2c0dbb525f40546"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The upload endpoint uses an AsyncSession and an ArqRedis queue to register uploads and enqueue background jobs.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:9966f0ccdc63e66eb26ffad9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The relational database schema includes tables for documents and chunks.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:f3a3f45d6bb9976094759fa7"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.__init__",
+     "chunk_id": "ch:a7a5795ade027ff83a79d6eb",
+     "end_line": 40,
+     "start_line": 37
+    },
+    "E2": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.__init__",
+     "chunk_id": "ch:9164bc8230c2355e22f05a9c",
+     "end_line": 32,
+     "start_line": 28
+    },
+    "E3": {
+     "path": "app/main.py",
+     "symbol": null,
+     "chunk_id": "ch:dcff50eb1394fd705fcb34e6",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "upload_document",
+     "chunk_id": "ch:9966f0ccdc63e66eb26ffad9",
+     "end_line": 26,
+     "start_line": 14
+    },
+    "E5": {
+     "path": "app/schemas.py",
+     "symbol": "QueryRequest",
+     "chunk_id": "ch:8aefd346508d3536fcae36aa",
+     "end_line": 29,
+     "start_line": 25
+    },
+    "E6": {
+     "path": "app/services/retriever.py",
+     "symbol": null,
+     "chunk_id": "ch:93206578a9dd44bac75fe033",
+     "end_line": 16,
+     "start_line": 1
+    },
+    "E7": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:e20bff36d22d28163e268539",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E8": {
+     "path": "app/db/models.py",
+     "symbol": "Document",
+     "chunk_id": "ch:75f336368fe699265ad1af12",
+     "end_line": 25,
+     "start_line": 13
+    },
+    "E9": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient.__init__",
+     "chunk_id": "ch:c21969ec8c079a693682c741",
+     "end_line": 28,
+     "start_line": 25
+    },
+    "E10": {
+     "path": "app/api/routes/query.py",
+     "symbol": "answer_query",
+     "chunk_id": "ch:360a20fa870c905048b31e38",
+     "end_line": 21,
+     "start_line": 14
+    },
+    "E11": {
+     "path": "app/main.py",
+     "symbol": "create_app",
+     "chunk_id": "ch:c9d153c3f0b4104b0253fcac",
+     "end_line": 37,
+     "start_line": 26
+    },
+    "E12": {
+     "path": "app/services/llm.py",
+     "symbol": "Answer",
+     "chunk_id": "ch:5c854751ecf954eb87060080",
+     "end_line": 19,
+     "start_line": 16
+    },
+    "E13": {
+     "path": "app/db/models.py",
+     "symbol": "Base",
+     "chunk_id": "ch:af6bb4df1c3b126e146f2f58",
+     "end_line": 10,
+     "start_line": 9
+    },
+    "E14": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": null,
+     "chunk_id": "ch:cbc258fae6c9658f478a375a",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E15": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore",
+     "chunk_id": "ch:196e2bd3c2c0dbb525f40546",
+     "end_line": 9,
+     "start_line": 7
+    },
+    "E16": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "downgrade",
+     "chunk_id": "ch:64fdf00b7fec98fea7737e0a",
+     "end_line": 35,
+     "start_line": 33
+    },
+    "E17": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "upgrade",
+     "chunk_id": "ch:f3a3f45d6bb9976094759fa7",
+     "end_line": 30,
+     "start_line": 13
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 7,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 5,
+    "unsupported": 0,
+    "grounded_ratio": 0.71,
+    "revision_rounds": 2,
+    "claims_not_stated": 0,
+    "strongly_inferred": 2
+   }
+  },
+  {
+   "key": "background-jobs",
+   "title": "Background work and workers",
+   "position": 3,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the background workers, queue configuration, and document ingestion tasks powered by arq.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Background Work and Workers",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on the architectural concepts introduced in Overview of FastAPI RAG service, this chapter details how background jobs are executed asynchronously to handle heavy data processing tasks like document ingestion. For details on how HTTP requests trigger actions or how data is persisted, refer to Request lifecycle and endpoints and Data and persistence layer. Configuration details can be found in Configuration and deployment."
+     },
+     {
+      "type": "heading",
+      "text": "Worker Configuration and Tasks",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The background worker subsystem uses arq to manage queues and execute tasks. The worker settings are defined in the WorkerSettings class [E7]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class WorkerSettings:\n    \"\"\"arq worker configuration.\"\"\"\n\n    functions = [ingest_document]\n    on_startup = startup\n    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)\n    max_jobs = 4",
+      "path": "app/workers/tasks.py",
+      "start_line": 27,
+      "caption": "WorkerSettings configuration"
+     },
+     {
+      "type": "paragraph",
+      "text": "When the worker starts, it executes the startup function which logs the startup event [E8]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "async def startup(ctx: dict) -> None:\n    logger.info(\"worker starting\")",
+      "path": "app/workers/tasks.py",
+      "start_line": 23,
+      "caption": "Worker startup function"
+     },
+     {
+      "type": "heading",
+      "text": "Job Execution Flow",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The primary background task is ingest_document, which chunks, embeds, and indexes an uploaded document [E6]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "async def ingest_document(ctx: dict, document_id: int) -> int:\n    \"\"\"Chunk, embed and index one uploaded document.\"\"\"\n    async with SessionLocal() as session:\n        service = IngestionService(session)\n        count = await service.ingest(document_id)\n    logger.info(\"ingested document %s into %s chunks\", document_id, count)\n    return count",
+      "path": "app/workers/tasks.py",
+      "start_line": 14,
+      "caption": "ingest_document task"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "Queue consumer triggers ingest_document with context and document_id [E6].",
+       "SessionLocal creates a database session [E6].",
+       "IngestionService is instantiated with the session [E6].",
+       "IngestionService.ingest runs to process the document [E5].",
+       "IngestionService.get_document fetches the document record [E4].",
+       "Document raw text is split into chunks using split_text [E1].",
+       "_make_chunk creates individual text chunks [E2]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "paragraph",
+      "text": "Background jobs in the application use arq with Redis, where the WorkerSettings class defines the arq worker configuration with a maximum of four jobs [E7]. The worker executes the ingest_document function to chunk, embed, and index uploaded documents using IngestionService [E6]. The queue is accessed and jobs are enqueued via an arq Redis pool created by get_queue [E10]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:e19b7f69f3aa2523",
+      "caption": "AI pipeline"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The WorkerSettings class configures the arq worker functions, startup hook, Redis settings, and maximum concurrent jobs.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:59cdf303cc2e04a8d82ad31c"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The startup function logs a message when the worker starts.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:3ebc561c147526df4aa47b08"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The ingest_document task creates a database session, instantiates the IngestionService, and invokes ingestion for a given document ID.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:bb52a537e3894c793dbb648f"
+     ],
+     "graph_node_ids": [
+      "function:bc97f09a72c15f467f2d2325",
+      "class:7df0b236b52bec0e6c127f42"
+     ],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "WorkerSettings defines arq worker configuration with a maximum of four jobs using Redis.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:59cdf303cc2e04a8d82ad31c"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The ingest_document function chunks, embeds, and indexes documents using IngestionService.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:bb52a537e3894c793dbb648f"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The get_queue function creates an arq Redis pool used to enqueue background jobs.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:9a300cc8ce8c7df2b5a47e88"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/services/chunking.py",
+     "symbol": "split_text",
+     "chunk_id": "ch:b1c53d9b3ac12ba09542b4be",
+     "end_line": 25,
+     "start_line": 13
+    },
+    "E2": {
+     "path": "app/services/chunking.py",
+     "symbol": "_make_chunk",
+     "chunk_id": "ch:c98fcf753c5ac4c3ff8bb48e",
+     "end_line": 29,
+     "start_line": 28
+    },
+    "E3": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:24673f03369b17e2e545f655",
+     "end_line": 27,
+     "start_line": 25
+    },
+    "E4": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:0eec1c97f938b76681d7a1bd",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E5": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.ingest",
+     "chunk_id": "ch:3dcb4f3163a81ed399d1a8ff",
+     "end_line": 74,
+     "start_line": 57
+    },
+    "E6": {
+     "path": "app/workers/tasks.py",
+     "symbol": "ingest_document",
+     "chunk_id": "ch:bb52a537e3894c793dbb648f",
+     "end_line": 20,
+     "start_line": 14
+    },
+    "E7": {
+     "path": "app/workers/tasks.py",
+     "symbol": "WorkerSettings",
+     "chunk_id": "ch:59cdf303cc2e04a8d82ad31c",
+     "end_line": 33,
+     "start_line": 27
+    },
+    "E8": {
+     "path": "app/workers/tasks.py",
+     "symbol": "startup",
+     "chunk_id": "ch:3ebc561c147526df4aa47b08",
+     "end_line": 24,
+     "start_line": 23
+    },
+    "E9": {
+     "path": "app/workers/tasks.py",
+     "symbol": null,
+     "chunk_id": "ch:514a261eecfa24569fa6ee71",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E10": {
+     "path": "app/api/deps.py",
+     "symbol": "get_queue",
+     "chunk_id": "ch:9a300cc8ce8c7df2b5a47e88",
+     "end_line": 22,
+     "start_line": 19
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 6,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 5,
+    "unsupported": 0,
+    "grounded_ratio": 0.83,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "config-deploy",
+   "title": "Configuration and deployment",
+   "position": 4,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter details the configuration settings, application startup, and deployment manifests for fastapi_rag.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Configuration and deployment",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on the Overview of FastAPI RAG service, this chapter covers the configuration, manifests, and startup mechanisms that power fastapi_rag [E1][E2][E3]."
+     },
+     {
+      "type": "heading",
+      "text": "Runtime Configuration",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The runtime configuration for both the API and the worker is managed by the Settings class in app/core/config.py, which inherits from Pydantic's BaseSettings [E1][E8]. Settings are loaded from environment variables and an optional .env file [E1][E8]. A cached instance is provided via get_settings [E2]:"
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Settings(BaseSettings):\n    \"\"\"Runtime configuration for the API and the worker.\"\"\"\n\n    model_config = SettingsConfigDict(env_file=\".env\", extra=\"ignore\")\n\n    database_url: str = \"postgresql+asyncpg://docqa:<REDACTED_SECRET>@localhost:5432/docqa\"\n    redis_url: str = \"redis://localhost:6379/0\"\n    qdrant_url: str = \"http://localhost:6333\"\n    collection_name: str = \"docqa_chunks\"\n    openai_api_key: str = DEV_OPENAI_API_KEY\n    chat_model: str = \"gpt-4o-mini\"\n    embedding_model: str = \"sentence-transformers/all-MiniLM-L6-v2\"\n    embedding_dim: int = 384\n    chunk_size: int = 800\n    chunk_overlap: int = 120\n    top_k: int = 8\n    log_level: str = \"INFO\"\n    cors_origins: list[str] = [\"http://localhost:3000\"]",
+      "path": "app/core/config.py",
+      "start_line": 11,
+      "caption": null
+     },
+     {
+      "type": "heading",
+      "text": "Application Startup Flow",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "When the FastAPI application starts up, it initializes settings, configures CORS and logging, sets up the Qdrant vector store collection, and registers the database disposal lifecycle [E3][E7]."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "app/main.py invokes create_app [E3]",
+       "create_app calls get_settings to retrieve runtime configuration [E2][E3]",
+       "get_settings returns the cached Settings instance [E1][E2]",
+       "Settings configure the FastAPI application instance [E1][E3]"
+      ],
+      "ordered": true
+     },
+     {
+      "type": "heading",
+      "text": "Deployment and Services",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses Docker Compose to run services such as the worker and dependencies like PostgreSQL, Redis, and Qdrant [E4]. For instance, the worker service is defined as follows [E4]:"
+     },
+     {
+      "type": "code",
+      "language": "yaml",
+      "code": "  worker:\n    build: .\n    command: arq app.workers.tasks.WorkerSettings\n    environment:\n      - DATABASE_URL=postgresql+asyncpg://docqa:<REDACTED_SECRET>@postgres:5432/docqa\n      - REDIS_URL=redis://redis:6379/0\n      - QDRANT_URL=http://qdrant:6333\n      - OPENAI_API_KEY=${OPENAI_API_KEY}\n    depends_on:\n      postgres:\n        condition: service_healthy\n      redis:\n        condition: service_started\n      qdrant:\n        condition: service_started",
+      "path": "docker-compose.yml",
+      "start_line": 16,
+      "caption": "Worker service definition in docker-compose.yml"
+     },
+     {
+      "type": "paragraph",
+      "text": "CI workflows are configured in .github/workflows/ci.yml under the name ci and run on pushes and pull requests to main [E5][E6]."
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence shows Docker Compose configuration for the worker and a GitHub Actions workflow named ci [E4, E5]."
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show which settings a developer should change first."
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not discuss other chapters."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:0f2b652684343efd",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "Runtime configuration for the API and the worker is defined in the Settings class using Pydantic BaseSettings.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:6d88ab6587752885bd3447a0"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Settings are cached using lru_cache in get_settings.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a209f1303c1b1f15d3d48d76"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The FastAPI application is created in create_app by loading settings and configuring CORS and routers.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:c9d153c3f0b4104b0253fcac"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.87,
+     "note": null
+    },
+    {
+     "text": "The worker service is defined in Docker Compose with appropriate environment variables and dependency health checks.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:2f640d7ce858b59c36415bb3"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "CI workflows run on GitHub Actions for pushes and pull requests.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:ae3bde707322a88adc1308d3",
+      "ch:a0f6bb488d90f663b864fde3"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The lifespan context manager configures logging, initializes the Qdrant collection, and disposes of the database engine on shutdown.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:e0275c0ac9d77a5bc33481d9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Settings defines runtime configuration for the API and worker using BaseSettings [E2].",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:6d88ab6587752885bd3447a0"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Docker Compose and GitHub Actions ci workflow are used for deployment and CI [E4, E5].",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:2f640d7ce858b59c36415bb3",
+      "ch:ae3bde707322a88adc1308d3"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:6d88ab6587752885bd3447a0",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E2": {
+     "path": "app/core/config.py",
+     "symbol": "get_settings",
+     "chunk_id": "ch:a209f1303c1b1f15d3d48d76",
+     "end_line": 34,
+     "start_line": 31
+    },
+    "E3": {
+     "path": "app/main.py",
+     "symbol": "create_app",
+     "chunk_id": "ch:c9d153c3f0b4104b0253fcac",
+     "end_line": 37,
+     "start_line": 26
+    },
+    "E4": {
+     "path": "docker-compose.yml",
+     "symbol": "services.worker",
+     "chunk_id": "ch:2f640d7ce858b59c36415bb3",
+     "end_line": 31,
+     "start_line": 16
+    },
+    "E5": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "name",
+     "chunk_id": "ch:ae3bde707322a88adc1308d3",
+     "end_line": 1,
+     "start_line": 1
+    },
+    "E6": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "on",
+     "chunk_id": "ch:a0f6bb488d90f663b864fde3",
+     "end_line": 6,
+     "start_line": 3
+    },
+    "E7": {
+     "path": "app/main.py",
+     "symbol": "lifespan",
+     "chunk_id": "ch:e0275c0ac9d77a5bc33481d9",
+     "end_line": 23,
+     "start_line": 15
+    },
+    "E8": {
+     "path": "app/core/config.py",
+     "symbol": null,
+     "chunk_id": "ch:ab9f0c6634c6470742c08b2f",
+     "end_line": 10,
+     "start_line": 1
+    },
+    "E9": {
+     "path": "app/workers/tasks.py",
+     "symbol": "WorkerSettings",
+     "chunk_id": "ch:59cdf303cc2e04a8d82ad31c",
+     "end_line": 33,
+     "start_line": 27
+    },
+    "E10": {
+     "path": "docker-compose.yml",
+     "symbol": "volumes",
+     "chunk_id": "ch:ee3aa7c33364c7646e38272c",
+     "end_line": 57,
+     "start_line": 56
+    },
+    "E11": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:e20bff36d22d28163e268539",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E12": {
+     "path": "app/workers/tasks.py",
+     "symbol": null,
+     "chunk_id": "ch:514a261eecfa24569fa6ee71",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E13": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:24673f03369b17e2e545f655",
+     "end_line": 27,
+     "start_line": 25
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 8,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 6,
+    "unsupported": 0,
+    "grounded_ratio": 0.75,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 2
+   }
+  },
+  {
+   "key": "versions",
+   "title": "Versions and migrations",
+   "position": 5,
+   "status": "ready",
+   "kind": "core",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the versions and migrations subsystem, detailing how Alembic manages database schema changes through initial revision scripts.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Versions and Migrations",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on the architectural concepts introduced in the Overview of FastAPI RAG service, this chapter examines how database migrations are organized using Alembic revision scripts. The project relies on migration versions to define and evolve the relational database schema."
+     },
+     {
+      "type": "heading",
+      "text": "Initial Schema Revision",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The initial database schema is defined in the migrations version script under the Subsystem 'versions'. This script sets up the baseline revision identifier and establishes the core relational tables for the application."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "\"\"\"initial schema\n\nRevision ID: 0001\n\"\"\"\n\nimport sqlalchemy as sa\nfrom alembic import op\n\nrevision = \"0001\"\ndown_revision = None\n",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 1,
+      "caption": "Initial revision metadata"
+     },
+     {
+      "type": "paragraph",
+      "text": "The migration script defines an upgrade function that creates the necessary tables, specifically the documents table and the chunks table with a foreign key constraint linking back to documents."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def upgrade() -> None:\n    op.create_table(\n        \"documents\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"filename\", sa.String(512), nullable=False),\n        sa.Column(\"content_type\", sa.String(128), nullable=False),\n        sa.Column(\"status\", sa.String(32), nullable=False),\n        sa.Column(\"raw_text\", sa.Text, nullable=True),\n        sa.Column(\"created_at\", sa.DateTime(timezone=True), server_default=sa.func.now()),\n    )\n    op.create_table(\n        \"chunks\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"document_id\", sa.Integer, sa.ForeignKey(\"documents.id\", ondelete=\"CASCADE\")),\n        sa.Column(\"position\", sa.Integer),\n        sa.Column(\"text\", sa.Text),\n        sa.Column(\"token_count\", sa.Integer),\n    )",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 13,
+      "caption": "Initial migration upgrade function"
+     },
+     {
+      "type": "paragraph",
+      "text": "Conversely, the downgrade function provides the mechanism to reverse the schema application by dropping the created tables in the correct order."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def downgrade() -> None:\n    op.drop_table(\"chunks\")\n    op.drop_table(\"documents\")",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 33,
+      "caption": "Initial migration downgrade function"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show how migration errors are handled or rolled back."
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The project relies on migration versions to define and evolve the relational database schema.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:cbc258fae6c9658f478a375a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The initial database schema is defined in the migrations version script under the Subsystem versions.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:cbc258fae6c9658f478a375a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The upgrade function creates the necessary tables, specifically the documents table and the chunks table with a foreign key constraint linking back to documents.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:f3a3f45d6bb9976094759fa7"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The downgrade function provides the mechanism to reverse the schema application by dropping the created tables in the correct order.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:64fdf00b7fec98fea7737e0a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The initial migration creates the documents and chunks tables.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:f3a3f45d6bb9976094759fa7"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The initial migration downgrade drops the chunks and documents tables.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:64fdf00b7fec98fea7737e0a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The evidence does not show how migration errors are handled or rolled back.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:64fdf00b7fec98fea7737e0a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "upgrade",
+     "chunk_id": "ch:f3a3f45d6bb9976094759fa7",
+     "end_line": 30,
+     "start_line": 13
+    },
+    "E2": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "downgrade",
+     "chunk_id": "ch:64fdf00b7fec98fea7737e0a",
+     "end_line": 35,
+     "start_line": 33
+    },
+    "E3": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": null,
+     "chunk_id": "ch:cbc258fae6c9658f478a375a",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:0eec1c97f938b76681d7a1bd",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E5": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.upsert_chunks",
+     "chunk_id": "ch:873797a69d6e2d36c6370ddb",
+     "end_line": 24,
+     "start_line": 21
+    },
+    "E6": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "on",
+     "chunk_id": "ch:a0f6bb488d90f663b864fde3",
+     "end_line": 6,
+     "start_line": 3
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 7,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 0,
+    "unsupported": 0,
+    "grounded_ratio": 0.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 7
+   }
+  }
+ ]
+}

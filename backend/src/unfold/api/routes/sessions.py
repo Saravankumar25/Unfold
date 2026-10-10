@@ -56,7 +56,8 @@ async def current_session(rt: RuntimeDep, session: SessionDep) -> SessionCurrent
             created_at=project.created_at,
         )
         for project, job in await rt.control.projects_of_session(session.id)
-        if job is not None and project.expires_at > now  # no job: an upload that was never completed
+        # no job: an upload that was never completed; a deleting project is already gone for the reader
+        if job is not None and project.expires_at > now and project.deleting_at is None
     ]
     return SessionCurrentOut(
         session_id=session.id,

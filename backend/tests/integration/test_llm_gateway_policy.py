@@ -384,6 +384,21 @@ async def test_job_token_budget_refuses_further_calls_once_reached(h: Harness) -
     assert len(gem.calls) == 2
 
 
+async def test_chat_has_its_own_per_chat_budget_independent_of_analysis(h: Harness) -> None:
+    gem = _gemini()
+    gw = h.gateway(gem, settings=h.settings_with(chat_llm_call_budget=2, analysis_llm_call_budget=100))
+    chat = f"chat:{uuid.uuid4().hex[:8]}"
+    await gw.generate(_req(job_id=chat, priority=Priority.P0))
+    await gw.generate(_req(job_id=chat, priority=Priority.P0))
+    await gw.generate(_req(job_id=chat, priority=Priority.P0))  # hard stop is ceil(2 * 1.3) = 3
+    with pytest.raises(UnfoldError) as hit:
+        await gw.generate(_req(job_id=chat, priority=Priority.P0))
+    assert hit.value.code is ErrorCode.LLM_BUDGET_EXHAUSTED and hit.value.detail["budget"] == 2
+    await gw.generate(_req(job_id=f"chat:{uuid.uuid4().hex[:8]}", priority=Priority.P0))  # another chat
+    await gw.generate(_req(job_id=f"job-{uuid.uuid4().hex[:8]}", priority=Priority.P0))  # analyses unaffected
+    assert len(gem.calls) == 5
+
+
 async def test_requests_without_job_are_not_budgeted(h: Harness) -> None:
     gem = _gemini()
     gw = h.gateway(gem, settings=h.settings_with(analysis_llm_call_budget=0))

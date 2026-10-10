@@ -72,13 +72,19 @@ class ProjectRow(Base):
     ir_object_key: Mapped[str | None] = mapped_column(Text)
     lexical_object_key: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    # Set by DELETE or by the sweeper; the project is invisible from then on and the sweeper finishes cleanup.
+    deleting_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class AnalysisJobRow(Base):
     __tablename__ = "analysis_jobs"
     id: Mapped[uuid.UUID] = _uuid_pk()
     project_id: Mapped[uuid.UUID] = _project_fk()
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="analysis", server_default="analysis"
+    )
+    section_key: Mapped[str | None] = mapped_column(String(64))  # kind == "regenerate": the chapter to redo
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
     current_stage: Mapped[str] = mapped_column(String(40), nullable=False, default="RECEIVED")
     stage_progress: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
@@ -180,6 +186,13 @@ class GuideSectionRow(Base):
     claims: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     evidence_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     quality_scores: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    research: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # `guide.models.ResearchBrief` (v2 plans)
+    verification: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB
+    )  # `guide.verification_models.StoredVerification`
+    input_hash: Mapped[str | None] = mapped_column(
+        Text
+    )  # reserved, never written: chapter reuse is not built
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

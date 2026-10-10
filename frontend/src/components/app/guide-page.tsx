@@ -1,41 +1,48 @@
 "use client";
 
-import { BookOpen, ChevronLeft, ChevronRight, Menu, MessageSquareText, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { EvidenceProvider, useEvidence } from "@/components/content/evidence-drawer";
 import { CodeView } from "@/components/content/code-view";
-import { InlineText } from "@/components/content/inline-text";
+import { EvidenceAppendix } from "@/components/content/evidence-appendix";
+import { Statement } from "@/components/content/inline-text";
 import { DiagramView } from "@/components/diagram/diagram-view";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/endpoints";
 import type { Block, GuideSectionOut, SectionContent } from "@/lib/api/types";
-import { mapResolver } from "@/lib/citations";
+import { appendixItems, citationSource, isUnconfirmed, mapResolver } from "@/lib/citations";
 import { useResource } from "@/lib/hooks/use-resource";
 import { cn, titleCase } from "@/lib/utils";
 import { ErrorPanel } from "./error-panel";
 import { ExportButton } from "./export-button";
 import { ProjectReadyGate, useProject } from "./project-provider";
 import { ProjectTopbar } from "./project-topbar";
+import { RegenerateButton } from "./regenerate-button";
 import { LoadingLines } from "./skeleton";
+
+const UNCONFIRMED = "border-l-2 border-dashed border-signal pl-3";
 
 function SectionBlocks({ projectId, section, content }: { projectId: string; section: GuideSectionOut; content: SectionContent }) {
   const { openEvidence } = useEvidence();
+  const { project } = useProject();
+  const source = citationSource(project);
   const resolve = mapResolver(section.evidence);
   const cite = (label: string, ref: Parameters<typeof openEvidence>[0][number]["ref"]) => openEvidence([{ label, ref }]);
-  return <div className="prose-guide">{content.blocks.map((block: Block, i) => {
+  const appendix = <EvidenceAppendix items={appendixItems(content, section.evidence)} source={source} onOpen={(it) => openEvidence([it])} />;
+  return <><div className="prose-guide">{content.blocks.map((block: Block, i) => {
     switch (block.type) {
       case "heading": return block.level === 2 ? <h2 key={i} className="mb-4 mt-9 font-serif text-[28px] font-medium">{block.text}</h2> : <h3 key={i} className="mb-3 mt-7 font-serif text-[21px] font-medium">{block.text}</h3>;
-      case "paragraph": return <p key={i}><InlineText text={block.text} resolve={resolve} onCite={cite} /></p>;
-      case "bullets": { const items = block.items.map((x, j) => <li key={j}><InlineText text={x} resolve={resolve} onCite={cite} /></li>); return block.ordered ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>; }
-      case "callout": return <aside key={i} className={cn("my-6 border-l-2 bg-paper-dim px-5 py-4 text-[14px] leading-relaxed", block.tone === "warning" ? "border-signal" : "border-blueprint")}><p className="mb-1 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">{block.tone}</p><InlineText text={block.text} resolve={resolve} onCite={cite} /></aside>;
+      case "paragraph": return <p key={i} className={isUnconfirmed(block.text) ? UNCONFIRMED : undefined}><Statement source={source} text={block.text} resolve={resolve} onCite={cite} /></p>;
+      case "bullets": { const items = block.items.map((x, j) => <li key={j} className={isUnconfirmed(x) ? UNCONFIRMED : undefined}><Statement source={source} text={x} resolve={resolve} onCite={cite} /></li>); return block.ordered ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>; }
+      case "callout": return <aside key={i} className={cn("my-6 border-l-2 bg-paper-dim px-5 py-4 text-[14px] leading-relaxed", block.tone === "warning" ? "border-signal" : "border-blueprint", isUnconfirmed(block.text) && "border-dashed border-signal")}><p className="mb-1 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">{block.tone}</p><Statement source={source} text={block.text} resolve={resolve} onCite={cite} /></aside>;
       case "code": return <CodeView key={i} code={block.code} language={block.language} path={block.path ?? undefined} startLine={block.start_line ?? undefined} caption={block.caption ?? undefined} lineNumbers />;
       case "diagram": return <DiagramView key={i} projectId={projectId} diagramId={block.diagram_id} caption={block.caption} />;
-      case "table": return <div key={i} className="my-6 overflow-x-auto"><table className="w-full border-collapse text-left text-[13px]"><thead><tr>{block.headers.map((h) => <th key={h} className="border-b border-line-strong bg-paper-dim px-3 py-2 font-semibold">{h}</th>)}</tr></thead><tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c} className="border-b border-line px-3 py-2.5 align-top text-ink-soft"><InlineText text={cell} resolve={resolve} onCite={cite} /></td>)}</tr>)}</tbody></table></div>;
-      case "qa": return <details key={i} className="my-3 rounded-s border border-line bg-panel px-4 py-3"><summary className="cursor-pointer font-semibold">{block.question}</summary><p className="mb-0 mt-3 text-ink-soft"><InlineText text={block.answer} resolve={resolve} onCite={cite} /></p></details>;
+      case "table": return <div key={i} className="my-6 overflow-x-auto"><table className="w-full border-collapse text-left text-[13px]"><thead><tr>{block.headers.map((h) => <th key={h} className="border-b border-line-strong bg-paper-dim px-3 py-2 font-semibold">{h}</th>)}</tr></thead><tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c} className="border-b border-line px-3 py-2.5 align-top text-ink-soft"><Statement source={source} text={cell} resolve={resolve} onCite={cite} /></td>)}</tr>)}</tbody></table></div>;
+      case "qa": return <details key={i} className="my-3 rounded-s border border-line bg-panel px-4 py-3"><summary className="cursor-pointer font-semibold">{block.question}</summary><p className="mb-0 mt-3 text-ink-soft"><Statement source={source} text={block.answer} resolve={resolve} onCite={cite} /></p></details>;
       case "glossary": return <dl key={i} className="grid gap-3 sm:grid-cols-2">{block.items.map((item) => <div key={item.term} className="border-l border-line-strong pl-3"><dt className="font-semibold">{item.term}</dt><dd className="m-0 mt-1 text-[13px] leading-relaxed text-ink-soft">{item.definition}</dd></div>)}</dl>;
     }
-  })}</div>;
+  })}</div>{appendix}</>;
 }
 
 function GuideWorkspace() {
@@ -44,16 +51,12 @@ function GuideWorkspace() {
   const [pickedKey, setSectionKey] = useState<string | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const sectionKey = pickedKey ?? guide.data?.sections[0]?.key ?? null;
-  const [variantState, setVariantState] = useState<{ key: string; content: SectionContent } | null>(null);
-  const variant = variantState?.key === sectionKey ? variantState.content : null;
-  const [variantBusy, setVariantBusy] = useState(false);
   const section = useResource(sectionKey ? `section:${project!.id}:${sectionKey}` : null, (signal) => api.getSection(project!.id, sectionKey!, signal));
   const sections = guide.data?.sections ?? [];
   const currentIndex = sections.findIndex((s) => s.key === sectionKey);
-  async function transform(kind: "simpler" | "deeper") { if (!sectionKey) return; setVariantBusy(true); try { const next = await api.sectionVariant(project!.id, sectionKey, kind); setVariantState({ key: sectionKey, content: next.content }); } finally { setVariantBusy(false); } }
   const nav = <nav aria-label="Guide chapters" className="flex h-full flex-col"><div className="border-b border-line p-5"><p className="m-0 font-mono text-[10px] uppercase tracking-[.12em] text-ink-faint">Project guide</p><p className="mb-0 mt-1 font-serif text-[20px] font-medium">{guide.data?.estimated_read_minutes ?? "—"} min read</p></div><ol className="m-0 flex-1 list-none overflow-y-auto p-2">{sections.map((s, i) => <li key={s.key}><button type="button" onClick={() => { setSectionKey(s.key); setMobileNav(false); }} className={cn("flex w-full cursor-pointer items-start gap-3 rounded-s px-3 py-2.5 text-left", s.key === sectionKey ? "bg-paper-dim text-blueprint" : "text-ink-soft hover:bg-paper-dim")}><span className="mt-0.5 font-mono text-[10px] text-ink-faint">{String(i + 1).padStart(2, "0")}</span><span className="text-[13px] font-medium leading-snug">{s.title}</span></button></li>)}</ol></nav>;
   return <EvidenceProvider projectId={project!.id}>
-    <ProjectTopbar project={project!} current="guide" leading={<Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chapters" onClick={() => setMobileNav((v) => !v)}><Menu size={17} /></Button>} actions={<ExportButton start={() => api.exportGuide(project!.id)} filename={`${project!.name || "unfold"}-guide.pdf`} size="sm" />} />
+    <ProjectTopbar project={project!} current="guide" leading={<Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chapters" onClick={() => setMobileNav((v) => !v)}><Menu size={17} /></Button>} actions={<><ExportButton start={() => api.exportGuide(project!.id, "pdf")} filename={`${project!.name || "unfold"}-guide.pdf`} size="sm" /><ExportButton start={() => api.exportGuide(project!.id, "md")} filename={`${project!.name || "unfold"}-guide.md`} label="Markdown" size="sm" /></>} />
     <div className="grid min-h-[calc(100vh-var(--topbar-h))] lg:grid-cols-[var(--sidebar-w)_1fr]">
       <aside className="hidden border-r border-line bg-panel lg:block">{nav}</aside>
       {mobileNav ? <aside className="fixed inset-x-0 top-[calc(var(--topbar-h)+42px)] z-30 max-h-[70vh] border-b border-line bg-panel shadow-xl lg:hidden">{nav}</aside> : null}
@@ -63,8 +66,8 @@ function GuideWorkspace() {
             <p className="m-0 font-mono text-[11px] uppercase tracking-[.14em] text-signal">Chapter {currentIndex + 1} · {titleCase(section.data.kind)}</p>
             <h1 className="m-0 mt-3 font-serif text-[clamp(36px,6vw,58px)] font-[470] leading-[1.05]">{section.data.title}</h1>
             {section.data.content?.summary ? <p className="mb-0 mt-5 border-l-2 border-blueprint pl-4 text-[16px] leading-relaxed text-ink-soft">{section.data.content.summary}</p> : null}
-            <div className="mt-6 flex flex-wrap gap-2"><Button size="sm" variant="chip" disabled={variantBusy} onClick={() => void transform("simpler")}><Sparkles size={13} />Explain simpler</Button><Button size="sm" variant="chip" disabled={variantBusy} onClick={() => void transform("deeper")}><BookOpen size={13} />Go deeper</Button><Link href={`/projects/${project!.id}/chat?section=${encodeURIComponent(section.data.key)}`} className="inline-flex items-center gap-1.5 rounded-full border border-signal px-3 py-1.5 text-[12.5px] font-medium text-signal no-underline hover:bg-signal-soft"><MessageSquareText size={13} />Ask about this</Link></div>
-            <div className="mt-9">{(variant ?? section.data.content) ? <SectionBlocks projectId={project!.id} section={section.data} content={(variant ?? section.data.content)!} /> : <p className="text-ink-faint">{section.data.status === "failed" ? `This chapter could not be written${typeof section.data.quality.reason === "string" ? `: ${section.data.quality.reason}` : "."}` : "This chapter is still being assembled."}</p>}</div>
+            <div className="mt-6 flex flex-wrap gap-2"><Link href={`/projects/${project!.id}/chat?section=${encodeURIComponent(section.data.key)}`} className="inline-flex items-center gap-1.5 rounded-full border border-signal px-3 py-1.5 text-[12.5px] font-medium text-signal no-underline hover:bg-signal-soft"><MessageSquareText size={13} />Ask about this</Link><RegenerateButton projectId={project!.id} sectionKey={section.data.key} onDone={() => { section.reload(); guide.reload(); }} /></div>
+            <div className="mt-9">{section.data.content ? <SectionBlocks projectId={project!.id} section={section.data} content={section.data.content} /> : <p className="text-ink-faint">{section.data.status === "failed" ? `This chapter could not be written${typeof section.data.quality.reason === "string" ? `: ${section.data.quality.reason}` : "."}` : "This chapter is still being assembled."}</p>}</div>
             <div className="mt-12 flex items-center justify-between border-t border-line pt-5"><Button variant="ghost" disabled={currentIndex <= 0} onClick={() => setSectionKey(sections[currentIndex - 1]!.key)}><ChevronLeft size={15} />Previous</Button><Button variant="ghost" disabled={currentIndex >= sections.length - 1} onClick={() => setSectionKey(sections[currentIndex + 1]!.key)}>Next<ChevronRight size={15} /></Button></div>
           </>}
         </div>

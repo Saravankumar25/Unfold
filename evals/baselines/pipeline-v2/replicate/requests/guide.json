@@ -1,0 +1,968 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Overview of Requests Library",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "This chapter introduces the high-level architecture, module organization, and diagnostic helpers of the requests library.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Overview of Requests Library",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The requests library is organized around several core subsystems found within the source tree, primarily residing in src/requests. Other chapters cover Public API and Adapters, Internal Implementation and Utilities, and Configuration and GitHub Workflows."
+     },
+     {
+      "type": "heading",
+      "text": "Module Organization and Diagnostic Helpers",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The library provides modules for retrieving default certificates and gathering environment details for debugging. For instance, certs.py returns the preferred default CA certificate bundle from the certifi package [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "#!/usr/bin/env python\n\n\"\"\"\nrequests.certs\n~~~~~~~~~~~~~~\n\nThis module returns the preferred default CA certificate bundle. There is\nonly one \u2014 the one from the certifi package.\n\nIf you are packaging Requests, e.g., for a Linux distribution or a managed\nenvironment, you can change the definition of where() to return a separately\npackaged CA bundle.\n\"\"\"\nfrom certifi import where\n\nif __name__ == \"__main__\":\n    print(where())",
+      "path": "src/requests/certs.py",
+      "start_line": 1,
+      "caption": "Default CA certificate bundle module"
+     },
+     {
+      "type": "paragraph",
+      "text": "Additionally, help.py inspects the current environment and runtime implementation details to generate bug report information [E4]."
+     },
+     {
+      "type": "heading",
+      "text": "Execution Flow",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The diagnostic inspection flow proceeds through the help module functions:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "src/requests/help.py calls main",
+       "main invokes info",
+       "info invokes _implementation"
+      ],
+      "ordered": true
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def _implementation():\n    \"\"\"Return a dict with the Python implementation and version.\n\n    Provide both the name and the version of the Python implementation\n    currently running. For example, on CPython 3.10.3 it will return\n    {'name': 'CPython', 'version': '3.10.3'}.\n\n    This function works best on CPython and PyPy: in particular, it probably\n    doesn't work for Jython or IronPython. Future investigation should be done\n    to work out the correct shape of the code for those platforms.\n    \"\"\"\n    implementation = platform.python_implementation()\n\n    if implementation == \"CPython\":\n        implementation_version = platform.python_version()\n    elif implementation == \"PyPy\":\n        implementation_version = \"{}.{}.{}\".format(\n            sys.pypy_version_info.major,\n            sys.pypy_version_info.minor,\n            sys.pypy_version_info.micro,\n        )\n        if sys.pypy_version_info.releaselevel != \"final\":\n            implementation_version = \"\".join(\n                [implementation_version, sys.pypy_version_info.releaselevel]\n            )\n    elif implementation == \"Jython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    elif implementation == \"IronPython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    else:\n        implementation_version = \"Unknown\"\n\n    return {\"name\": implementation, \"version\": implementation_version}",
+      "path": "src/requests/help.py",
+      "start_line": 34,
+      "caption": "Python implementation detection function"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show how unsupported platforms handle implementation version queries beyond the default fallback."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:136ff8a1baf79edd",
+      "caption": "requests architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "requests.certs returns the preferred default CA certificate bundle from the certifi package.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:9311fb0420884f12293999c1"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "help.py provides utilities to inspect platform and python implementation details for bug reporting.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:15030d2fee24cc50a41373a6",
+      "ch:3510507ed718df8ca7f0629b"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The certs module returns the preferred default CA certificate bundle from the certifi package.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:9311fb0420884f12293999c1"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The _implementation function returns a dict with the Python implementation and version.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:15030d2fee24cc50a41373a6"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/certs.py",
+     "symbol": null,
+     "chunk_id": "ch:9311fb0420884f12293999c1",
+     "end_line": 17,
+     "start_line": 1
+    },
+    "E2": {
+     "path": "src/requests/help.py",
+     "symbol": "_implementation",
+     "chunk_id": "ch:15030d2fee24cc50a41373a6",
+     "end_line": 66,
+     "start_line": 34
+    },
+    "E3": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestRequests",
+     "chunk_id": "ch:fc0460512c5951e0b5f161fd",
+     "end_line": 82,
+     "start_line": 80
+    },
+    "E4": {
+     "path": "src/requests/help.py",
+     "symbol": "info",
+     "chunk_id": "ch:3510507ed718df8ca7f0629b",
+     "end_line": 125,
+     "start_line": 69
+    },
+    "E5": {
+     "path": "src/requests/help.py",
+     "symbol": "main",
+     "chunk_id": "ch:d2a52a2f873af7dfab2482cd",
+     "end_line": 130,
+     "start_line": 128
+    },
+    "E6": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_mtls_settings",
+     "chunk_id": "ch:6d0a11d0ae2e3be06e84408a",
+     "end_line": 2966,
+     "start_line": 2929
+    },
+    "E7": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_expired_cert",
+     "chunk_id": "ch:db3b3ec4e160f40de67d0447",
+     "end_line": 2895,
+     "start_line": 2864
+    },
+    "E8": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert",
+     "chunk_id": "ch:44c02d8053928e2d545a10f8",
+     "end_line": 2927,
+     "start_line": 2897
+    },
+    "E9": {
+     "path": "setup.py",
+     "symbol": null,
+     "chunk_id": "ch:9ea2d979b5f74d2cf32bec81",
+     "end_line": 30,
+     "start_line": 1
+    },
+    "E10": {
+     "path": "tests/certs/mtls/client/cert.cnf",
+     "symbol": null,
+     "chunk_id": "ch:54d1bc37353aabedd801dc3b",
+     "end_line": 26,
+     "start_line": 1
+    },
+    "E11": {
+     "path": "src/requests/cookies.py",
+     "symbol": "RequestsCookieJar.get_dict",
+     "chunk_id": "ch:75078d5351d1cd87f84e5e24",
+     "end_line": 319,
+     "start_line": 306
+    },
+    "E12": {
+     "path": "src/requests/cookies.py",
+     "symbol": "RequestsCookieJar.items",
+     "chunk_id": "ch:664d2a12d489290ed1b4706c",
+     "end_line": 275,
+     "start_line": 268
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 4,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 3,
+    "unsupported": 0,
+    "grounded_ratio": 0.75,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "public-api",
+   "title": "Public API and Adapters",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter examines the public adapters and core interfaces exposed by the requests library.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Public API and Adapters",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on Overview of Requests Library, this chapter focuses on the transport adapters and public interfaces used to communicate with servers. Internal Implementation and Utilities covers additional helper modules and sessions."
+     },
+     {
+      "type": "heading",
+      "text": "Base and HTTP Adapters",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The transport adapter system is anchored by BaseAdapter and HTTPAdapter. BaseAdapter defines the base transport adapter interface [E2]. HTTPAdapter is the built-in HTTP adapter for urllib3, providing a general-case interface for sessions to contact HTTP and HTTPS URLs [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class BaseAdapter:\n    \"\"\"The Base Transport Adapter\"\"\"",
+      "path": "src/requests/adapters.py",
+      "start_line": 137,
+      "caption": "BaseAdapter definition"
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class HTTPAdapter(BaseAdapter):\n    \"\"\"The built-in HTTP Adapter for urllib3.\n\n    Provides a general-case interface for Requests sessions to contact HTTP and\n    HTTPS urls by implementing the Transport Adapter interface. This class will\n    usually be created by the :class:`Session <Session>` class under the\n    covers.\n\n    :param pool_connections: The number of urllib3 connection pools to cache.\n    :param pool_maxsize: The maximum number of connections to save in the pool.\n    :param max_retries: The maximum number of retries each connection\n    should attempt. Note, this applies only to failed DNS lookups, socket\n    connections and connection timeouts, never to requests where data has\n    made it to the server. By default, Requests does not retry failed\n    connections. If you need granular control over the conditions under\n    which we retry a request, import urllib3's ``Retry`` class and pass\n    that instead.\n    :param pool_block: Whether the connection pool should block for connections.\n\n    Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> a = requests.adapters.HTTPAdapter(max_retries=3)\n      >>> s.mount('http://', a)\n    \"\"\"\n\n    __attrs__ = [\n        \"max_retries\",\n        \"config\",\n        \"_pool_connections\",\n        \"_pool_maxsize\",\n        \"_pool_block\",\n    ]",
+      "path": "src/requests/adapters.py",
+      "start_line": 167,
+      "caption": "HTTPAdapter definition"
+     },
+     {
+      "type": "heading",
+      "text": "Compatibility and Helper Functions",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Compatibility checks are performed by check_compatibility, which verifies urllib3, chardet, and charset_normalizer versions [E3]. Additionally, to_native_string ensures string objects are properly represented in the native string type [E4]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def check_compatibility(urllib3_version, chardet_version, charset_normalizer_version):\n    urllib3_version = urllib3_version.split(\".\")\n    assert urllib3_version != [\"dev\"]  # Verify urllib3 isn't installed from git.\n\n    # Sometimes, urllib3 only reports its version as 16.1.\n    if len(urllib3_version) == 2:\n        urllib3_version.append(\"0\")\n\n    # Check urllib3 for compatibility.\n    major, minor, patch = urllib3_version  # noqa: F811\n    major, minor, patch = int(major), int(minor), int(patch)\n    # urllib3 >= 1.21.1\n    assert major >= 1\n    if major == 1:\n        assert minor >= 21\n\n    # Check charset_normalizer for compatibility.\n    if chardet_version:\n        major, minor, patch = chardet_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # chardet_version >= 3.0.2, < 6.0.0\n        assert (3, 0, 2) <= (major, minor, patch) < (6, 0, 0)",
+      "path": "src/requests/__init__.py",
+      "start_line": 58,
+      "caption": "Compatibility check implementation"
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def to_native_string(string, encoding=\"ascii\"):\n    \"\"\"Given a string object, regardless of type, returns a representation of\n    that string in the native string type, encoding and decoding where\n    necessary. This assumes ASCII unless told otherwise.\n    \"\"\"\n    if isinstance(string, builtin_str):\n        out = string\n    else:\n        out = string.decode(encoding)\n\n    return out",
+      "path": "src/requests/_internal_utils.py",
+      "start_line": 25,
+      "caption": "To native string utility function"
+     },
+     {
+      "type": "callout",
+      "tone": "note",
+      "text": "When SOCKS support dependencies are missing, SOCKSProxyManager raises an InvalidSchema exception [E5]."
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "BaseAdapter defines the base transport adapter interface.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:48ce4ddc8b0c6be1f29d580d"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "HTTPAdapter is the built-in HTTP adapter for urllib3 providing a general-case interface for sessions.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:71786bc73e099e86e86e6452"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "check_compatibility verifies dependency versions for urllib3, chardet, and charset_normalizer.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:976ca1a96fb93aeb85b0dc89"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "to_native_string converts string objects into the native string type using encoding and decoding.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:90e088e0357cc514750d61e9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "SOCKSProxyManager raises an InvalidSchema exception when dependencies for SOCKS support are missing.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:f24f1a451718bd2382de3be2"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Compatibility checks are performed by check_compatibility, which verifies urllib3, chardet, and charset_normalizer versions.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:976ca1a96fb93aeb85b0dc89"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "to_native_string ensures string objects are properly represented in the native string type.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:90e088e0357cc514750d61e9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/adapters.py",
+     "symbol": "HTTPAdapter",
+     "chunk_id": "ch:71786bc73e099e86e86e6452",
+     "end_line": 201,
+     "start_line": 167
+    },
+    "E2": {
+     "path": "src/requests/adapters.py",
+     "symbol": "BaseAdapter",
+     "chunk_id": "ch:48ce4ddc8b0c6be1f29d580d",
+     "end_line": 139,
+     "start_line": 137
+    },
+    "E3": {
+     "path": "src/requests/__init__.py",
+     "symbol": "check_compatibility",
+     "chunk_id": "ch:976ca1a96fb93aeb85b0dc89",
+     "end_line": 90,
+     "start_line": 58
+    },
+    "E4": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": "to_native_string",
+     "chunk_id": "ch:90e088e0357cc514750d61e9",
+     "end_line": 35,
+     "start_line": 25
+    },
+    "E5": {
+     "path": "src/requests/adapters.py",
+     "symbol": "SOCKSProxyManager",
+     "chunk_id": "ch:f24f1a451718bd2382de3be2",
+     "end_line": 64,
+     "start_line": 63
+    },
+    "E6": {
+     "path": "tests/compat.py",
+     "symbol": "u",
+     "chunk_id": "ch:ca39b0de7893d46a8c0db767",
+     "end_line": 23,
+     "start_line": 14
+    },
+    "E7": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": null,
+     "chunk_id": "ch:2f7ddda492064968d329aef9",
+     "end_line": 24,
+     "start_line": 1
+    },
+    "E8": {
+     "path": "src/requests/cookies.py",
+     "symbol": "RequestsCookieJar",
+     "chunk_id": "ch:2bd49559c7559b18c0e4164b",
+     "end_line": 193,
+     "start_line": 176
+    },
+    "E9": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:89af87884ac1ba1b685ae050",
+     "end_line": 164,
+     "start_line": 105
+    },
+    "E10": {
+     "path": "HISTORY.md",
+     "symbol": "(preamble) (part 2/17)",
+     "chunk_id": "ch:4cf5b04f9833de28509e727c",
+     "end_line": 234,
+     "start_line": 118
+    },
+    "E11": {
+     "path": "src/requests/compat.py",
+     "symbol": "_resolve_char_detection",
+     "chunk_id": "ch:524dcbc10aef5be83ae028cf",
+     "end_line": 27,
+     "start_line": 18
+    },
+    "E12": {
+     "path": "tests/test_utils.py",
+     "symbol": "test_to_native_string",
+     "chunk_id": "ch:4776c53304980d91759bb2df",
+     "end_line": 694,
+     "start_line": 685
+    },
+    "E13": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": "unicode_is_ascii",
+     "chunk_id": "ch:bbe8a14ebe779adc4ec49612",
+     "end_line": 50,
+     "start_line": 38
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 7,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 7,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "internals",
+   "title": "Internal Implementation and Utilities",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the internal helper modules, session management, and utilities of requests.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Internal Implementation and Utilities",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon the Overview of Requests Library, this chapter dives deeper into the internal mechanics, session lifecycles, and helper functions that drive the library."
+     },
+     {
+      "type": "heading",
+      "text": "Implementation Helpers and Bug Reporting",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The internal help module handles platform and implementation detection to assist with diagnostics and bug reports [E1][E4][E5]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def _implementation():\n    implementation = platform.python_implementation()\n\n    if implementation == \"CPython\":\n        implementation_version = platform.python_version()\n    elif implementation == \"PyPy\":\n        implementation_version = \"{}.{}.{}\".format(\n            sys.pypy_version_info.major,\n            sys.pypy_version_info.minor,\n            sys.pypy_version_info.micro,\n        )\n        if sys.pypy_version_info.releaselevel != \"final\":\n            implementation_version = \"\".join(\n                [implementation_version, sys.pypy_version_info.releaselevel]\n            )\n    elif implementation == \"Jython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    elif implementation == \"IronPython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    else:\n        implementation_version = \"Unknown\"\n\n    return {\"name\": implementation, \"version\": implementation_version}",
+      "path": "src/requests/help.py",
+      "start_line": 34,
+      "caption": "Python implementation detection helper"
+     },
+     {
+      "type": "paragraph",
+      "text": "The bug report information flow proceeds through specific internal calls:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "src/requests/help.py:main calls info() [E5]",
+       "src/requests/help.py:info collects system and package versions [E4]",
+       "src/requests/help.py:info invokes _implementation() to determine Python runtime details [E1][E4]"
+      ],
+      "ordered": true
+     },
+     {
+      "type": "heading",
+      "text": "Sessions and Requests Coordination",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The Session class manages and persists settings across requests, such as cookies, auth, and proxies [E6][E7]. Within a session, the request method constructs, prepares, and dispatches HTTP requests [E8]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Session(SessionRedirectMixin):\n    __attrs__ = [\n        \"headers\",\n        \"cookies\",\n        \"auth\",\n        \"proxies\",\n        \"hooks\",\n        \"params\",\n        \"verify\",\n        \"cert\",\n        \"adapters\",\n        \"stream\",\n        \"trust_env\",\n        \"max_redirects\",\n    ]",
+      "path": "src/requests/sessions.py",
+      "start_line": 356,
+      "caption": "Session attributes definition"
+     },
+     {
+      "type": "paragraph",
+      "text": "The Session class in src/requests/sessions.py manages and persists settings across requests like cookies, auth, and proxies, handling request preparation and sending via adapters [E8, E6, E7]."
+     },
+     {
+      "type": "paragraph",
+      "text": "Requests provides Transport Adapters such as HTTPAdapter to define interaction methods for HTTP and HTTPS services using urllib3 [E11, E12]."
+     },
+     {
+      "type": "paragraph",
+      "text": "Testing and CI workflows for requests are defined using GitHub Actions, such as the test workflow running on push and pull request events [E13]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:3a10466edb7c934d",
+      "caption": "Module dependencies"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The internal help module handles platform and implementation detection to assist with diagnostics and bug reports.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:15030d2fee24cc50a41373a6",
+      "ch:3510507ed718df8ca7f0629b",
+      "ch:d2a52a2f873af7dfab2482cd"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The Session class manages and persists settings across requests, such as cookies, auth, and proxies.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:78c632e3923da4dca9269e96",
+      "ch:371649d76becc52532150bf6"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Within a session, the request method constructs, prepares, and dispatches HTTP requests.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:61f4f453c0670e63aea966d8"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The Session class manages and persists settings across requests like cookies, auth, and proxies, handling request preparation and sending.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:61f4f453c0670e63aea966d8",
+      "ch:78c632e3923da4dca9269e96",
+      "ch:371649d76becc52532150bf6"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Requests provides Transport Adapters such as HTTPAdapter to define interaction methods for HTTP and HTTPS services using urllib3.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:89da166d65704801bd41ea5e",
+      "ch:71786bc73e099e86e86e6452"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Testing and CI workflows for requests are defined using GitHub Actions, such as the test workflow running on push and pull request events.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:e3836df087efcd18f628b299"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/help.py",
+     "symbol": "_implementation",
+     "chunk_id": "ch:15030d2fee24cc50a41373a6",
+     "end_line": 66,
+     "start_line": 34
+    },
+    "E2": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:a915e96e7deb7e0c1cddfea0",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:9e009b273b31a05adea7c040",
+     "end_line": 110,
+     "start_line": 51
+    },
+    "E4": {
+     "path": "src/requests/help.py",
+     "symbol": "info",
+     "chunk_id": "ch:3510507ed718df8ca7f0629b",
+     "end_line": 125,
+     "start_line": 69
+    },
+    "E5": {
+     "path": "src/requests/help.py",
+     "symbol": "main",
+     "chunk_id": "ch:d2a52a2f873af7dfab2482cd",
+     "end_line": 130,
+     "start_line": 128
+    },
+    "E6": {
+     "path": "src/requests/sessions.py",
+     "symbol": null,
+     "chunk_id": "ch:78c632e3923da4dca9269e96",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E7": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session",
+     "chunk_id": "ch:371649d76becc52532150bf6",
+     "end_line": 389,
+     "start_line": 356
+    },
+    "E8": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session.request",
+     "chunk_id": "ch:61f4f453c0670e63aea966d8",
+     "end_line": 591,
+     "start_line": 500
+    },
+    "E9": {
+     "path": "src/requests/auth.py",
+     "symbol": "HTTPDigestAuth.handle_401",
+     "chunk_id": "ch:584b92f7c2dee7885c75ec2a",
+     "end_line": 283,
+     "start_line": 241
+    },
+    "E10": {
+     "path": "src/requests/adapters.py",
+     "symbol": "HTTPAdapter.add_headers",
+     "chunk_id": "ch:0159cb4ef5fe68d64088ec03",
+     "end_line": 590,
+     "start_line": 578
+    },
+    "E11": {
+     "path": "docs/user/advanced.rst",
+     "symbol": "Advanced Usage > Transport Adapters",
+     "chunk_id": "ch:89da166d65704801bd41ea5e",
+     "end_line": 1007,
+     "start_line": 969
+    },
+    "E12": {
+     "path": "src/requests/adapters.py",
+     "symbol": "HTTPAdapter",
+     "chunk_id": "ch:71786bc73e099e86e86e6452",
+     "end_line": 201,
+     "start_line": 167
+    },
+    "E13": {
+     "path": ".github/workflows/run-tests.yml",
+     "symbol": "on",
+     "chunk_id": "ch:e3836df087efcd18f628b299",
+     "end_line": 3,
+     "start_line": 3
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 6,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 3,
+    "unsupported": 0,
+    "grounded_ratio": 0.5,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 3
+   }
+  },
+  {
+   "key": "config-deploy",
+   "title": "Configuration and GitHub Workflows",
+   "position": 3,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter reviews the configuration files, package manifests, and test coverage settings that structure the requests repository.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Configuration and GitHub Workflows",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon the Overview of Requests Library, this chapter examines the package layout configurations and coverage settings that govern how the project is built and tested."
+     },
+     {
+      "type": "heading",
+      "text": "Package Structure and Manifests",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The repository uses a MANIFEST.in file to declare which non-source files and test directories should be included in source distributions [E1]."
+     },
+     {
+      "type": "code",
+      "language": "text",
+      "code": "include README.md LICENSE NOTICE HISTORY.md requirements-dev.txt\nrecursive-include tests *.py\nrecursive-include tests/certs *",
+      "path": "MANIFEST.in",
+      "start_line": 1,
+      "caption": "Package distribution manifest rules"
+     },
+     {
+      "type": "paragraph",
+      "text": "Additionally, test coverage configuration is managed through the .coveragerc file, which omits internal bundled packages from coverage reports [E2]."
+     },
+     {
+      "type": "code",
+      "language": "ini",
+      "code": "[run]\nomit = requests/packages/*",
+      "path": ".coveragerc",
+      "start_line": 1,
+      "caption": "Coverage configuration omitting legacy bundled packages"
+     },
+     {
+      "type": "paragraph",
+      "text": "The lint workflow runs on push and pull request events [E4], and the CodeQL analysis workflow runs on ubuntu-latest to analyze Python code using CodeQL actions [E3]."
+     },
+     {
+      "type": "paragraph",
+      "text": "Readthedocs is configured to build documentation on ubuntu-22.04 using Python 3.12 [E6] and generate PDF and epub formats [E8], while docs/conf.py adds Requests' path and theme directories to sys.path and configures Sphinx extensions such as autodoc, intersphinx, todo, and viewcode [E7]."
+     },
+     {
+      "type": "paragraph",
+      "text": "For details on how the library handles public interfaces, consult Public API and Adapters, and for internal helpers see Internal Implementation and Utilities."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:357304fb50627c56",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The repository uses a MANIFEST.in file to declare which non-source files and test directories should be included in source distributions.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:bab755ecec79ce6d94efbf67"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Test coverage configuration is managed through the .coveragerc file, which omits internal bundled packages from coverage reports.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:9e90b5d6305ae971f25a7e28"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The lint workflow runs on push and pull request events.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:761f427af816daaa14b59ed8"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The CodeQL analysis workflow runs on ubuntu-latest to analyze Python code using CodeQL actions.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:c1d9c0a2daff52fbf88eaf2b"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Readthedocs is configured to build documentation on ubuntu-22.04 using Python 3.12 and generate PDF and epub formats.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:8bcb0142d50f107ab0161f2e",
+      "ch:4905fc64cb9095218af2d972"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "docs/conf.py adds Requests' path and theme directories to sys.path and configures Sphinx extensions such as autodoc, intersphinx, todo, and viewcode.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a915e96e7deb7e0c1cddfea0"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "MANIFEST.in",
+     "symbol": null,
+     "chunk_id": "ch:bab755ecec79ce6d94efbf67",
+     "end_line": 3,
+     "start_line": 1
+    },
+    "E2": {
+     "path": ".coveragerc",
+     "symbol": null,
+     "chunk_id": "ch:9e90b5d6305ae971f25a7e28",
+     "end_line": 2,
+     "start_line": 1
+    },
+    "E3": {
+     "path": ".github/workflows/codeql-analysis.yml",
+     "symbol": "jobs",
+     "chunk_id": "ch:c1d9c0a2daff52fbf88eaf2b",
+     "end_line": 73,
+     "start_line": 20
+    },
+    "E4": {
+     "path": ".github/workflows/lint.yml",
+     "symbol": "on",
+     "chunk_id": "ch:761f427af816daaa14b59ed8",
+     "end_line": 3,
+     "start_line": 3
+    },
+    "E5": {
+     "path": ".github/workflows/lint.yml",
+     "symbol": "name",
+     "chunk_id": "ch:7f79cc771ab8e7d0050feb8c",
+     "end_line": 1,
+     "start_line": 1
+    },
+    "E6": {
+     "path": ".readthedocs.yaml",
+     "symbol": "build",
+     "chunk_id": "ch:8bcb0142d50f107ab0161f2e",
+     "end_line": 13,
+     "start_line": 8
+    },
+    "E7": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:a915e96e7deb7e0c1cddfea0",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E8": {
+     "path": ".readthedocs.yaml",
+     "symbol": "formats",
+     "chunk_id": "ch:4905fc64cb9095218af2d972",
+     "end_line": 25,
+     "start_line": 19
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 6,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 3,
+    "unsupported": 0,
+    "grounded_ratio": 0.5,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 3
+   }
+  }
+ ]
+}

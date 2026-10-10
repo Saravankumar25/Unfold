@@ -1,0 +1,142 @@
+{
+  "fastapi_rag": {
+    "scores": {
+      "coverage": 3.82,
+      "groundedness": 2.44,
+      "citation_accuracy": 4.0,
+      "depth_proxy": 3.0,
+      "specificity": 1.85,
+      "redundancy": 3.83,
+      "uncertainty_honesty": 4.0
+    },
+    "raw": {
+      "coverage": {
+        "components": 14,
+        "components_named": 14,
+        "entry_points": 8,
+        "entry_points_named": 7,
+        "share": 0.9545
+      },
+      "groundedness": {
+        "claims": 36,
+        "project_facts": 36,
+        "verified": 22,
+        "unsupported": 0,
+        "uncited": 0,
+        "inferences": 0,
+        "verified_ratio": 0.6111
+      },
+      "citation_accuracy": {
+        "citations": 48,
+        "path_ok": 48,
+        "line_ok": 48,
+        "excerpts": 15,
+        "excerpt_ok": 15,
+        "resolve_rate": 1.0
+      },
+      "depth_proxy": {
+        "chapters": 6,
+        "indicator_rates": {
+          "flow": 0.6667,
+          "error_edge": 0.3333,
+          "code": 1.0,
+          "state": 1.0
+        },
+        "judged_depth": "human review sheet"
+      },
+      "specificity": {
+        "sentences": 78,
+        "naming_a_symbol": 36
+      },
+      "redundancy": {
+        "chapters": 6,
+        "mean_repeated_share": 0.0435,
+        "max_repeated_share": 0.0793
+      },
+      "uncertainty_honesty": {
+        "unverified_facts_left": 0,
+        "gaps_stated": 4,
+        "statements_qualified_or_removed": 0,
+        "claims_not_stated": 0
+      }
+    },
+    "length": {
+      "chapters": 6,
+      "chapters_failed": 0,
+      "words": 1287,
+      "claims": 36,
+      "code_blocks": 15
+    },
+    "human": "readability and judged depth/specificity: fill review-sheet.json"
+  },
+  "requests": {
+    "scores": {
+      "coverage": 4.0,
+      "groundedness": 2.78,
+      "citation_accuracy": 4.0,
+      "depth_proxy": 2.5,
+      "specificity": 1.41,
+      "redundancy": 3.91,
+      "uncertainty_honesty": 4.0
+    },
+    "raw": {
+      "coverage": {
+        "components": 3,
+        "components_named": 3,
+        "entry_points": 2,
+        "entry_points_named": 2,
+        "share": 1.0
+      },
+      "groundedness": {
+        "claims": 23,
+        "project_facts": 23,
+        "verified": 16,
+        "unsupported": 0,
+        "uncited": 0,
+        "inferences": 0,
+        "verified_ratio": 0.6957
+      },
+      "citation_accuracy": {
+        "citations": 31,
+        "path_ok": 31,
+        "line_ok": 31,
+        "excerpts": 10,
+        "excerpt_ok": 10,
+        "resolve_rate": 1.0
+      },
+      "depth_proxy": {
+        "chapters": 4,
+        "indicator_rates": {
+          "flow": 0.5,
+          "error_edge": 0.5,
+          "code": 1.0,
+          "state": 0.5
+        },
+        "judged_depth": "human review sheet"
+      },
+      "specificity": {
+        "sentences": 34,
+        "naming_a_symbol": 12
+      },
+      "redundancy": {
+        "chapters": 4,
+        "mean_repeated_share": 0.0225,
+        "max_repeated_share": 0.0389
+      },
+      "uncertainty_honesty": {
+        "unverified_facts_left": 0,
+        "gaps_stated": 1,
+        "statements_qualified_or_removed": 0,
+        "claims_not_stated": 0
+      }
+    },
+    "length": {
+      "chapters": 4,
+      "chapters_failed": 0,
+      "words": 654,
+      "claims": 23,
+      "code_blocks": 10
+    },
+    "human": "readability and judged depth/specificity: fill review-sheet.json"
+  }
+}

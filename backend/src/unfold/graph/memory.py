@@ -257,6 +257,7 @@ class MemoryGraph:
                     type=t,
                     provenance=self.edges[(t, s, d)].get("source"),
                     confidence=self.edges[(t, s, d)].get("confidence"),
+                    proof=self.edges[(t, s, d)].get("proof"),
                 )
                 for s, d, t in edges
             ],

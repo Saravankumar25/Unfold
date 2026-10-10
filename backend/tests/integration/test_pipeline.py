@@ -24,14 +24,12 @@ from unfold.cleanup.service import cleanup_project
 from unfold.core.config import Settings
 from unfold.core.errors import ErrorCode, ProviderCapacityError
 from unfold.core.ids import new_session_token, token_hash
-from unfold.guide.models import (
-    DraftClaim,
-    GuidePlan,
-    GuideSectionPlan,
-    ParagraphBlock,
-    SectionContent,
-    SectionDraft,
-)
+from unfold.evaluation.scripted import scripted_critique, scripted_refinement, scripted_rewrite
+from unfold.guide.models import DraftClaim, ParagraphBlock, SectionContent, SectionDraft
+from unfold.guide.plan import PlanRefinement
+from unfold.guide.research import QuestionSet
+from unfold.guide.rewrite import RewriteDraft
+from unfold.guide.verification_models import SemanticCritique
 from unfold.llm.schemas import LLMRequest
 from unfold.orchestration.pipeline import run_analysis
 from unfold.persistence.postgres.models import (
@@ -54,10 +52,11 @@ _LABEL = re.compile(r"\[(E\d+)\] (\S+?):(\d+)-(\d+)")
 
 
 class ScriptedLLM:
-    """Deterministic stand-in for the gateway: plans 4 sections, writes each from the evidence it was shown."""
+    """Deterministic stand-in for the gateway: echoes the outline, writes each chapter from the evidence shown."""
 
     def __init__(self, *, fail_on_section: int | None = None) -> None:
         self.calls: list[str] = []
+        self.prompts: list[str] = []  # writer prompts
         self.sections_written = 0
         self.fail_on_section = fail_on_section
 
@@ -69,34 +68,20 @@ class ScriptedLLM:
 
     async def generate_structured(self, req: LLMRequest, schema: type[BaseModel]) -> Any:
         self.calls.append(req.purpose)
-        if schema is GuidePlan:
-            return GuidePlan(
-                estimated_read_minutes=12,
-                sections=[
-                    GuideSectionPlan(
-                        key=key,
-                        title=title,
-                        kind="backbone" if i < 2 else "core",
-                        purpose=f"Explain {title.lower()} of this project",
-                        target_minutes=3,
-                        evidence_objectives=["app", "api", "routes", "retrieval"],
-                        visual_needs=["architecture"] if i == 1 else [],
-                    )
-                    for i, (key, title) in enumerate(
-                        [
-                            ("overview", "Overview"),
-                            ("architecture", "Architecture"),
-                            ("data-flow", "Data flow"),
-                            ("running", "Running it"),
-                        ]
-                    )
-                ],
-            )
+        if schema is PlanRefinement:
+            return scripted_refinement(req.messages[0].content)
+        if schema is QuestionSet:
+            return QuestionSet(questions=["What does this part do?", "How is it used?"])
+        if schema is SemanticCritique:
+            return scripted_critique()
+        if schema is RewriteDraft:
+            return scripted_rewrite(req.messages[0].content)
         assert schema is SectionDraft
         if self.fail_on_section is not None and self.sections_written >= self.fail_on_section:
             raise ProviderCapacityError("scripted capacity failure", retryable=True)
         self.sections_written += 1
         text = req.messages[0].content
+        self.prompts.append(text)
         labels = _LABEL.findall(text)
         assert labels, "the writer must always be given labelled evidence"
         label, path, _start, _end = labels[0]
@@ -210,18 +195,33 @@ async def test_fixture_repo_yields_guide_diagrams_and_cleans_up(runtime: Runtime
             )
         assert job is not None and project is not None
         assert (job.status, job.current_stage) == ("succeeded", "READY")
-        assert {"analyze", "lexical", "subsystems", "plan", "sections", "verify", "visuals"} <= checkpoints
+        assert {
+            "analyze",
+            "lexical",
+            "subsystems",
+            "plan",
+            "research",
+            "sections",
+            "verify",
+            "visuals",
+        } <= checkpoints
         assert project.ir_object_key and project.lexical_object_key
         assert (project.project_type or {}).get("categories")
 
-        assert [s.section_key for s in sections] == ["overview", "architecture", "data-flow", "running"]
+        keys = [s.section_key for s in sections]
+        assert keys[0] == "overview" and "request-lifecycle" in keys and 4 <= len(keys) <= 14
         for sec in sections:
             assert sec.content and sec.content["summary"]
+            assert sec.research and sec.research["chapter_key"] == sec.section_key  # persisted brief
+            assert sec.research["findings"] and 0.0 <= sec.research["coverage"] <= 1.0
             statuses = {c["status"] for c in sec.claims}
             assert "VERIFIED" in statuses  # cites a real label, names a real path
-            assert "UNSUPPORTED" in statuses  # the uncited claim
-            assert sec.quality_scores and sec.quality_scores["claims"] == 3
-        arch = next(s for s in sections if s.section_key == "architecture")
+            assert "UNSUPPORTED" in statuses  # the uncited claim, which names nothing to look for
+            # the claim about `NonexistentWidgetFactory` is one the chapter never makes: recorded, not kept
+            assert sec.quality_scores and sec.quality_scores["claims"] == 2
+            assert sec.quality_scores["claims_not_stated"] == 1
+            assert sec.verification and len(sec.verification["unstated"]) == 1
+        arch = next(s for s in sections if s.section_key == "overview")
         assert any(b["type"] == "diagram" for b in arch.content["blocks"])  # attached by the visuals stage
 
         assert await _count(runtime, ChunkRow, project_id) > 10
@@ -233,7 +233,21 @@ async def test_fixture_repo_yields_guide_diagrams_and_cleans_up(runtime: Runtime
         seqs = [seq for seq, _ in events]
         assert seqs == sorted(seqs) and events[-1][1]["type"] == "ready"
         stages = [e["stage"] for _, e in events if e["type"] == "stage"]
-        assert stages.index("INGESTING") < stages.index("BUILDING_IR") < stages.index("GENERATING_GUIDE")
+        order = ["INGESTING", "BUILDING_IR", "INVESTIGATING_PROJECT", "PLANNING_GUIDE", "RESEARCHING_GUIDE"]
+        assert [stages.index(x) for x in order] == sorted(stages.index(x) for x in order)
+        assert stages.index("RESEARCHING_GUIDE") < stages.index("GENERATING_GUIDE")
+
+        # every chapter but the first is told one line about the chapter it depends on, and nothing else
+        with_deps = [p for p in llm.prompts if "## Earlier chapters this one builds on" in p]
+        assert len(llm.prompts) == len(keys) and len(with_deps) == len(keys) - 1
+
+        def dependency_lines(prompt: str) -> int:
+            part = prompt.split("## Earlier chapters this one builds on")[1]
+            return part.split("## Covered in other")[0].count("\n- ")
+
+        assert all(dependency_lines(p) == 1 for p in with_deps)
+        # and told, by title and objective only, what every other chapter owns so it does not repeat it
+        assert all("## Covered in other chapters" in p for p in llm.prompts)
 
         # a finished job is a no-op, not a rerun
         calls = len(llm.calls)
@@ -267,16 +281,18 @@ async def test_rerun_after_failure_resumes_without_duplicates(runtime: Runtime) 
                 ).scalars()
             )
         assert job is not None and job.status == "queued"
-        assert {"analyze", "plan"} <= done and "sections" not in done
+        assert {"analyze", "plan", "research"} <= done and "sections" not in done
         chunks_before = await _count(runtime, ChunkRow, project_id)
+        total = await _count(runtime, GuideSectionRow, project_id)
 
         healthy = ScriptedLLM()
         second = await run_analysis(runtime, healthy, job_id)
         assert second.succeeded
         assert healthy.calls.count("guide.plan") == 0  # plan checkpoint was reused
-        assert healthy.calls.count("guide.section") == 2  # only the sections the first attempt did not finish
+        assert "guide.research" not in healthy.calls  # so were the research briefs
+        assert healthy.calls.count("guide.section") == total - 2  # only the chapters the first attempt left
         assert await _count(runtime, ChunkRow, project_id) == chunks_before
-        assert await _count(runtime, GuideSectionRow, project_id) == 4
+        assert await _count(runtime, GuideSectionRow, project_id) == total
     finally:
         await _teardown(runtime, project_id)
 
@@ -323,6 +339,9 @@ class _NullQueue:
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         return None
 
+    async def enqueue_export(self, export_id: str) -> None:
+        return None
+
     async def aclose(self) -> None:
         return None
 
@@ -340,15 +359,10 @@ async def test_read_routes_serve_the_persisted_guide(runtime: Runtime, settings:
             ) as c:
                 base = f"/api/v1/projects/{project_id}"
                 guide = (await c.get(f"{base}/guide")).json()
-                assert [s["key"] for s in guide["sections"]] == [
-                    "overview",
-                    "architecture",
-                    "data-flow",
-                    "running",
-                ]
+                assert [s["key"] for s in guide["sections"]][:2] == ["overview", "request-lifecycle"]
                 assert guide["estimated_read_minutes"] > 0 and guide["sections"][0]["summary"]
 
-                section = (await c.get(f"{base}/guide/sections/architecture")).json()
+                section = (await c.get(f"{base}/guide/sections/overview")).json()
                 assert section["status"] in ("ready", "degraded")
                 assert section["evidence"] and section["claims"]
                 assert {b["type"] for b in section["content"]["blocks"]} >= {"paragraph", "diagram"}
@@ -423,29 +437,29 @@ async def test_resuming_inside_a_stage_group_does_not_move_the_job_backwards(run
 
 
 def _missing_evidence_for(monkeypatch: pytest.MonkeyPatch, keys: set[str] | None) -> None:
-    """Make `write_section` find no evidence for `keys` (every section when None); others run for real."""
-    from unfold.guide.generate import SectionEvidenceMissing
+    """Make `write_chapter` find no evidence for `keys` (every section when None); others run for real."""
+    from unfold.guide.write import SectionEvidenceMissing
     from unfold.orchestration import pipeline
 
-    real = pipeline.write_section
+    real = pipeline.write_chapter
 
-    async def write(llm: Any, retriever: Any, spec: Any, *args: Any, **kwargs: Any) -> Any:
+    async def write(llm: Any, chunks: Any, spec: Any, *args: Any, **kwargs: Any) -> Any:
         if keys is None or spec.key in keys:
             raise SectionEvidenceMissing(
                 f"No repository evidence was found for section '{spec.title}'.",
                 code=ErrorCode.RETRIEVAL_FAILED,
                 retryable=True,
             )
-        return await real(llm, retriever, spec, *args, **kwargs)
+        return await real(llm, chunks, spec, *args, **kwargs)
 
-    monkeypatch.setattr(pipeline, "write_section", write)
+    monkeypatch.setattr(pipeline, "write_chapter", write)
 
 
 async def test_one_section_without_evidence_fails_that_section_not_the_job(
     runtime: Runtime, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_id, job_id = await _seed(runtime, _zip_of(FIXTURE))
-    _missing_evidence_for(monkeypatch, {"running"})
+    _missing_evidence_for(monkeypatch, {"config-deploy"})
     try:
         outcome = await run_analysis(runtime, ScriptedLLM(), job_id)
         assert outcome.succeeded, outcome
@@ -463,10 +477,10 @@ async def test_one_section_without_evidence_fails_that_section_not_the_job(
         assert job is not None and job.status == "succeeded" and job.attempt == 1
         assert "guide_sections" in job.stage_progress["degraded"]
         by_key = {r.section_key: r for r in rows}
-        failed = by_key["running"]
+        failed = by_key["config-deploy"]
         assert failed.status == "failed" and failed.content is None
         assert "No repository evidence" in failed.quality_scores["reason"]
-        assert all(r.status in {"ready", "degraded"} for k, r in by_key.items() if k != "running")
+        assert all(r.status in {"ready", "degraded"} for k, r in by_key.items() if k != "config-deploy")
     finally:
         await _teardown(runtime, project_id)
 

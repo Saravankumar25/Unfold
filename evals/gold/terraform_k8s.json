@@ -1,0 +1,29 @@
+{
+  "repo": "terraform_k8s",
+  "retrieval": [
+    {"q": "How is the GKE cluster defined?", "expect": ["terraform/modules/gke/main.tf"]},
+    {"q": "What does the Kubernetes deployment run and which port does it expose?", "expect": ["k8s/deployment.yaml"]},
+    {"q": "How does the Go service create a short link?", "expect": ["app/internal/handlers/handlers.go"]},
+    {"q": "Which SQL schema does the Go service use?", "expect": ["app/internal/store/schema.sql", "app/internal/store/store.go"]},
+    {"q": "How is the deploy workflow triggered?", "expect": [".github/workflows/deploy.yml"]},
+    {"q": "How is the VPC network module configured?", "expect": ["terraform/modules/network/main.tf"]},
+    {"q": "Which ingress exposes the service?", "expect": ["k8s/ingress.yaml"]}
+  ],
+  "claims": [
+    {"text": "The `network` module is given `subnet_cidr` from `var.subnet_cidr`", "kind": "project_fact", "cite": ["terraform/main.tf"], "expect": "VERIFIED"},
+    {"text": "`Health` writes `http.StatusOK`", "kind": "project_fact", "cite": ["app/internal/handlers/handlers.go"], "expect": "VERIFIED"},
+    {"text": "A `StatefulSet` named `shortlink-redis` caches resolved links", "kind": "project_fact", "cite": ["k8s/deployment.yaml"], "expect": "INFERRED", "hallucinated": true},
+    {"text": "`module.network` outputs are passed to `module.gke` and `module.database`", "kind": "project_fact", "cite": [], "expect": "UNSUPPORTED"}
+  ],
+  "chat": [
+    "How is the GKE cluster defined?",
+    "What does the deployment run?"
+  ],
+  "relations": [
+    {"type": "DEPLOYS_TO", "source": "app", "target": "app"}
+  ],
+  "subsystems": {
+    "together": [["terraform/modules/gke/main.tf", "terraform/modules/network/main.tf"]],
+    "apart": [["app/main.go", "terraform/modules/gke/main.tf"]]
+  }
+}

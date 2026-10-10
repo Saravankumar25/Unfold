@@ -4,18 +4,20 @@ import type {
   ArchitectureOut,
   ArtifactOut,
   ChatDetailOut,
+  ChatReplyOut,
   ChatSessionOut,
   CreateGithubProject,
   DiagramOut,
   EvidenceOut,
   ExportCreated,
+  ExportFormat,
   GuideOut,
   GuideSectionOut,
+  PostChatMessage,
   ProgressPage,
   ProjectCreated,
   ProjectOut,
-  SectionVariant,
-  SectionVariantOut,
+  RegenerateCreated,
   SessionCurrentOut,
   SessionOut,
   TechnicalLevel,
@@ -83,10 +85,8 @@ export function createEndpoints(client: ApiClient) {
       client.get<GuideOut>(`/projects/${enc(projectId)}/guide`, { signal }),
     getSection: (projectId: string, key: string, signal?: AbortSignal) =>
       client.get<GuideSectionOut>(`/projects/${enc(projectId)}/guide/sections/${enc(key)}`, { signal }),
-    sectionVariant: (projectId: string, key: string, variant: SectionVariant) =>
-      client.post<SectionVariantOut>(
-        `/projects/${enc(projectId)}/guide/sections/${enc(key)}/${variant === "simpler" ? "simplify" : "deepen"}`,
-      ),
+    regenerateSection: (projectId: string, key: string) =>
+      client.post<RegenerateCreated>(`/projects/${enc(projectId)}/sections/${enc(key)}/regenerate`),
     getEvidence: (projectId: string, chunkId: string, signal?: AbortSignal) =>
       client.get<EvidenceOut>(`/projects/${enc(projectId)}/evidence/${enc(chunkId)}`, { signal }),
 
@@ -101,10 +101,14 @@ export function createEndpoints(client: ApiClient) {
       client.get<ChatSessionOut[]>(`/projects/${enc(projectId)}/chats`, { signal }),
     createChat: (projectId: string) => client.post<ChatSessionOut>(`/projects/${enc(projectId)}/chats`),
     getChat: (chatId: string, signal?: AbortSignal) => client.get<ChatDetailOut>(`/chats/${enc(chatId)}`, { signal }),
+    postMessage: (chatId: string, body: PostChatMessage, signal?: AbortSignal) =>
+      client.post<ChatReplyOut>(`/chats/${enc(chatId)}/messages`, body, { signal }),
 
     // exports
-    exportGuide: (projectId: string) => client.post<ExportCreated>(`/projects/${enc(projectId)}/exports/guide`),
-    exportChat: (chatId: string) => client.post<ExportCreated>(`/chats/${enc(chatId)}/exports`),
+    exportGuide: (projectId: string, format: ExportFormat = "pdf") =>
+      client.post<ExportCreated>(`/projects/${enc(projectId)}/exports/guide?format=${format}`),
+    exportChat: (chatId: string, format: ExportFormat = "pdf") =>
+      client.post<ExportCreated>(`/chats/${enc(chatId)}/exports?format=${format}`),
     getExport: (artifactId: string, signal?: AbortSignal) =>
       client.get<ArtifactOut>(`/exports/${enc(artifactId)}`, { signal }),
   };
@@ -112,8 +116,3 @@ export function createEndpoints(client: ApiClient) {
 
 export const api = createEndpoints(apiClient);
 export type Api = ReturnType<typeof createEndpoints>;
-
-/** Path builders for the streaming endpoints (consumed by `sse.ts`); progress is polled, not streamed. */
-export const streamPaths = {
-  chatMessages: (chatId: string) => `/chats/${enc(chatId)}/messages`,
-};

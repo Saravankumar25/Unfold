@@ -233,13 +233,21 @@ class Neo4jGraphQueries:
         rows = await self.neo4j.run(
             f"MATCH (a:Entity)-[r:{rels}]->(b:Entity) "
             "WHERE a.uid IN $uids AND b.uid IN $uids AND a.project_id = $pid AND b.project_id = $pid "
-            "RETURN a.uid AS s, b.uid AS t, type(r) AS type, r.source AS src, r.confidence AS conf "
+            "RETURN a.uid AS s, b.uid AS t, type(r) AS type, r.source AS src, r.confidence AS conf, "
+            "r.proof AS proof "
             "ORDER BY s, t, type LIMIT 2000",
             uids=uids,
             pid=project_id,
         )
         return [
-            GraphEdge(source=r["s"], target=r["t"], type=r["type"], provenance=r["src"], confidence=r["conf"])
+            GraphEdge(
+                source=r["s"],
+                target=r["t"],
+                type=r["type"],
+                provenance=r["src"],
+                confidence=r["conf"],
+                proof=r["proof"],
+            )
             for r in rows
         ]
 

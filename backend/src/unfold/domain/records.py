@@ -41,6 +41,7 @@ class ProjectRec:
     upload_object_key: str | None = None
     ir_object_key: str | None = None
     lexical_object_key: str | None = None
+    deleting_at: datetime | None = None  # durable delete marker: hidden from every route, cleanup finishes it
 
 
 @dataclass
@@ -59,6 +60,8 @@ class JobRec:
     completed_at: datetime | None = None
     heartbeat_at: datetime | None = None
     session_id: str = ""  # owner, for the per-session active-job cap
+    kind: str = "analysis"  # analysis | regenerate (one chapter redone by a worker)
+    section_key: str | None = None  # kind == "regenerate": the chapter
 
     @property
     def terminal(self) -> bool:
@@ -90,6 +93,8 @@ class SectionRec:
     claims: list[Any] = field(default_factory=list)
     evidence_summary: dict[str, Any] | None = None
     quality_scores: dict[str, Any] | None = None
+    research: dict[str, Any] | None = None  # guide.models.ResearchBrief
+    verification: dict[str, Any] | None = None  # guide.verification_models.StoredVerification
     version: int = 1
 
 
@@ -104,3 +109,43 @@ class DiagramRec:
     description: str | None = None
     origin: str = "deterministic"
     section_key: str | None = None
+
+
+@dataclass
+class ChatRec:
+    id: str
+    project_id: str
+    created_at: datetime
+    updated_at: datetime
+    title: str | None = None
+    message_count: int = 0  # derived by the store, never written by callers
+
+
+@dataclass
+class ChatMessageRec:
+    id: str
+    chat_id: str
+    created_at: datetime
+    role: str  # user | assistant
+    mode: str = "default"
+    content: dict[str, Any] = field(default_factory=dict)
+    evidence: list[Any] = field(default_factory=list)
+    model_metadata: dict[str, Any] = field(default_factory=dict)
+    seq: int = 0  # assigned by the store when a turn is appended
+
+
+@dataclass
+class ArtifactRec:
+    """An export (guide or chat as PDF or Markdown). `object_key` names the blob once `status` is ready."""
+
+    id: str
+    project_id: str
+    kind: str
+    created_at: datetime
+    expires_at: datetime
+    chat_id: str | None = None
+    status: str = "pending"
+    object_key: str | None = None
+    content_type: str = "application/pdf"
+    size_bytes: int | None = None
+    error: str | None = None

@@ -46,7 +46,7 @@ def install_error_handling(app: FastAPI) -> None:
     async def unfold_error(request: Request, exc: UnfoldError) -> JSONResponse:
         if exc.http_status >= 500:
             log.error("request.failed", code=exc.code.value, error=exc.message, path=request.url.path)
-        headers = {"Retry-After": "30"} if exc.http_status in (429, 503) else None
+        headers = {"Retry-After": "30"} if exc.http_status in (429, 503) and exc.retryable else None
         return JSONResponse(exc.envelope(_rid(request)), status_code=exc.http_status, headers=headers)
 
     @app.exception_handler(RequestValidationError)

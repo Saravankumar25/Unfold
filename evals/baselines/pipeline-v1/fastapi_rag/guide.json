@@ -1,0 +1,1041 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Quick Overview",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "This guide section provides a quick overview of the fastapi_rag project layout, architecture, and its purpose as a retrieval-augmented question answering system.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Quick Overview",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The fastapi_rag project is designed for retrieval-augmented question answering over uploaded documents [E1]. It leverages FastAPI for the web interface and API routing [E1, E5], while integrating a RAG system for handling document ingestion, embedding generation, hybrid retrieval, and LLM-powered answering [E1, E18]."
+     },
+     {
+      "type": "heading",
+      "text": "Project Layout and Architecture",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The repository is structured around several core subsystems handling HTTP endpoints, background tasks, and database sessions:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "app/main.py: FastAPI application factory and router wiring [E1].",
+       "app/api/routes/: HTTP endpoints including /api/v1/documents, /api/v1/query, and /api/v1/health [E1].",
+       "app/services/: Services covering ingestion, chunking, embeddings, hybrid retrieval, and the LLM client [E1].",
+       "app/workers/tasks.py: arq background jobs that ingest uploaded documents [E1].",
+       "app/db/models.py: SQLAlchemy models for documents and chunks stored in PostgreSQL [E1]."
+      ],
+      "ordered": false
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def create_app() -> FastAPI:\n    \"\"\"Build the FastAPI application.\"\"\"\n    settings = get_settings()\n    application = FastAPI(title=\"DocQA\", version=\"0.3.1\", lifespan=lifespan)\n    application.add_middleware(\n        CORSMiddleware,\n        allow_origins=settings.cors_origins,\n        allow_methods=[\"*\"],\n        allow_headers=[\"*\"],\n    )\n    application.include_router(api_router, prefix=\"/api/v1\")\n    return application",
+      "path": "app/main.py",
+      "start_line": 26,
+      "caption": "Application factory in app/main.py"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:1f1aebb18151cbce",
+      "caption": "fastapi_rag architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The fastapi_rag project is designed for retrieval-augmented question answering over uploaded documents.",
+     "kind": "project_fact",
+     "status": "INFERRED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.1,
+     "note": "Names in the claim were not found in the cited evidence: fastapi_rag"
+    },
+    {
+     "text": "It leverages FastAPI for the web interface and API routing.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac",
+      "ch:908aa8892eb30a19f2d56931"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The repository is structured around subsystems for routing, services, background tasks, and database models.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:02954accd194b59367b038ac",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E2": {
+     "path": "app/main.py",
+     "symbol": null,
+     "chunk_id": "ch:611163851b318909ed981e99",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:56a120ef0fabaf2a8c4ab515",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E4": {
+     "path": "app/api/deps.py",
+     "symbol": null,
+     "chunk_id": "ch:aebb773b9319cfcca47e6972",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "app/main.py",
+     "symbol": "create_app",
+     "chunk_id": "ch:908aa8892eb30a19f2d56931",
+     "end_line": 37,
+     "start_line": 26
+    },
+    "E6": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Notes for automated tools",
+     "chunk_id": "ch:a425139f7ddcdb1d7a86160f",
+     "end_line": 27,
+     "start_line": 24
+    },
+    "E7": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Configuration",
+     "chunk_id": "ch:a9b832eba273e487b899bd80",
+     "end_line": 30,
+     "start_line": 28
+    },
+    "E8": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Running locally",
+     "chunk_id": "ch:58bf0f56b97acc0a49d560b8",
+     "end_line": 23,
+     "start_line": 15
+    },
+    "E9": {
+     "path": "app/core/config.py",
+     "symbol": null,
+     "chunk_id": "ch:f6c3557fe23b2367244f7c53",
+     "end_line": 10,
+     "start_line": 1
+    },
+    "E10": {
+     "path": "app/core/logging.py",
+     "symbol": "configure_logging",
+     "chunk_id": "ch:6092070f7197808303c02350",
+     "end_line": 13,
+     "start_line": 7
+    },
+    "E11": {
+     "path": "tests/test_api.py",
+     "symbol": null,
+     "chunk_id": "ch:152d932d5f7d3ea88b53b2a1",
+     "end_line": 7,
+     "start_line": 1
+    },
+    "E12": {
+     "path": "app/core/config.py",
+     "symbol": "get_settings",
+     "chunk_id": "ch:f550eed36ef45cb32d4bcd39",
+     "end_line": 34,
+     "start_line": 31
+    },
+    "E13": {
+     "path": "pyproject.toml",
+     "symbol": "project",
+     "chunk_id": "ch:8dbaba099164f8180b8ee06f",
+     "end_line": 23,
+     "start_line": 1
+    },
+    "E14": {
+     "path": "app/main.py",
+     "symbol": "lifespan",
+     "chunk_id": "ch:20f55309378e1c8ee8f4ae1f",
+     "end_line": 23,
+     "start_line": 15
+    },
+    "E15": {
+     "path": "app/api/routes/health.py",
+     "symbol": null,
+     "chunk_id": "ch:c6fc6c254574519370f04cf3",
+     "end_line": 7,
+     "start_line": 1
+    },
+    "E16": {
+     "path": "app/workers/tasks.py",
+     "symbol": null,
+     "chunk_id": "ch:c77522d48f6e534d3f91eb1d",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E17": {
+     "path": "app/services/embeddings.py",
+     "symbol": null,
+     "chunk_id": "ch:c863a552d964f57a5bd5e0d8",
+     "end_line": 9,
+     "start_line": 1
+    },
+    "E18": {
+     "path": "app/services/llm.py",
+     "symbol": null,
+     "chunk_id": "ch:04a99f8f7278bb78d5ebc482",
+     "end_line": 15,
+     "start_line": 1
+    },
+    "E19": {
+     "path": "app/api/routes/documents.py",
+     "symbol": null,
+     "chunk_id": "ch:1342f3336e1a2b7625fe746c",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E20": {
+     "path": "app/schemas.py",
+     "symbol": "DocumentOut",
+     "chunk_id": "ch:b43d76122d1023387197d2ee",
+     "end_line": 16,
+     "start_line": 8
+    }
+   },
+   "quality": {
+    "claims": 3,
+    "inferred": 1,
+    "proposed": 0,
+    "verified": 1,
+    "unsupported": 0,
+    "grounded_ratio": 0.33,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "architecture",
+   "title": "Architecture Walkthrough",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 5.0,
+   "content": {
+    "summary": "This guide section examines the modular design, data stores including PostgreSQL and Qdrant, and FastAPI endpoints of the fastapi_rag repository.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Architecture Walkthrough",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The fastapi_rag project features a modular design structured around FastAPI, PostgreSQL, and Qdrant [E1]. The codebase separates HTTP routing, background jobs, database models, and retrieval services to maintain a clean separation of concerns [E1]."
+     },
+     {
+      "type": "heading",
+      "text": "Data Stores",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "PostgreSQL serves as the primary relational data store using SQLAlchemy models to manage documents and text chunks [E1]. Meanwhile, Qdrant stores and searches chunk embeddings within a designated vector collection [E15]. The application connects to these data stores using configuration settings defined via Pydantic [E9]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Settings(BaseSettings):\n    database_url: str = \"postgresql+asyncpg://docqa:<REDACTED_SECRET>@localhost:5432/docqa\"\n    redis_url: str = \"redis://localhost:6379/0\"\n    qdrant_url: str = \"http://localhost:6333\"\n    collection_name: str = \"docqa_chunks\"",
+      "path": "app/core/config.py",
+      "start_line": 11,
+      "caption": "Configuration settings for data stores"
+     },
+     {
+      "type": "heading",
+      "text": "FastAPI Endpoints",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The API routes are aggregated under an API router and prefixed appropriately, including endpoints for health checks, document management, and question answering [E1, E3, E7, E12, E18]. For instance, the query endpoint handles retrieval-augmented generation by invoking a hybrid retriever and an LLM client [E12]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "@router.post(\"\", response_model=QueryResponse)\nasync def answer_query(request: QueryRequest, db: AsyncSession = Depends(get_db)) -> QueryResponse:\n    retriever = HybridRetriever(db)\n    hits = await retriever.search(request.question, top_k=request.top_k)\n    llm = LLMClient()\n    answer = await llm.answer(request.question, hits)\n    return QueryResponse(answer=answer.text, citations=answer.citations)",
+      "path": "app/api/routes/query.py",
+      "start_line": 14,
+      "caption": "Query endpoint implementation"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:7dc4080559420f67",
+      "caption": "Module dependencies"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:1492d2a9f0409f42",
+      "caption": "Data model"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The project uses a modular design with FastAPI, PostgreSQL, and Qdrant.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "PostgreSQL stores documents and chunks using SQLAlchemy models.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Qdrant stores and searches chunk embeddings.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:9bb7b0c1f97d8f9ef9402656"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Settings define database, redis, and qdrant connection URLs.",
+     "kind": "project_fact",
+     "status": "INFERRED",
+     "evidence_ids": [
+      "ch:56a120ef0fabaf2a8c4ab515"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.1,
+     "note": "Names in the claim were not found in the cited evidence: urls"
+    },
+    {
+     "text": "API routes include health checks, document handling, and query endpoints.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac",
+      "ch:b4634de6c051c867dd33287d"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The query endpoint performs hybrid retrieval and generates an LLM-based cited answer.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:4b3959b3b27377f74e27f994"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:02954accd194b59367b038ac",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E2": {
+     "path": "app/api/routes/documents.py",
+     "symbol": null,
+     "chunk_id": "ch:1342f3336e1a2b7625fe746c",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "app/api/routes/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:b4634de6c051c867dd33287d",
+     "end_line": 10,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "app/api/routes/query.py",
+     "symbol": null,
+     "chunk_id": "ch:8840faaea64c0dbe7a438b88",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "app/api/routes/health.py",
+     "symbol": null,
+     "chunk_id": "ch:c6fc6c254574519370f04cf3",
+     "end_line": 7,
+     "start_line": 1
+    },
+    "E6": {
+     "path": "app/main.py",
+     "symbol": null,
+     "chunk_id": "ch:611163851b318909ed981e99",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E7": {
+     "path": "app/api/routes/health.py",
+     "symbol": "health",
+     "chunk_id": "ch:af2db70832b43e8dcaa6f826",
+     "end_line": 11,
+     "start_line": 8
+    },
+    "E8": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.__init__",
+     "chunk_id": "ch:cbbda2ebd5b807e911d94b29",
+     "end_line": 40,
+     "start_line": 37
+    },
+    "E9": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:56a120ef0fabaf2a8c4ab515",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E10": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.__init__",
+     "chunk_id": "ch:b2045bfb4b22cca35b99077a",
+     "end_line": 12,
+     "start_line": 10
+    },
+    "E11": {
+     "path": "docker-compose.yml",
+     "symbol": "services.api",
+     "chunk_id": "ch:9a0bf885e4cf9d0b8e11439e",
+     "end_line": 15,
+     "start_line": 1
+    },
+    "E12": {
+     "path": "app/api/routes/query.py",
+     "symbol": "answer_query",
+     "chunk_id": "ch:4b3959b3b27377f74e27f994",
+     "end_line": 21,
+     "start_line": 14
+    },
+    "E13": {
+     "path": "tests/test_api.py",
+     "symbol": null,
+     "chunk_id": "ch:152d932d5f7d3ea88b53b2a1",
+     "end_line": 7,
+     "start_line": 1
+    },
+    "E14": {
+     "path": ".env.example",
+     "symbol": null,
+     "chunk_id": "ch:81730911412f3c211b1c779c",
+     "end_line": 5,
+     "start_line": 1
+    },
+    "E15": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore",
+     "chunk_id": "ch:9bb7b0c1f97d8f9ef9402656",
+     "end_line": 9,
+     "start_line": 7
+    },
+    "E16": {
+     "path": "app/api/deps.py",
+     "symbol": null,
+     "chunk_id": "ch:aebb773b9319cfcca47e6972",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E17": {
+     "path": "app/services/vector_store.py",
+     "symbol": null,
+     "chunk_id": "ch:bf2ddbe83f2b896c0c8ead97",
+     "end_line": 6,
+     "start_line": 1
+    },
+    "E18": {
+     "path": "app/main.py",
+     "symbol": "create_app",
+     "chunk_id": "ch:908aa8892eb30a19f2d56931",
+     "end_line": 37,
+     "start_line": 26
+    },
+    "E19": {
+     "path": "app/api/deps.py",
+     "symbol": "get_db",
+     "chunk_id": "ch:418934434fce8a86660d2cc0",
+     "end_line": 16,
+     "start_line": 13
+    },
+    "E20": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "delete_document",
+     "chunk_id": "ch:c64152015590d47620d72433",
+     "end_line": 50,
+     "start_line": 46
+    }
+   },
+   "quality": {
+    "claims": 6,
+    "inferred": 1,
+    "proposed": 0,
+    "verified": 2,
+    "unsupported": 0,
+    "grounded_ratio": 0.33,
+    "strongly_inferred": 3
+   }
+  },
+  {
+   "key": "deployment",
+   "title": "How to Run or Deploy",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "Learn how to start the runnable services using Docker and run migrations for fastapi_rag.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "How to Run or Deploy",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "This guide covers starting the runnable services using Docker and managing database migrations via Alembic [E1, E2, E5, E6, E8, E10, E12]."
+     },
+     {
+      "type": "heading",
+      "text": "Running Locally with Docker Compose",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "You can spin up all required runnable services locally using Docker Compose [E5, E6, E8, E10, E12]. The configuration includes the API service, background worker, PostgreSQL database, Qdrant vector store, and Redis cache."
+     },
+     {
+      "type": "code",
+      "language": "bash",
+      "code": "docker compose up --build",
+      "path": "README.md",
+      "start_line": 15,
+      "caption": "Build and run local services"
+     },
+     {
+      "type": "heading",
+      "text": "Database Migrations",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses Alembic to manage database schema versions, starting with the initial migration defining the documents and chunks tables [E2, E4]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def upgrade() -> None:\n    op.create_table(\n        \"documents\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"filename\", sa.String(512), nullable=False),\n        sa.Column(\"content_type\", sa.String(128), nullable=False),\n        sa.Column(\"status\", sa.String(32), nullable=False),\n        sa.Column(\"raw_text\", sa.Text, nullable=True),\n        sa.Column(\"created_at\", sa.DateTime(timezone=True), server_default=sa.func.now()),\n    )\n    op.create_table(\n        \"chunks\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"document_id\", sa.Integer, sa.ForeignKey(\"documents.id\", ondelete=\"CASCADE\")),\n        sa.Column(\"position\", sa.Integer),\n        sa.Column(\"text\", sa.Text),\n        sa.Column(\"token_count\", sa.Integer),\n    )",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 13,
+      "caption": "Initial migration upgrade function"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:a32191a983ff9f77",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The project uses Docker to containerize services like API, worker, postgres, qdrant, and redis.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:51075d60a42f786397b3f180",
+      "ch:b8ae35bbbc2e2bcafe50f3f6",
+      "ch:5ade24870b71ad045db24b2d",
+      "ch:9a0bf885e4cf9d0b8e11439e",
+      "ch:07c353514bff90e1991524df"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Database migrations are managed using Alembic with an initial migration creating documents and chunks tables.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:f17f04d6fae8ac500c869032",
+      "ch:9eb30510cfb103cc989edb75"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Services can be run locally using docker compose up --build.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:58bf0f56b97acc0a49d560b8"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "Dockerfile",
+     "symbol": "stage base",
+     "chunk_id": "ch:51075d60a42f786397b3f180",
+     "end_line": 9,
+     "start_line": 1
+    },
+    "E2": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": null,
+     "chunk_id": "ch:f17f04d6fae8ac500c869032",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "downgrade",
+     "chunk_id": "ch:2efd2dcddb3993fa82048c28",
+     "end_line": 35,
+     "start_line": 33
+    },
+    "E4": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "upgrade",
+     "chunk_id": "ch:9eb30510cfb103cc989edb75",
+     "end_line": 30,
+     "start_line": 13
+    },
+    "E5": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Running locally",
+     "chunk_id": "ch:58bf0f56b97acc0a49d560b8",
+     "end_line": 23,
+     "start_line": 15
+    },
+    "E6": {
+     "path": "docker-compose.yml",
+     "symbol": "services.worker",
+     "chunk_id": "ch:b8ae35bbbc2e2bcafe50f3f6",
+     "end_line": 31,
+     "start_line": 16
+    },
+    "E7": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "jobs",
+     "chunk_id": "ch:a81140ba8f9b51e7f7a9c7c0",
+     "end_line": 35,
+     "start_line": 8
+    },
+    "E8": {
+     "path": "docker-compose.yml",
+     "symbol": "services.qdrant",
+     "chunk_id": "ch:5ade24870b71ad045db24b2d",
+     "end_line": 54,
+     "start_line": 51
+    },
+    "E9": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.search",
+     "chunk_id": "ch:6ff11f6a1ac7db734324f7c9",
+     "end_line": 71,
+     "start_line": 59
+    },
+    "E10": {
+     "path": "docker-compose.yml",
+     "symbol": "services.api",
+     "chunk_id": "ch:9a0bf885e4cf9d0b8e11439e",
+     "end_line": 15,
+     "start_line": 1
+    },
+    "E11": {
+     "path": "docker-compose.yml",
+     "symbol": "volumes",
+     "chunk_id": "ch:eadaef032b1935900df07376",
+     "end_line": 57,
+     "start_line": 56
+    },
+    "E12": {
+     "path": "docker-compose.yml",
+     "symbol": "services.redis",
+     "chunk_id": "ch:07c353514bff90e1991524df",
+     "end_line": 50,
+     "start_line": 46
+    }
+   },
+   "quality": {
+    "claims": 3,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 0,
+    "unsupported": 0,
+    "grounded_ratio": 0.0,
+    "strongly_inferred": 3
+   }
+  },
+  {
+   "key": "rag-pipeline",
+   "title": "AI Pipeline and RAG Subsystem",
+   "position": 3,
+   "status": "ready",
+   "kind": "core",
+   "target_minutes": 6.0,
+   "content": {
+    "summary": "This guide section details the AI pipeline and RAG subsystem of the FastAPI RAG application, covering text chunking, Qdrant vector search, BM25 lexical search, reciprocal rank fusion, and OpenAI LLM integration.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "AI Pipeline and RAG Subsystem",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The Retrieval-Augmented Generation (RAG) subsystem is responsible for processing uploaded documents, indexing text chunks, executing hybrid searches, and generating grounded answers via an LLM client [E7, E10, E11, E22]."
+     },
+     {
+      "type": "heading",
+      "text": "Chunking and Ingestion",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Documents are split into manageable text pieces using custom chunking logic. The split_text function divides input text on paragraph boundaries to target a specific character size and overlap [E17]. Each chunk is stored in PostgreSQL and indexed in Qdrant [E22]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def split_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[TextChunk]:\n    \"\"\"Split text on paragraph boundaries into chunks of roughly `chunk_size` characters with overlap.\"\"\"\n    paragraphs = [p.strip() for p in text.split(\"\\n\\n\") if p.strip()]\n    chunks: list[TextChunk] = []\n    buffer = \"\"\n    for paragraph in paragraphs:\n        if len(buffer) + len(paragraph) > chunk_size and buffer:\n            chunks.append(_make_chunk(len(chunks), buffer))\n            buffer = buffer[-overlap:]\n        buffer = f\"{buffer}\\n\\n{paragraph}\" if buffer else paragraph\n    if buffer:\n        chunks.append(_make_chunk(len(chunks), buffer))\n    return chunks",
+      "path": "app/services/chunking.py",
+      "start_line": 13,
+      "caption": "Text splitting implementation"
+     },
+     {
+      "type": "heading",
+      "text": "Hybrid Retrieval: Vector and Lexical Search",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The HybridRetriever combines dense vector search using Qdrant with BM25 lexical search [E4]. Qdrant handles vector similarity scoring through its client wrapper, while rank_bm25 provides lexical scoring over chunk text [E2, E8, E9]. Results from both approaches are fused together using Reciprocal Rank Fusion (RRF) [E14]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class HybridRetriever:\n    \"\"\"Combines BM25 over chunk text with Qdrant vector search.\"\"\"",
+      "path": "app/services/retriever.py",
+      "start_line": 34,
+      "caption": "HybridRetriever class definition"
+     },
+     {
+      "type": "heading",
+      "text": "LLM Integration",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The LLMClient provides a thin wrapper over the OpenAI chat completions API, utilizing a system prompt that forces the model to answer only from the provided context and cite chunks accordingly [E10, E16, E18]. Context blocks are constructed dynamically from the retrieved chunks before being sent to the model [E12, E18]."
+     },
+     {
+      "type": "callout",
+      "tone": "note",
+      "text": "The LLM integration uses a temperature of 0.1 to ensure deterministic, grounded responses based strictly on the retrieved context chunks."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:5edd19a1b8b03bb4",
+      "caption": "AI pipeline"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:970e3db6575dc55f",
+      "caption": "Request flow"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The RAG subsystem processes documents, indexes chunks, performs hybrid searches, and generates grounded answers.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:02954accd194b59367b038ac",
+      "ch:04a99f8f7278bb78d5ebc482",
+      "ch:4b3959b3b27377f74e27f994",
+      "ch:61d3d7ea132cee35b1bbcef8"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Documents are split on paragraph boundaries with configurable chunk size and overlap.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:bd48b6670338ba4e2c722e91"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Hybrid search combines Qdrant vector search and BM25 lexical search, fused via Reciprocal Rank Fusion.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:99ee140e25d7329021709b23",
+      "ch:93e1f695efab9fa07a4667d9",
+      "ch:0e58eba09a42b85182dd3d64",
+      "ch:6ff11f6a1ac7db734324f7c9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The LLMClient wraps the OpenAI chat completions API to generate cited answers from retrieved chunks.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:04a99f8f7278bb78d5ebc482",
+      "ch:95ddb18614884bea8f2c7194",
+      "ch:d4659bdb4d3922800f529c6c"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/services/retriever.py",
+     "symbol": null,
+     "chunk_id": "ch:e7d7124ecf350f2d4302b8e9",
+     "end_line": 16,
+     "start_line": 1
+    },
+    "E2": {
+     "path": "app/services/vector_store.py",
+     "symbol": null,
+     "chunk_id": "ch:bf2ddbe83f2b896c0c8ead97",
+     "end_line": 6,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore",
+     "chunk_id": "ch:9bb7b0c1f97d8f9ef9402656",
+     "end_line": 9,
+     "start_line": 7
+    },
+    "E4": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever",
+     "chunk_id": "ch:99ee140e25d7329021709b23",
+     "end_line": 36,
+     "start_line": 34
+    },
+    "E5": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.upsert_chunks",
+     "chunk_id": "ch:37da819051f82a37f69727c0",
+     "end_line": 24,
+     "start_line": 21
+    },
+    "E6": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.dense_search",
+     "chunk_id": "ch:a1e0905bd9e401054c75e7e7",
+     "end_line": 57,
+     "start_line": 54
+    },
+    "E7": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:02954accd194b59367b038ac",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E8": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.lexical_search",
+     "chunk_id": "ch:93e1f695efab9fa07a4667d9",
+     "end_line": 52,
+     "start_line": 46
+    },
+    "E9": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.search_vectors",
+     "chunk_id": "ch:0e58eba09a42b85182dd3d64",
+     "end_line": 29,
+     "start_line": 26
+    },
+    "E10": {
+     "path": "app/services/llm.py",
+     "symbol": null,
+     "chunk_id": "ch:04a99f8f7278bb78d5ebc482",
+     "end_line": 15,
+     "start_line": 1
+    },
+    "E11": {
+     "path": "app/api/routes/query.py",
+     "symbol": "answer_query",
+     "chunk_id": "ch:4b3959b3b27377f74e27f994",
+     "end_line": 21,
+     "start_line": 14
+    },
+    "E12": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient.build_prompt",
+     "chunk_id": "ch:9cf2a2b76650f0cfd0e5217f",
+     "end_line": 33,
+     "start_line": 30
+    },
+    "E13": {
+     "path": "app/services/chunking.py",
+     "symbol": "TextChunk",
+     "chunk_id": "ch:e5bd81a58e84fa31e178cc5d",
+     "end_line": 10,
+     "start_line": 6
+    },
+    "E14": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.search",
+     "chunk_id": "ch:6ff11f6a1ac7db734324f7c9",
+     "end_line": 71,
+     "start_line": 59
+    },
+    "E15": {
+     "path": "app/services/retriever.py",
+     "symbol": "RetrievedChunk",
+     "chunk_id": "ch:f4f09aed0986df52b95b2b48",
+     "end_line": 22,
+     "start_line": 17
+    },
+    "E16": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient",
+     "chunk_id": "ch:95ddb18614884bea8f2c7194",
+     "end_line": 24,
+     "start_line": 22
+    },
+    "E17": {
+     "path": "app/services/chunking.py",
+     "symbol": "split_text",
+     "chunk_id": "ch:bd48b6670338ba4e2c722e91",
+     "end_line": 25,
+     "start_line": 13
+    },
+    "E18": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient.answer",
+     "chunk_id": "ch:d4659bdb4d3922800f529c6c",
+     "end_line": 47,
+     "start_line": 35
+    },
+    "E19": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient.__init__",
+     "chunk_id": "ch:a6dfaba13361a1fe71ebce39",
+     "end_line": 28,
+     "start_line": 25
+    },
+    "E20": {
+     "path": "app/api/routes/query.py",
+     "symbol": null,
+     "chunk_id": "ch:8840faaea64c0dbe7a438b88",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E21": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.__init__",
+     "chunk_id": "ch:cbbda2ebd5b807e911d94b29",
+     "end_line": 40,
+     "start_line": 37
+    },
+    "E22": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.ingest",
+     "chunk_id": "ch:61d3d7ea132cee35b1bbcef8",
+     "end_line": 74,
+     "start_line": 57
+    },
+    "E23": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.__init__",
+     "chunk_id": "ch:0d870286e7241bc422a2cec5",
+     "end_line": 32,
+     "start_line": 28
+    },
+    "E24": {
+     "path": "app/main.py",
+     "symbol": "lifespan",
+     "chunk_id": "ch:20f55309378e1c8ee8f4ae1f",
+     "end_line": 23,
+     "start_line": 15
+    }
+   },
+   "quality": {
+    "claims": 4,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 2,
+    "unsupported": 0,
+    "grounded_ratio": 0.5,
+    "strongly_inferred": 2
+   }
+  }
+ ]
+}

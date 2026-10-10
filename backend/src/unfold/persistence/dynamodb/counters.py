@@ -7,6 +7,7 @@ set only so old windows are eventually removed (DynamoDB deletes "typically with
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from unfold.persistence.dynamodb.table import ConditionFailed, DynamoTable
@@ -64,6 +65,10 @@ class DynamoCounters(CounterStore):
         if item is None:
             return {}
         return {k: int(v) for k, v in item.items() if k not in ("PK", "SK", "ttl")}
+
+    async def delete(self, keys: Sequence[str]) -> int:
+        await self._table.batch_write(deletes=[(f"C#{k}", _SK) for k in keys])
+        return len(keys)
 
 
 class DynamoRateLimiter(RateLimiter):
