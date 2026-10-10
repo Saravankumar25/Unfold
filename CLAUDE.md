@@ -21,7 +21,9 @@ decisions in `docs/adr/`.
 ## Architecture rules (enforced by `backend/tests/unit/test_architecture.py`)
 
 - Application code depends on `unfold.ports` (`BlobStore`, `JobQueue`, `RateLimiter`, `ProgressStore`).
-  Only adapters import `redis` or `minio`.
+  Only adapters import `minio`, `arq` or `boto3`; `redis` is imported only by `persistence.redis_store` and the
+  allow-listed LLM coordination modules `llm.budget`, `llm.circuit`, `llm.key_pool` (ADR 0002, known exception;
+  `indexing.dense` uses the Redis client it is handed, not the SDK).
 - `unfold.api` and `unfold.worker` are the composition roots; library code receives its stores as arguments.
 - All model calls go through the LLM gateway with a per-job budget. Default models: Gemini 3.5-flash-lite,
   3.5-flash, 3.6-flash (2.5 models are retired for new keys; Pro has no free quota).

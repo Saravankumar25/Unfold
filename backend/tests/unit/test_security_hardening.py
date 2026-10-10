@@ -95,6 +95,7 @@ def test_client_ip_is_normalised() -> None:
 
     assert ip("203.0.113.9") == "203.0.113.9"
     assert ip("2001:db8:1:2:aaaa::1") == ip("2001:db8:1:2:bbbb::9") == "2001:db8:1:2::/64"
+    assert ip("::ffff:203.0.113.9") == "203.0.113.9"  # IPv4-mapped is not bucketed into ::/64
     assert ip("not-an-ip") == "not-an-ip"
     assert ip("x" * 200) == "x" * 64
     assert ip(None) == "unknown"

@@ -49,6 +49,8 @@ def client_ip(request: Request) -> str:
         addr = ipaddress.ip_address(host)
     except ValueError:
         return host[:64] or "unknown"
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped  # ::ffff:a.b.c.d is an IPv4 client, not a member of ::/64
     if isinstance(addr, ipaddress.IPv6Address):
         return str(ipaddress.ip_network(f"{addr}/64", strict=False).network_address) + "/64"
     return str(addr)

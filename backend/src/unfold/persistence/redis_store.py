@@ -6,8 +6,10 @@ from typing import Any
 
 import orjson
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from unfold.core.config import Settings
+from unfold.core.errors import StoreUnavailable
 from unfold.ports import RateLimiter
 
 # INCR + EXPIRE as one atomic step; also repairs a counter left without a TTL by an older crash (audit S-4).
@@ -51,7 +53,10 @@ class RedisRateLimiter(RateLimiter):
         self._hit = store.client.register_script(_HIT)
 
     async def hit(self, key: str, limit: int, window_seconds: int) -> bool:
-        count = await self._hit(keys=[f"rl:{key}"], args=[window_seconds])
+        try:
+            count = await self._hit(keys=[f"rl:{key}"], args=[window_seconds])
+        except (RedisError, OSError) as exc:  # fail closed, as a typed error the API maps to 503
+            raise StoreUnavailable(f"Rate limiter unreachable: {type(exc).__name__}") from exc
         return int(count) <= limit
 
     async def delete_prefix(self, prefix: str) -> int:

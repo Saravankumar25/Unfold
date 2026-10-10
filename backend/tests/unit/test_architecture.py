@@ -85,7 +85,6 @@ def test_no_subprocess_or_eval_of_repository_content() -> None:
 # Redis-backed LLM coordination (Lua scripts for budget, circuit breaker, key pool) is pending a phase-4
 # decision; until then it is the only non-adapter code allowed to talk to Redis directly.
 _REDIS_COORDINATION = {
-    "unfold.llm._redis",
     "unfold.llm.budget",
     "unfold.llm.circuit",
     "unfold.llm.key_pool",
@@ -93,6 +92,8 @@ _REDIS_COORDINATION = {
 _ADAPTER_SDKS = {
     "redis": {"unfold.persistence.redis_store", *_REDIS_COORDINATION},
     "minio": {"unfold.persistence.object_store"},
+    "arq": set(),  # replaced by one-shot workers (ADR 0003)
+    "boto3": set(),  # the S3 adapter lands in phase 4 and is added here then
 }
 
 

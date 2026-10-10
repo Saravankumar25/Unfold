@@ -16,12 +16,13 @@ The AWS scale-to-zero target replaces Redis (queue, rate limits, progress stream
 | `RateLimiter` | `persistence.redis_store.RedisRateLimiter` (atomic Lua) | DynamoDB TTL items |
 | `ProgressStore` | `persistence.postgres.progress.PostgresProgressStore` (`job_events`) | same (Postgres) |
 
-`tests/unit/test_architecture.py::test_infrastructure_sdks_only_in_adapters` fails if `redis` or `minio` is
+`tests/unit/test_architecture.py::test_infrastructure_sdks_only_in_adapters` fails if `redis`, `minio`, `arq` or `boto3` is
 imported anywhere else.
 
 ## Known exception
-LLM coordination (`llm/budget.py`, `circuit.py`, `key_pool.py`, `_redis.py`) and the embedding cache
-(`indexing/dense.py`) use Redis directly, as Lua scripts and `mget`. They are allow-listed in the architecture test.
+LLM coordination (`llm/budget.py`, `circuit.py`, `key_pool.py`) imports `redis` directly (Lua scripts), and the
+embedding cache (`indexing/dense.py`) calls `mget` on the Redis client it is handed. The three importing modules are
+allow-listed in the architecture test; `arq` and `boto3` have an empty allow-list.
 Phase 4 decides: DynamoDB conditional writes, or in-task state (a one-shot worker serves one job, so per-job budget
 needs no shared store; cross-job provider quota does).
 

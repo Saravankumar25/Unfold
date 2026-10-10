@@ -174,6 +174,24 @@ async def test_session_creation_has_a_global_ceiling(settings: Settings) -> None
         await rt.limiter.delete_prefix("sessions:global")
 
 
+async def test_project_creation_has_a_global_ceiling(settings: Settings) -> None:
+    limited = settings.model_copy(update={"max_projects_per_hour_global": 1})
+    async with _app_client(limited, _peer()) as (app, c):
+        rt: Runtime = app.state.runtime
+        await rt.limiter.delete_prefix("projects:global")
+        try:
+            statuses = []
+            for _ in range(2):
+                await _session(c)
+                resp = await c.post(
+                    "/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"}
+                )
+                statuses.append(resp.status_code)
+            assert statuses == [202, 429]
+        finally:
+            await rt.limiter.delete_prefix("projects:global")
+
+
 async def test_project_creation_is_limited_per_ip_across_sessions(settings: Settings) -> None:
     limited = settings.model_copy(update={"max_projects_per_ip_per_hour": 2})
     async with _app_client(limited, _peer()) as (_, c):
