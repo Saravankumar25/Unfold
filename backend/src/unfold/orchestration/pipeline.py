@@ -202,8 +202,9 @@ class _Run:
     async def _ensure_project_exists(self) -> None:
         """Stop when the project was removed mid-run, so cleanup's work is not recreated behind it."""
         async with self.rt.db.session() as s:
-            if await s.get(ProjectRow, self.project.id) is None:
-                raise UnfoldError("The project was removed.", code=ErrorCode.NOT_FOUND, retryable=False)
+            row = await s.get(ProjectRow, self.project.id)
+        if row is None or row.deleting_at is not None:
+            raise UnfoldError("The project was removed.", code=ErrorCode.NOT_FOUND, retryable=False)
 
     async def _checkpoint(self, name: str, data: dict[str, Any]) -> None:
         async with self.rt.db.transaction() as s:

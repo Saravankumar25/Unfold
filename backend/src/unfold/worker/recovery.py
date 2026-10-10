@@ -1,4 +1,4 @@
-"""Re-enqueue jobs whose worker is gone (API restart, crashed host). Called at API start; phase 3 schedules it."""
+"""Re-enqueue jobs whose worker is gone (API restart, crashed host). One step of `cleanup.sweeper.sweep`."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from unfold.core.errors import ErrorCode, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import JobStatus
 from unfold.orchestration.progress import ProgressReporter
-from unfold.persistence.postgres.models import AnalysisJobRow
+from unfold.persistence.postgres.models import AnalysisJobRow, ProjectRow
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
 
@@ -28,8 +28,10 @@ async def requeue_incomplete_jobs(rt: Runtime, queue: JobQueue, *, now: datetime
     async with rt.db.session() as s:
         rows = (
             await s.execute(
-                select(AnalysisJobRow.id, AnalysisJobRow.attempt).where(
-                    or_(AnalysisJobRow.status == "queued", stale_running)
+                select(AnalysisJobRow.id, AnalysisJobRow.attempt)
+                .join(ProjectRow, ProjectRow.id == AnalysisJobRow.project_id)
+                .where(
+                    or_(AnalysisJobRow.status == "queued", stale_running), ProjectRow.deleting_at.is_(None)
                 )
             )
         ).all()

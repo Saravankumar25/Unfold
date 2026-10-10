@@ -14,6 +14,7 @@ from sqlalchemy import select
 from unfold.core.errors import ErrorCode, NotFound, RateLimited, SessionError
 from unfold.core.ids import token_hash
 from unfold.persistence.postgres.models import ChatSessionRow, ProjectRow, SessionRow
+from unfold.ports import session_rate_key
 from unfold.runtime import Runtime
 
 
@@ -86,7 +87,7 @@ async def owned_project(rt: Runtime, session: CurrentSession, project_id: str) -
     pid = parse_uuid(project_id)
     async with rt.db.session() as s:
         row = await s.get(ProjectRow, pid)
-    if row is None or row.session_id != session.id:
+    if row is None or row.session_id != session.id or row.deleting_at is not None:
         raise NotFound("Project not found.")
     return row
 
@@ -96,7 +97,7 @@ async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tupl
     async with rt.db.session() as s:
         chat = await s.get(ChatSessionRow, cid)
         project = await s.get(ProjectRow, chat.project_id) if chat else None
-    if chat is None or project is None or project.session_id != session.id:
+    if chat is None or project is None or project.session_id != session.id or project.deleting_at is not None:
         raise NotFound("Chat not found.")
     return chat, project
 
@@ -104,7 +105,7 @@ async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tupl
 async def enforce_rate_limit(
     rt: Runtime, session: CurrentSession, bucket: str, limit: int, window_s: int
 ) -> None:
-    if not await rt.limiter.hit(f"{bucket}:{session.id}", limit, window_s):
+    if not await rt.limiter.hit(session_rate_key(bucket, session.id), limit, window_s):
         raise RateLimited(f"Too many requests; limit is {limit} per {window_s // 60 or 1} minute(s).")
 
 

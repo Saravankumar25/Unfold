@@ -33,6 +33,7 @@ from unfold.api.schemas import (
     ProjectCreated,
     ProjectOut,
 )
+from unfold.cleanup.service import mark_deleting
 from unfold.core.errors import ErrorCode, InputError, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import InputType, JobStage, JobStatus, TechnicalLevel
@@ -237,8 +238,14 @@ async def delete_project(
     project_id: str, request: Request, rt: RuntimeDep, session: SessionDep
 ) -> dict[str, str]:
     project = await owned_project(rt, session, project_id)
+    # The marker is the durable part: from here every route 404s, and the sweeper finishes the cleanup even if
+    # the enqueue below is lost (API restart, queue outage).
+    await mark_deleting(rt, [project.id])
     queue: JobQueue = request.app.state.queue
-    await queue.enqueue_project_cleanup(str(project.id))
+    try:
+        await queue.enqueue_project_cleanup(str(project.id))
+    except UnfoldError as exc:
+        log.warning("project.cleanup_enqueue_failed", project_id=str(project.id), code=exc.code.value)
     return {"status": "deleting"}
 
 

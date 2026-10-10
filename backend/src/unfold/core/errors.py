@@ -144,6 +144,12 @@ class Conflict(UnfoldError):
     http_status = 409
 
 
+class ProjectNotReady(UnfoldError):
+    code = ErrorCode.PROJECT_NOT_READY
+    http_status = 409
+    retryable = True
+
+
 class RateLimited(UnfoldError):
     code = ErrorCode.RATE_LIMITED
     http_status = 429

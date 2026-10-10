@@ -196,9 +196,15 @@ class LLMGateway:
     async def _admit(self, req: LLMRequest) -> None:
         if not req.job_id:
             return
-        soft = max(0, self._settings.analysis_llm_call_budget)
+        # A chat is accounted under "chat:<id>" with its own, smaller allowance.
+        chat = req.job_id.startswith("chat:")
+        soft = max(
+            0, self._settings.chat_llm_call_budget if chat else self._settings.analysis_llm_call_budget
+        )
         hard = math.ceil(soft * HARD_STOP_FACTOR)
-        tokens = max(0, self._settings.analysis_llm_token_budget)
+        tokens = max(
+            0, self._settings.chat_llm_token_budget if chat else self._settings.analysis_llm_token_budget
+        )
         result: Any = await self._admit_script(
             keys=[self._usage_key(req.job_id)],
             args=[soft, hard, int(req.priority), USAGE_TTL_SECONDS, tokens],

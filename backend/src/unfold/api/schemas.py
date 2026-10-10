@@ -229,24 +229,15 @@ class PostChatMessage(BaseModel):
     section_key: str | None = None  # "Ask about this" from a guide section
 
 
-class ChatEvent(BaseModel):
-    """SSE `POST /chats/{id}/messages` — event names equal `type`:
+class ChatReplyOut(BaseModel):
+    """`POST /chats/{id}/messages` without `stream`: the whole turn in one JSON body."""
 
-    chat.started {message_id} · retrieval.started · retrieval.completed {detail} · agent.started ·
-    agent.tool {tool} · agent.completed · response.delta {text} · response.evidence {evidence} ·
-    response.completed {message_id, seq} · error {code, message, retryable}
-    """
-
-    type: str
-    text: str | None = None
-    tool: str | None = None
-    detail: str | None = None
-    evidence: list[EvidenceRef] | None = None
-    message_id: str | None = None
-    seq: int | None = None
-    code: str | None = None
-    message: str | None = None
-    retryable: bool | None = None
+    user_message: ChatMessageOut
+    message: ChatMessageOut
+    grounding: dict[
+        str, Any
+    ]  # claim grading of the answer: claims, verified, unsupported, grounded_ratio, ...
+    timings: dict[str, float]  # retrieval_ms, first_token_ms, total_ms
 
 
 # ---- exports -----------------------------------------------------------------------------------------------
@@ -258,10 +249,10 @@ class ExportCreated(BaseModel):
 
 class ArtifactOut(BaseModel):
     id: str
-    kind: str  # guide_pdf | chat_pdf
+    kind: str  # guide_pdf | guide_md | chat_pdf | chat_md
     status: str  # pending | ready | failed
     error: str | None
     size_bytes: int | None
     created_at: datetime
     expires_at: datetime
-    download_url: str | None  # relative, e.g. /api/v1/exports/{id}/download when ready
+    download_url: str | None  # relative, /exports/{id}/download, once ready

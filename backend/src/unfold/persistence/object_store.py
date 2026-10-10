@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 
 from minio import Minio
@@ -72,6 +73,17 @@ class MinioBlobStore(BlobStore):
             return n
 
         return await self._call(_delete)
+
+    async def presigned_get_url(self, key: str, expires_s: int, *, filename: str) -> str:
+        disposition = f'attachment; filename="{filename}"'
+        return await self._call(
+            lambda: self._client.presigned_get_object(
+                self.bucket,
+                key,
+                expires=timedelta(seconds=expires_s),
+                response_headers={"response-content-disposition": disposition},
+            )
+        )
 
     async def ping(self) -> None:
         await self._call(lambda: self._client.bucket_exists(self.bucket))

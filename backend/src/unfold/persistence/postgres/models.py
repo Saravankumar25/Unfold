@@ -72,7 +72,9 @@ class ProjectRow(Base):
     ir_object_key: Mapped[str | None] = mapped_column(Text)
     lexical_object_key: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now()
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    # Set by DELETE or by the sweeper; the project is invisible from then on and the sweeper finishes cleanup.
+    deleting_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class AnalysisJobRow(Base):

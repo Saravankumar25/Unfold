@@ -184,6 +184,23 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env == "production"
 
+    # --- phase 3: chat, exports, cleanup ---------------------------------------------------------------------
+    chat_llm_call_budget: int = (
+        40  # model calls one chat may use in total (hard stop at 1.3x, see the gateway)
+    )
+    chat_llm_token_budget: int = 400_000  # input + output tokens per chat
+    chat_context_tokens: int = 6_000
+    chat_history_messages: int = 6
+    max_chats_per_project: int = 20
+    export_ttl_seconds: int = 86_400
+    max_exports_per_hour: int = 10  # per project
+    export_download: Literal["proxy", "presigned"] = "proxy"
+    export_presigned_ttl_seconds: int = 300
+    sweep_interval_seconds: int = (
+        300  # in-process sweeper period of the API; 0 = an external scheduler runs it
+    )
+    # --- end phase 3 -----------------------------------------------------------------------------------------
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

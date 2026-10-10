@@ -210,7 +210,21 @@ class ChatMode(StrEnum):
 
 class ArtifactKind(StrEnum):
     GUIDE_PDF = "guide_pdf"
+    GUIDE_MD = "guide_md"
     CHAT_PDF = "chat_pdf"
+    CHAT_MD = "chat_md"
+
+    @property
+    def is_guide(self) -> bool:
+        return self in (ArtifactKind.GUIDE_PDF, ArtifactKind.GUIDE_MD)
+
+    @property
+    def extension(self) -> str:
+        return "pdf" if self in (ArtifactKind.GUIDE_PDF, ArtifactKind.CHAT_PDF) else "md"
+
+    @property
+    def content_type(self) -> str:
+        return "application/pdf" if self.extension == "pdf" else "text/markdown; charset=utf-8"
 
 
 class ArtifactStatus(StrEnum):

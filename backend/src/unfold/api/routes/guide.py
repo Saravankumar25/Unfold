@@ -21,7 +21,7 @@ from unfold.api.schemas import (
     GuideSectionSummary,
     SubsystemOut,
 )
-from unfold.core.errors import ErrorCode, NotFound, UnfoldError
+from unfold.core.errors import NotFound, ProjectNotReady
 from unfold.diagrams.models import DiagramSpec
 from unfold.domain.models import ClaimRecord, EvidenceRef
 from unfold.guide.models import GuidePlan, SectionContent
@@ -41,17 +41,11 @@ from unfold.security.secrets import redact_text
 router = APIRouter(prefix="/projects", tags=["guide"])
 
 
-def _not_ready() -> UnfoldError:
-    return UnfoldError(
-        "The guide is not ready yet.", code=ErrorCode.PROJECT_NOT_READY, http_status=409, retryable=True
-    )
-
-
 async def _plan(rt: Runtime, project: ProjectRow) -> GuidePlan:
     async with rt.db.session() as s:
         row = await s.get(GuidePlanRow, project.id)
     if row is None:
-        raise _not_ready()
+        raise ProjectNotReady("The guide is not ready yet.")
     return GuidePlan.model_validate(row.plan)
 
 
@@ -175,7 +169,7 @@ async def get_diagram(project_id: str, diagram_id: str, rt: RuntimeDep, session:
 async def get_architecture(project_id: str, rt: RuntimeDep, session: SessionDep) -> ArchitectureOut:
     project = await owned_project(rt, session, project_id)
     if not project.ir_object_key:
-        raise _not_ready()
+        raise ProjectNotReady("The guide is not ready yet.")
     ir = await load_ir(rt.objects, project.ir_object_key)
     async with rt.db.session() as s:
         subsystems = (

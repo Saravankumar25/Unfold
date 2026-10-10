@@ -13,21 +13,36 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from unfold import __version__
 from unfold.api.errors import install_error_handling
-from unfold.api.routes import guide, projects, sessions
+from unfold.api.routes import chat, exports, guide, projects, sessions
+from unfold.cleanup.sweeper import sweep
 from unfold.core.config import Settings, get_settings
 from unfold.core.logging import configure_logging, get_logger
+from unfold.llm.factory import build_gateway
+from unfold.llm.schemas import LLMClient
 from unfold.observability.tracing import configure_tracing
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
 from unfold.worker.queue import SubprocessJobQueue
-from unfold.worker.recovery import requeue_incomplete_jobs
 
 log = get_logger(__name__)
 API_PREFIX = "/api/v1"
 
 
-def create_app(settings: Settings | None = None, *, queue: JobQueue | None = None) -> FastAPI:
-    """Build the API. `queue` lets a caller supply the job queue (tests, another launcher); default: subprocess."""
+async def _sweep_forever(rt: Runtime, queue: JobQueue, every_s: float) -> None:
+    """Local stand-in for a scheduler: the same idempotent `sweep` the one-shot worker task runs."""
+    while True:
+        await asyncio.sleep(every_s)
+        try:
+            await sweep(rt, queue)
+        except Exception as exc:  # a failed pass is retried on the next tick; it must not end the loop
+            log.error("sweep.failed", error_type=type(exc).__name__)
+
+
+def create_app(
+    settings: Settings | None = None, *, queue: JobQueue | None = None, llm: LLMClient | None = None
+) -> FastAPI:
+    """Build the API. `queue` and `llm` let a caller supply the job queue and model client (tests, another
+    launcher); the defaults are the subprocess queue and the real gateway."""
     settings = settings or get_settings()
     configure_logging(settings)
     configure_tracing(settings, "api")
@@ -35,14 +50,24 @@ def create_app(settings: Settings | None = None, *, queue: JobQueue | None = Non
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rt = Runtime.create(settings)
+        rt.llm = llm if llm is not None else build_gateway(settings, rt.redis)
         app.state.runtime = rt
         app.state.queue = queue if queue is not None else await SubprocessJobQueue.connect(settings)
         await rt.objects.ensure_bucket()
-        await requeue_incomplete_jobs(rt, app.state.queue)
+        # Finishes deletes a previous process never completed and restarts jobs whose worker is gone.
+        await sweep(rt, app.state.queue)
+        ticker = (
+            asyncio.create_task(_sweep_forever(rt, app.state.queue, settings.sweep_interval_seconds))
+            if settings.sweep_interval_seconds > 0
+            else None
+        )
         log.info("api.started", version=__version__, env=settings.app_env)
         try:
             yield
         finally:
+            if ticker is not None:
+                ticker.cancel()
+                await asyncio.gather(ticker, return_exceptions=True)
             await app.state.queue.aclose()
             await rt.aclose()
 
@@ -54,7 +79,7 @@ def create_app(settings: Settings | None = None, *, queue: JobQueue | None = Non
         openapi_url=None if settings.is_production else "/api/openapi.json",
     )
     install_error_handling(app)
-    for module in (sessions, projects, guide):
+    for module in (sessions, projects, guide, chat, exports):
         app.include_router(module.router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["ops"])

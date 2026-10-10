@@ -1,7 +1,12 @@
-"""One-shot worker entrypoint: `python -m unfold.worker.run analysis <job_id>` / `cleanup <project_id>`.
+"""One-shot worker entrypoint: `python -m unfold.worker.run <task> <ref>` with task one of
 
-Loads the job, runs it to completion, exits. Exit codes: 0 done (succeeded, or failed for good and recorded on the
-job), 75 the job was returned to the queue and should be run again, 2 bad arguments.
+* `analysis <job_id>`    run or resume an analysis job
+* `export <export_id>`   render one export artifact (PDF through Chromium, or Markdown)
+* `cleanup <project_id>` remove a project from every store
+* `sweep`                one pass of the sweeper (expired sessions, deleting projects, stale jobs and exports)
+
+Loads the work, runs it to completion, exits. Exit codes: 0 done (succeeded, or failed for good and recorded on the
+job or artifact), 75 returned to the queue and should be run again, 2 bad arguments.
 """
 
 from __future__ import annotations
@@ -18,12 +23,17 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from unfold.cleanup.service import cleanup_project
+from unfold.cleanup.sweeper import sweep
 from unfold.core.config import get_settings
+from unfold.core.errors import ExportError
 from unfold.core.logging import configure_logging, get_logger
+from unfold.exports.pdf import PdfRenderer
+from unfold.exports.service import mark_failed, run_export
 from unfold.llm.factory import build_gateway
 from unfold.observability.tracing import configure_tracing
 from unfold.orchestration.pipeline import RETRY_EXIT_CODE, run_analysis
 from unfold.runtime import Runtime
+from unfold.worker.queue import SubprocessJobQueue
 
 log = get_logger(__name__)
 
@@ -54,6 +64,32 @@ def _arm_watchdog(seconds: float) -> None:
     timer.start()
 
 
+async def _export(rt: Runtime, export_id: str) -> int:
+    renderer = PdfRenderer()
+    try:
+        await run_export(rt, export_id, renderer)
+        return 0
+    except ExportError as exc:
+        if exc.retryable:
+            log.warning("export.retry", export_id=export_id, error=exc.message)
+            return RETRY_EXIT_CODE
+        await mark_failed(rt, export_id, exc.message)
+        return 0
+    finally:
+        await renderer.close()
+
+
+async def _sweep(rt: Runtime) -> int:
+    queue = await SubprocessJobQueue.connect(rt.settings)
+    try:
+        report = await sweep(rt, queue)
+        log.info("sweep.report", **report.as_dict())
+        await queue.join()  # restarted jobs and exports are supervised by this process; let them finish
+    finally:
+        await queue.aclose()
+    return 0
+
+
 async def run(task: str, ref: str) -> int:
     settings = get_settings()
     configure_logging(settings)
@@ -66,9 +102,12 @@ async def run(task: str, ref: str) -> int:
     try:
         await rt.objects.ensure_bucket()
         if task == "cleanup":
-            counts = await cleanup_project(rt, ref)
-            log.info("cleanup.done", project_id=ref, **counts)
+            await cleanup_project(rt, ref)  # logs its own counts
             return 0
+        if task == "export":
+            return await _export(rt, ref)
+        if task == "sweep":
+            return await _sweep(rt)
         gateway = build_gateway(settings, rt.redis)
         rt.llm = gateway
         outcome = await run_analysis(rt, gateway, ref)
@@ -81,9 +120,11 @@ async def run(task: str, ref: str) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="unfold.worker.run")
-    parser.add_argument("task", choices=["analysis", "cleanup"])
-    parser.add_argument("ref", help="analysis job id, or project id for cleanup")
+    parser.add_argument("task", choices=["analysis", "export", "cleanup", "sweep"])
+    parser.add_argument("ref", nargs="?", default="", help="job, export or project id (not used by sweep)")
     args = parser.parse_args(argv)
+    if args.task != "sweep" and not args.ref:
+        parser.error(f"{args.task} needs an id")
     return asyncio.run(run(args.task, args.ref))
 
 

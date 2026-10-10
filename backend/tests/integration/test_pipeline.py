@@ -323,6 +323,9 @@ class _NullQueue:
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         return None
 
+    async def enqueue_export(self, export_id: str) -> None:
+        return None
+
     async def aclose(self) -> None:
         return None
 
