@@ -77,7 +77,7 @@ _STOP = frozenset(
     | {"have", "can", "will", "not", "but", "all", "any", "each", "which", "when", "where", "then", "than"}
     | {"also", "only", "over", "under", "here", "there", "their", "they", "them", "was", "were", "been"}
 )
-CLAIM_MATCH = 0.5  # word overlap a sentence needs with a claim to be the one that made it
+CLAIM_MATCH = 0.45  # Dice overlap a sentence needs with a claim to be the one that made it
 
 
 # --- primitives shared with evaluation.rubric --------------------------------------------------------------------
@@ -204,6 +204,15 @@ def words(text: str) -> set[str]:
     return {_stem(w) for w in _WORD.findall(text.lower().replace("_", " "))} - _STOP
 
 
+def best_unit(claim: str, units: Sequence[str]) -> tuple[int, float]:
+    """Index and Dice overlap (2|A&B| / (|A|+|B|) over stemmed content words) of the unit closest to `claim`;
+    a paraphrase that adds a few words still lands on the sentence it restates."""
+    want = words(claim)
+    scores = [2 * len(want & w) / (len(want) + len(w)) if want and w else 0.0 for w in map(words, units)]
+    best = max(range(len(units)), key=lambda i: scores[i], default=-1)
+    return (best, scores[best]) if best >= 0 else (-1, 0.0)
+
+
 def sentences(block: Block) -> list[str]:
     """The units a claim can have been made in: sentences of prose, list items, table cells."""
     return [u for t in block_texts(block) for u in _SENTENCE.split(t.strip()) if u]
@@ -296,12 +305,11 @@ def verify_section(
         hits = [b for b, t in texts.items() if len(names) == 2 and all(_mentions(t, n) for n in names)]
         return hits[0] if hits else None
 
-    units = [(f"b{i}", words(u)) for i, block in enumerate(content.blocks) for u in sentences(block)]
+    units = [(f"b{i}", u) for i, block in enumerate(content.blocks) for u in sentences(block)]
 
     def place_claim(text: str) -> str | None:
-        want = words(text)
-        best = max(((len(want & w) / len(want), b) for b, w in units if want), default=(0.0, ""))
-        return best[1] if best[0] >= CLAIM_MATCH else None
+        i, score = best_unit(text, [u for _, u in units])
+        return units[i][0] if i >= 0 and score >= CLAIM_MATCH else None
 
     for claim in claims:
         if len(claim.graph_node_ids) == 2:

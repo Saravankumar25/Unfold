@@ -260,3 +260,29 @@ def test_route_alias_matches_inside_a_versioned_path() -> None:
     sec = section("a", [ParagraphBlock(text=text)], [])
     assert rubric.coverage([sec], IR).raw["entry_points_named"] == 1
     assert rubric.specificity([sec], IR).raw["naming_a_symbol"] == 1
+
+
+def test_stating_a_gap_does_not_cost_specificity_or_redundancy() -> None:
+    """A sentence about what the evidence does not show is neither generic advice nor a repeated explanation; the
+    same gap sentence in every chapter must not read as redundancy, nor lower the share of specific sentences."""
+    gap = "The evidence does not show how the retry policy is configured."
+    base = good()
+    with_gaps = good()
+    for sec in with_gaps:
+        sec.content.blocks.append(ParagraphBlock(text=gap))  # type: ignore[union-attr]
+    for dim, fn in (
+        ("specificity", lambda s: rubric.specificity(s, IR)),
+        ("redundancy", rubric.redundancy),
+    ):
+        assert fn(with_gaps).score == fn(base).score, dim
+    assert rubric.uncertainty_honesty(with_gaps).raw["gaps_stated"] == (
+        rubric.uncertainty_honesty(base).raw["gaps_stated"] + len(with_gaps)
+    )
+
+
+def test_repeating_an_ordinary_sentence_across_chapters_still_counts_as_redundancy() -> None:
+    sentence = "The HybridRetriever merges lexical and dense hits before the answer is built for the reader."
+    sections = good()
+    for sec in sections:
+        sec.content.blocks.append(ParagraphBlock(text=sentence))  # type: ignore[union-attr]
+    assert rubric.redundancy(sections).score < rubric.redundancy(good()).score

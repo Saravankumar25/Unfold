@@ -201,13 +201,16 @@ class _Lexicon:
 
 
 def _sentences(sec: GuideSection) -> list[str]:
+    """Statements about the repository. A sentence that says what the evidence does not show is a statement about
+    the guide's own limits, not generic advice and not a repeated explanation: it is left out of specificity and
+    redundancy so that stating a gap is never what costs a score (honesty is scored by its own dimension)."""
     out: list[str] = []
     headings = {b.text for b in sec.content.blocks if isinstance(b, HeadingBlock)} if sec.content else set()
     for u in _units(sec):
         if u in headings:  # a title is not a statement
             continue
         clean = _LABEL.sub("", u).replace("**", "").replace("*", "")
-        out += [s.strip() for s in _SENTENCE.split(clean) if len(s.split()) >= 4]
+        out += [s.strip() for s in _SENTENCE.split(clean) if len(s.split()) >= 4 and not _GAPS.search(s)]
     return out
 
 
@@ -356,7 +359,8 @@ def specificity(sections: Sequence[GuideSection], ir: IRSummary) -> Score:
 
 
 def _shingles(sec: GuideSection) -> set[tuple[str, ...]]:
-    words = re.findall(r"[a-z0-9_]+", _LABEL.sub(" ", _prose(sec)).lower())
+    stated = " ".join(x for u in _units(sec) for x in _SENTENCE.split(u) if not _GAPS.search(x))
+    words = re.findall(r"[a-z0-9_]+", _LABEL.sub(" ", stated).lower())
     return {tuple(words[i : i + SHINGLE]) for i in range(len(words) - SHINGLE + 1)}
 
 

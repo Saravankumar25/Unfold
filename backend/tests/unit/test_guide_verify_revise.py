@@ -428,3 +428,33 @@ def test_a_paraphrased_claim_is_placed_at_the_sentence_that_made_it(
     failed = [c for c in r.deterministic if not c.ok]
     assert [(c.check, c.block) for c in failed] == [("claim_supported", "b1")]
     assert r.verdict == "revise"
+
+
+def test_a_claim_that_adds_words_to_its_sentence_is_still_placed_there(
+    world: tuple[ProjectIR, dict[str, str]],
+) -> None:
+    """From the requests run: the claim restates a bullet and adds `requests.help`, `dictionary`, `name`; overlap
+    measured against the claim alone was 0.44 and the unsupported statement stayed in the guide unplaced."""
+    from unfold.guide.models import BulletsBlock
+    from unfold.guide.verify import CLAIM_MATCH, best_unit
+
+    claim = (
+        "The _implementation function in requests.help returns a dictionary with the Python "
+        "implementation name and version."
+    )
+    items = [
+        "src/requests/help.py calls main()",
+        "main() invokes info()",
+        "_implementation() returns the Python implementation and version dict [E1].",
+    ]
+    index, score = best_unit(claim, items)
+    assert index == 2 and score >= CLAIM_MATCH
+    # an unrelated sentence does not clear the bar
+    assert (
+        best_unit(claim, ["Certificates come from the certifi package.", "Sessions keep cookies."])[1]
+        < CLAIM_MATCH
+    )
+
+    bad = ClaimRecord(text=claim, status=ClaimStatus.INFERRED, evidence_ids=["c1"])
+    r = _verify(world, _content(_para("Intro."), BulletsBlock(items=items, ordered=True)), [bad])
+    assert [(c.check, c.block) for c in r.deterministic if not c.ok] == [("claim_supported", "b1")]

@@ -31,11 +31,19 @@ from unfold.guide.verification_models import (
     Unsupported,
     VerificationResult,
 )
-from unfold.guide.verify import LABEL, PATHLINE, block_index, block_texts, sentences, words
+from unfold.guide.verify import (
+    CLAIM_MATCH,
+    LABEL,
+    PATHLINE,
+    best_unit,
+    block_index,
+    block_texts,
+    sentences,
+    words,
+)
 
 _RANK = {Proof.STATIC: 0, Proof.HEURISTIC: 1, Proof.INFERRED: 2}
 _QUERY_CHARS = 240
-_SENTENCE_MATCH = 0.34  # word overlap that identifies the sentence a failing claim was made in
 
 
 class RevisionItem(BaseModel):
@@ -130,10 +138,8 @@ def _sentence_level(block: Block, claims: Sequence[str]) -> tuple[list[Block], d
     units = list(block.items) if isinstance(block, BulletsBlock) else sentences(block)
     culprit: dict[int, list[str]] = {}
     for claim in claims:
-        want = words(claim)
-        scores = [len(want & words(u)) / len(want) if want else 0.0 for u in units]
-        best = max(range(len(units)), key=lambda i: scores[i], default=-1)
-        if best < 0 or scores[best] < _SENTENCE_MATCH:
+        best, score = best_unit(claim, units)
+        if best < 0 or score < CLAIM_MATCH:
             return None
         culprit.setdefault(best, []).append(claim)
     disposed = {c: "qualified" if _cites(units[i]) else "removed" for i, cs in culprit.items() for c in cs}
