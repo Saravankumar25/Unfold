@@ -11,6 +11,7 @@ import type {
   ExportCreated,
   GuideOut,
   GuideSectionOut,
+  ProgressPage,
   ProjectCreated,
   ProjectOut,
   SectionVariant,
@@ -41,6 +42,9 @@ export function createEndpoints(client: ApiClient) {
     getProject: (projectId: string, signal?: AbortSignal) =>
       client.get<ProjectOut>(`/projects/${enc(projectId)}`, { signal }),
     deleteProject: (projectId: string) => client.delete<unknown>(`/projects/${enc(projectId)}`),
+
+    getProgress: (projectId: string, after: number, signal?: AbortSignal) =>
+      client.get<ProgressPage>(`/projects/${enc(projectId)}/progress?after=${after}`, { signal }),
 
     // guide
     getGuide: (projectId: string, signal?: AbortSignal) =>
@@ -77,8 +81,7 @@ export function createEndpoints(client: ApiClient) {
 export const api = createEndpoints(apiClient);
 export type Api = ReturnType<typeof createEndpoints>;
 
-/** Path builders for the streaming endpoints (consumed by `sse.ts`). */
+/** Path builders for the streaming endpoints (consumed by `sse.ts`); progress is polled, not streamed. */
 export const streamPaths = {
-  projectEvents: (projectId: string) => `/projects/${enc(projectId)}/events`,
   chatMessages: (chatId: string) => `/chats/${enc(chatId)}/messages`,
 };

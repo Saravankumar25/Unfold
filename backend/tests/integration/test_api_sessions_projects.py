@@ -17,9 +17,26 @@ from unfold.runtime import Runtime
 pytestmark = pytest.mark.integration
 
 
+class RecordingQueue:
+    """Test double for the `JobQueue` port: records enqueues instead of starting worker processes."""
+
+    def __init__(self) -> None:
+        self.analyses: list[str] = []
+        self.cleanups: list[str] = []
+
+    async def enqueue_analysis(self, job_id: str, attempt: int, *, defer_s: float | None = None) -> None:
+        self.analyses.append(job_id)
+
+    async def enqueue_project_cleanup(self, project_id: str) -> None:
+        self.cleanups.append(project_id)
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.fixture
 async def app(settings: Settings) -> AsyncIterator[FastAPI]:
-    application = create_app(settings)
+    application = create_app(settings, queue=RecordingQueue())
     async with application.router.lifespan_context(application):
         yield application
 
@@ -125,7 +142,7 @@ async def test_touch_extends_within_cap(client: httpx.AsyncClient) -> None:
 
 @asynccontextmanager
 async def _app_client(settings: Settings, peer: str) -> AsyncIterator[tuple[FastAPI, httpx.AsyncClient]]:
-    application = create_app(settings)
+    application = create_app(settings, queue=RecordingQueue())
     async with application.router.lifespan_context(application):
         transport = httpx.ASGITransport(app=application, client=(peer, 5000))
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
@@ -178,33 +195,52 @@ async def test_header_is_not_a_session_credential(client: httpx.AsyncClient) -> 
     assert resp.status_code == 401
 
 
-async def test_stream_cap_rejects_extra_streams(app: FastAPI, client: httpx.AsyncClient) -> None:
-    sid = (await client.post("/api/v1/sessions")).json()["session_id"]
-    pid = (
-        await client.post("/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"})
-    ).json()["project_id"]
-    caps = app.state.streams
-    leases = []
-    while (lease := caps.acquire(sid)) is not None:
-        leases.append(lease)
-    resp = await client.get(f"/api/v1/projects/{pid}/events")
-    assert resp.status_code == 429
-    # A malformed cursor must be rejected by the cap (429), not crash before it (500).
-    bad_cursor = await client.get(f"/api/v1/projects/{pid}/events?last_event_id=%C2%B2")
-    assert bad_cursor.status_code == 429
-    for lease in leases:
-        lease.release()
-
-
-async def test_events_replay_from_last_event_id(app: FastAPI, client: httpx.AsyncClient) -> None:
+async def test_progress_poll_is_ordered_resumable_and_owner_scoped(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
     await _session(client)
     pid = (
         await client.post("/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"})
     ).json()["project_id"]
     rt: Runtime = app.state.runtime
-    first = await rt.progress.publish(pid, {"type": "stage", "stage": "INVENTORY"})
-    await rt.progress.publish(pid, {"type": "ready", "stage": "READY"})
-    resp = await client.get(f"/api/v1/projects/{pid}/events", headers={"Last-Event-ID": str(first)})
-    assert resp.status_code == 200
-    assert "event: ready" in resp.text
-    assert "INVENTORY" not in resp.text
+    first = await rt.progress.publish(
+        pid,
+        {
+            "type": "stage",
+            "stage": "INVENTORY",
+            "label": "x",
+            "index": 4,
+            "total": 19,
+            "at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    last = await rt.progress.publish(
+        pid,
+        {
+            "type": "ready",
+            "stage": "READY",
+            "label": "Ready",
+            "index": 18,
+            "total": 19,
+            "at": "2026-01-01T00:00:01+00:00",
+        },
+    )
+
+    page = (await client.get(f"/api/v1/projects/{pid}/progress")).json()
+    seqs = [e["seq"] for e in page["events"]]
+    assert seqs == sorted(seqs) and seqs[-2:] == [first, last]
+    assert page["cursor"] == last
+    assert page["job"]["status"] == "queued"
+
+    after = (await client.get(f"/api/v1/projects/{pid}/progress?after={first}")).json()
+    assert [e["type"] for e in after["events"]] == ["ready"]
+    caught_up = (await client.get(f"/api/v1/projects/{pid}/progress?after={last}")).json()
+    assert caught_up["events"] == [] and caught_up["cursor"] == last
+
+    bad = await client.get(f"/api/v1/projects/{pid}/progress?after=-1")
+    assert bad.status_code == 422
+
+    other = httpx.AsyncClient(transport=client._transport, base_url="http://test")
+    await _session(other)
+    assert (await other.get(f"/api/v1/projects/{pid}/progress")).status_code == 404
+    await other.aclose()

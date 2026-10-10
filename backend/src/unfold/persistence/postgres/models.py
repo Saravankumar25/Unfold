@@ -270,3 +270,15 @@ class JobEventRow(Base):
     )
     event: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = _now()
+
+
+class JobCheckpointRow(Base):
+    """One row per completed pipeline stage group; a rerun skips the groups present here (resume)."""
+
+    __tablename__ = "job_checkpoints"
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analysis_jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    completed_at: Mapped[datetime] = _now()

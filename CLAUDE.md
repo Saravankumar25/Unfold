@@ -1,7 +1,7 @@
 # Unfold
 
 Paste a GitHub URL or ZIP, get a guide, architecture diagrams and grounded chat about the repo.
-Backend: Python 3.12, FastAPI, arq worker, Postgres, Qdrant, Neo4j, Redis, MinIO. Frontend: Next.js 16 / React 19.
+Backend: Python 3.12, FastAPI, one-shot worker processes, Postgres, Qdrant, Neo4j, Redis, MinIO. Frontend: Next.js 16 / React 19.
 Target runtime (scale to zero on AWS): see `six-phase-plan.md`. Repo state and findings: `PROJECT_AUDIT.md`.
 
 ## Commands
@@ -21,7 +21,7 @@ decisions in `docs/adr/`.
 ## Architecture rules (enforced by `backend/tests/unit/test_architecture.py`)
 
 - Application code depends on `unfold.ports` (`BlobStore`, `JobQueue`, `RateLimiter`, `ProgressStore`).
-  Only adapters import `redis`, `arq` or `minio`.
+  Only adapters import `redis` or `minio`.
 - `unfold.api` and `unfold.worker` are the composition roots; library code receives its stores as arguments.
 - All model calls go through the LLM gateway with a per-job budget. Default models: Gemini 3.5-flash-lite,
   3.5-flash, 3.6-flash (2.5 models are retired for new keys; Pro has no free quota).

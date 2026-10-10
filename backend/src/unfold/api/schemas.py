@@ -1,6 +1,6 @@
 """HTTP DTOs (LLD §20). The frontend's `lib/api/types.ts` mirrors these exactly; change both together.
 
-SSE payloads are documented here too: every SSE message has `event: <type>` and `data: <json of the model>`.
+Chat SSE payloads are documented here too: every message has `event: <type>` and `data: <json of the model>`.
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ class ProjectOut(BaseModel):
 
 
 class ProgressEvent(BaseModel):
-    """SSE `GET /projects/{id}/events` — event names: `stage`, `ready`, `failed`, `heartbeat`."""
+    """One progress event; types: `stage`, `ready`, `failed`, `heartbeat`."""
 
     type: Literal["stage", "ready", "failed", "heartbeat"]
     stage: str
@@ -109,6 +109,18 @@ class ProgressEvent(BaseModel):
     message: str | None = None
     retryable: bool | None = None
     at: datetime
+
+
+class ProgressItem(ProgressEvent):
+    seq: int  # strictly increasing replay cursor
+
+
+class ProgressPage(BaseModel):
+    """`GET /projects/{id}/progress?after=<seq>`: new events, the next cursor, and the durable job state."""
+
+    events: list[ProgressItem]
+    cursor: int
+    job: JobOut
 
 
 # ---- guide -------------------------------------------------------------------------------------------------

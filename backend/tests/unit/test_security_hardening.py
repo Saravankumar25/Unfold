@@ -10,7 +10,6 @@ from starlette.requests import Request as StarletteRequest
 
 from unfold.api.deps import client_ip, session_token_from
 from unfold.api.main import install_proxy_trust
-from unfold.api.streams import StreamCap
 from unfold.core.config import Settings
 
 SAFE_PROD = {
@@ -89,24 +88,6 @@ def test_session_token_comes_from_cookie_only() -> None:
     assert session_token_from(StarletteRequest(header_only), "unfold_session") is None
 
 
-def test_stream_cap_blocks_n_plus_one_and_frees_on_release() -> None:
-    cap = StreamCap(2)
-    first, second = cap.acquire("s"), cap.acquire("s")
-    assert first and second
-    assert cap.acquire("s") is None
-    assert cap.acquire("other")
-    first.release()
-    first.release()  # idempotent: must not free a second slot
-    assert cap.acquire("s")
-    assert cap.acquire("s") is None
-
-
-def test_stream_cap_has_a_global_ceiling() -> None:
-    cap = StreamCap(per_key=5, total=2)
-    assert cap.acquire("a") and cap.acquire("b")
-    assert cap.acquire("c") is None
-
-
 def test_client_ip_is_normalised() -> None:
     def ip(host: str | None) -> str:
         scope = {"type": "http", "headers": [], "client": (host, 1) if host else None}
@@ -114,5 +95,6 @@ def test_client_ip_is_normalised() -> None:
 
     assert ip("203.0.113.9") == "203.0.113.9"
     assert ip("2001:db8:1:2:aaaa::1") == ip("2001:db8:1:2:bbbb::9") == "2001:db8:1:2::/64"
-    assert ip("not-an-ip") == "unknown"
+    assert ip("not-an-ip") == "not-an-ip"
+    assert ip("x" * 200) == "x" * 64
     assert ip(None) == "unknown"

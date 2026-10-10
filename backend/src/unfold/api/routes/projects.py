@@ -6,20 +6,15 @@ Creation commits project + job first, then enqueues (outbox-equivalent: the stal
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import tempfile
 import uuid
-from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
-import orjson
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from sqlalchemy import select
-from sse_starlette.sse import EventSourceResponse
-from starlette.background import BackgroundTask
 
 from unfold import ANALYSIS_VERSION
 from unfold.api.deps import (
@@ -30,9 +25,15 @@ from unfold.api.deps import (
     enforce_rate_limit,
     owned_project,
 )
-from unfold.api.schemas import CreateGithubProject, JobOut, ProjectCreated, ProjectOut
-from unfold.api.streams import StreamCap
-from unfold.core.errors import ErrorCode, InputError, RateLimited, UnfoldError
+from unfold.api.schemas import (
+    CreateGithubProject,
+    JobOut,
+    ProgressItem,
+    ProgressPage,
+    ProjectCreated,
+    ProjectOut,
+)
+from unfold.core.errors import ErrorCode, InputError, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import InputType, JobStage, JobStatus, TechnicalLevel
 from unfold.ingestion.archive import ZIP_MAGIC
@@ -241,78 +242,17 @@ async def delete_project(
     return {"status": "deleting"}
 
 
-@router.get("/{project_id}/events")
-async def project_events(
-    project_id: str, request: Request, rt: RuntimeDep, session: SessionDep
-) -> EventSourceResponse:
-    """Replayable SSE (HLD D10): replays the durable progress log after `Last-Event-ID`, then tails it.
+@router.get("/{project_id}/progress", response_model=ProgressPage)
+async def project_progress(
+    project_id: str, rt: RuntimeDep, session: SessionDep, after: Annotated[int, Query(ge=0)] = 0
+) -> ProgressPage:
+    """Short-poll progress (HLD D10): events with `seq > after` plus the durable job state.
 
-    Superseded by short-poll `GET /projects/{id}/progress` in phase 2; capped per session until then (S-5).
+    Clients poll with `after` = the last `seq` they saw; every response also carries the job, so a client that
+    missed events (or returns after a restart) still converges on the real state.
     """
     project = await owned_project(rt, session, project_id)
-    pid = str(project.id)
-    raw_cursor = request.headers.get("Last-Event-ID") or request.query_params.get("last_event_id") or "0"
-    start = min(int(raw_cursor), 2**63 - 1) if raw_cursor.isascii() and raw_cursor.isdigit() else 0
-    caps: StreamCap = request.app.state.streams
-    lease = caps.acquire(str(session.id))
-    if lease is None:
-        raise RateLimited("Too many open progress streams; try again shortly.")
-
-    async def gen() -> AsyncIterator[dict[str, Any]]:
-        try:
-            cursor = start
-            if cursor == 0:
-                job = await latest_job(rt, project.id)
-                stage = JobStage(job.current_stage)
-                if job.status == JobStatus.SUCCEEDED.value:
-                    yield {"event": "ready", "data": _dump(stage_event("ready", JobStage.READY))}
-                    return
-                if job.status == JobStatus.FAILED.value:
-                    err = UnfoldError(
-                        str((job.error_detail or {}).get("message", stage.user_label)),
-                        code=ErrorCode(job.error_code or ErrorCode.INTERNAL_ERROR.value),
-                        retryable=job.retryable,
-                    )
-                    yield {"event": "failed", "data": _dump(stage_event("failed", stage, error=err))}
-                    return
-            idle = 0
-            while not await request.is_disconnected():
-                events = await rt.progress.read_after(pid, cursor)
-                if not events:
-                    idle += 1
-                    if idle % 10 == 0:
-                        yield {
-                            "event": "heartbeat",
-                            "data": _dump(
-                                {
-                                    **stage_event("heartbeat", JobStage.RECEIVED),
-                                    "stage": "",
-                                    "label": "",
-                                    "index": -1,
-                                }
-                            ),
-                        }
-                    if idle > 3600:  # an hour without progress: let the client reconnect
-                        return
-                    await asyncio.sleep(1)
-                    continue
-                idle = 0
-                for seq, event in events:
-                    cursor = seq
-                    yield {"event": event["type"], "id": str(seq), "data": _dump(event)}
-                    if event["type"] in ("ready", "failed"):
-                        return
-        finally:
-            lease.release()
-
-    # `background` also runs when the client vanishes before the generator is first iterated.
-    return EventSourceResponse(
-        gen(),
-        ping=15,
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        background=BackgroundTask(lease.release),
-    )
-
-
-def _dump(obj: dict[str, Any]) -> str:
-    return orjson.dumps(obj).decode()
+    events = await rt.progress.read_after(str(project.id), min(after, 2**63 - 1), limit=200)
+    job = await latest_job(rt, project.id)
+    items = [ProgressItem(seq=seq, **event) for seq, event in events]
+    return ProgressPage(events=items, cursor=events[-1][0] if events else after, job=job_out(job))

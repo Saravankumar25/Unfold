@@ -112,12 +112,14 @@ class Settings(BaseSettings):
     max_repo_archive_bytes: int = 100 * 1024 * 1024
     max_projects_per_hour: int = 10
     max_chat_messages_per_minute: int = 30
+    job_timeout_seconds: int = 1800
+    max_job_attempts: int = 3
+    max_concurrent_jobs: int = 2
+    section_concurrency: int = 2
     max_sessions_per_ip_per_hour: int = 20
     max_sessions_per_hour: int = 500
     max_projects_per_ip_per_hour: int = 30
     max_projects_per_hour_global: int = 200
-    max_streams_per_session: int = 3
-    max_streams_total: int = 200
 
     # network trust: only these peers may set X-Forwarded-For (comma separated IPs/CIDRs; never "*")
     trusted_proxy_ips: str = "127.0.0.1"

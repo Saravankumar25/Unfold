@@ -40,14 +40,15 @@ def session_token_from(request: Request, cookie_name: str) -> str | None:
 def client_ip(request: Request) -> str:
     """Peer address as rewritten by the trusted-proxy middleware; a forged X-Forwarded-For is never honoured.
 
-    Normalised to a rate-limit key: unparseable values collapse to "unknown" and IPv6 clients share their /64,
-    so rotating addresses inside one allocation does not mint new buckets.
+    Normalised to a rate-limit key: IPv6 clients share their /64, so rotating addresses inside one allocation
+    does not mint new buckets. A peer that is not an IP (unix socket, test transport) keeps its own capped key
+    instead of collapsing every such client into one bucket.
     """
     host = request.client.host if request.client else ""
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
-        return "unknown"
+        return host[:64] or "unknown"
     if isinstance(addr, ipaddress.IPv6Address):
         return str(ipaddress.ip_network(f"{addr}/64", strict=False).network_address) + "/64"
     return str(addr)

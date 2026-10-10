@@ -13,19 +13,21 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from unfold import __version__
 from unfold.api.errors import install_error_handling
-from unfold.api.routes import projects, sessions
-from unfold.api.streams import StreamCap
+from unfold.api.routes import guide, projects, sessions
 from unfold.core.config import Settings, get_settings
 from unfold.core.logging import configure_logging, get_logger
 from unfold.observability.tracing import configure_tracing
+from unfold.ports import JobQueue
 from unfold.runtime import Runtime
-from unfold.worker.queue import ArqJobQueue
+from unfold.worker.queue import SubprocessJobQueue
+from unfold.worker.recovery import requeue_incomplete_jobs
 
 log = get_logger(__name__)
 API_PREFIX = "/api/v1"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, queue: JobQueue | None = None) -> FastAPI:
+    """Build the API. `queue` lets a caller supply the job queue (tests, another launcher); default: subprocess."""
     settings = settings or get_settings()
     configure_logging(settings)
     configure_tracing(settings, "api")
@@ -34,9 +36,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         rt = Runtime.create(settings)
         app.state.runtime = rt
-        app.state.queue = await ArqJobQueue.connect(settings)
-        app.state.streams = StreamCap(settings.max_streams_per_session, settings.max_streams_total)
+        app.state.queue = queue if queue is not None else await SubprocessJobQueue.connect(settings)
         await rt.objects.ensure_bucket()
+        await requeue_incomplete_jobs(rt, app.state.queue)
         log.info("api.started", version=__version__, env=settings.app_env)
         try:
             yield
@@ -52,7 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if settings.is_production else "/api/openapi.json",
     )
     install_error_handling(app)
-    for module in (sessions, projects):
+    for module in (sessions, projects, guide):
         app.include_router(module.router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["ops"])

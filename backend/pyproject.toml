@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.0",
-    "arq>=0.28.0",
     "asyncpg>=0.31.0",
     "bm25s>=0.3.11",
     "fastapi>=0.141.1",
@@ -107,7 +106,7 @@ test-e2e = "pytest -m e2e"
 test-llm = "pytest -m llm"
 migrate = "alembic upgrade head"
 api = "uvicorn unfold.api.main:app --reload --port 8000"
-worker = "arq unfold.worker.settings.WorkerSettings"
+worker = "python -m unfold.worker.run"
 eval-offline = "python -m unfold.evaluation.offline"
 eval-online = "python -m unfold.evaluation.online"
 llm-models = "python -m unfold.llm.cli models"

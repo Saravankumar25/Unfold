@@ -53,4 +53,5 @@ RUN playwright install --with-deps chromium \
     && python /app/docker/prefetch.py grammars \
     && chown -R unfold:unfold /opt/unfold
 USER unfold
-CMD ["arq", "unfold.worker.settings.WorkerSettings"]
+ENTRYPOINT ["python", "-m", "unfold.worker.run"]
+# one task per container run: `analysis <job_id>` or `cleanup <project_id>`; exits when done

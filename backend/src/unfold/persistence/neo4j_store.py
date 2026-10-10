@@ -15,6 +15,7 @@ class Neo4jStore:
             settings.neo4j_uri,
             auth=(settings.neo4j_username, settings.neo4j_password.get_secret_value()),
             max_connection_pool_size=20,
+            notifications_min_severity="OFF",  # 'relationship type does not exist' on empty projects is expected
         )
 
     async def ping(self) -> None:

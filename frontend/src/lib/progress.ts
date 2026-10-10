@@ -1,5 +1,5 @@
 /**
- * Progress state for `GET /projects/{id}/events` (LLD §5, HLD D10). Labels always come from the server
+ * Progress state for `GET /projects/{id}/progress` (LLD §5, HLD D10). Labels always come from the server
  * (`JobStage.user_label`); the client only orders and remembers what it has been told.
  */
 import type { JobOut, ProgressEvent } from "./api/types";

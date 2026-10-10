@@ -326,6 +326,16 @@ export interface ProgressEvent {
   at: string;
 }
 
+export interface ProgressItem extends ProgressEvent {
+  seq: number;
+}
+
+export interface ProgressPage {
+  events: ProgressItem[];
+  cursor: number;
+  job: JobOut;
+}
+
 // guide
 
 export interface GuideSectionSummary {

@@ -4,7 +4,7 @@ Status: accepted (2026-10-10) · Phase 1
 
 ## Context
 The AWS scale-to-zero target replaces Redis (queue, rate limits, progress streams) and MinIO. Callers were coupled to
-`RedisStore`, arq and the MinIO client, so the swap would have been a rewrite.
+`RedisStore`, arq and the MinIO client (arq was replaced by one-shot workers in phase 2, ADR 0003), so the swap would have been a rewrite.
 
 ## Decision
 `unfold/ports.py` defines four protocols; callers depend on them only.
@@ -12,11 +12,11 @@ The AWS scale-to-zero target replaces Redis (queue, rate limits, progress stream
 | Port | Local adapter | Phase 4 adapter |
 |---|---|---|
 | `BlobStore` | `persistence.object_store.MinioBlobStore` | S3 |
-| `JobQueue` | `worker.queue.ArqJobQueue` | SQS + Step Functions |
+| `JobQueue` | `worker.queue.SubprocessJobQueue` (one one-shot worker process per job) | SQS + Step Functions + Fargate |
 | `RateLimiter` | `persistence.redis_store.RedisRateLimiter` (atomic Lua) | DynamoDB TTL items |
 | `ProgressStore` | `persistence.postgres.progress.PostgresProgressStore` (`job_events`) | same (Postgres) |
 
-`tests/unit/test_architecture.py::test_infrastructure_sdks_only_in_adapters` fails if `redis`, `arq` or `minio` is
+`tests/unit/test_architecture.py::test_infrastructure_sdks_only_in_adapters` fails if `redis` or `minio` is
 imported anywhere else.
 
 ## Known exception

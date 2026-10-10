@@ -92,7 +92,6 @@ _REDIS_COORDINATION = {
 }
 _ADAPTER_SDKS = {
     "redis": {"unfold.persistence.redis_store", *_REDIS_COORDINATION},
-    "arq": {"unfold.worker.queue"},
     "minio": {"unfold.persistence.object_store"},
 }
 
