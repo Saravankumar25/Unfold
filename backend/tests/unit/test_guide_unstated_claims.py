@@ -60,6 +60,9 @@ def test_snake_and_camel_spellings_are_one_name_when_grading_and_placing() -> No
     assert graded[0].status is ClaimStatus.VERIFIED
     content = SectionContent(
         summary="s",
-        blocks=[ParagraphBlock(text="Settings are loaded once."), ParagraphBlock(text="getDb returns the session.")],
+        blocks=[
+            ParagraphBlock(text="Settings are loaded once."),
+            ParagraphBlock(text="getDb returns the session."),
+        ],
     )
     assert place_claims(content, ["`get_db` returns the session."]) == {"`get_db` returns the session.": "b1"}

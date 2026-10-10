@@ -113,7 +113,9 @@ _DEFINITION = re.compile(r"(?m)^[\s>*+-]*\[[^\]]*\]:")
 
 
 def test_reference_style_links_and_images_cannot_survive() -> None:
-    hostile = "[r]: https://evil/x\n![pic][r]\n[text][r]\n> [q]: https://evil/y\n- [^n]: note\nplain [1] stays"
+    hostile = (
+        "[r]: https://evil/x\n![pic][r]\n[text][r]\n> [q]: https://evil/y\n- [^n]: note\nplain [1] stays"
+    )
     md = render_chat_markdown(
         PROJECT, "t", [ExportChatMessage(role="assistant", text=hostile, created_at=NOW)]
     )
