@@ -89,7 +89,8 @@ class ProgressReporter:
             check_transition(current, stage)
             row.current_stage = stage.value
             progress = dict(row.stage_progress or {})
-            progress.setdefault("stages", {})[stage.value] = datetime.now(UTC).isoformat()
+            # a new nested dict: mutating the shared one is invisible to SQLAlchemy (plain JSONB column)
+            progress["stages"] = {**progress.get("stages", {}), stage.value: datetime.now(UTC).isoformat()}
             if detail:
                 progress["detail"] = detail
             row.stage_progress = progress
