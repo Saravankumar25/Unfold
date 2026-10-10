@@ -1,0 +1,54 @@
+{
+  "reviewer": null,
+  "date": null,
+  "chapters": [
+    {
+      "key": "overview",
+      "title": "Overview of FastAPI RAG Architecture",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "request-lifecycle",
+      "title": "API Request Lifecycle and Routing",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "data-persistence",
+      "title": "Data Models and Persistence",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "background-jobs",
+      "title": "Background Processing and Tasks",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "config-deploy",
+      "title": "Configuration and Deployment Setup",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "versions",
+      "title": "Database Migrations and Versions",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    }
+  ]
+}

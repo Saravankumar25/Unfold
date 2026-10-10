@@ -1,0 +1,912 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Overview of Requests Library",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "This chapter provides an overview of the requests library, examining its main modules, utilities, and helper components.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Overview of Requests Library",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Requests is an elegant and simple HTTP library for Python, built for human beings [E10]."
+     },
+     {
+      "type": "heading",
+      "text": "Main Modules and Flow",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The library provides diagnostic and help utilities in src/requests/help.py that generate bug report information, including platform details, implementation versions, and dependency information [E1][E2][E3]."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "src/requests/help.py: main",
+       "src/requests/help.py: info",
+       "src/requests/help.py: _implementation"
+      ],
+      "ordered": true
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def main():\n    \"\"\"Pretty-print the bug information as JSON.\"\"\"\n    print(json.dumps(info(), sort_keys=True, indent=2))",
+      "path": "src/requests/help.py",
+      "start_line": 128,
+      "caption": "Help main function"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show where execution and initialization start within src/requests."
+     },
+     {
+      "type": "paragraph",
+      "text": "Other chapters cover related topics: Public API and Adapters covers the public HTTP interface and adapters exposed by requests, Internal Structures and Exceptions covers internal data structures, compatibility modules, and error handling, and Configuration and Documentation covers project documentation and repository configurations."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:2a15ae069a652535",
+      "caption": "requests architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "Requests is an elegant and simple HTTP library for Python, built for human beings.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:75b34c05142ff72a405da61a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The library provides diagnostic and help utilities in src/requests/help.py that generate bug report information, including platform details, implementation versions, and dependency information.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:6e751692c4f9266bee3aacc1",
+      "ch:023c167d0b4938012bee00f3",
+      "ch:0698e073276a16c80b0365f5"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/help.py",
+     "symbol": "_implementation",
+     "chunk_id": "ch:6e751692c4f9266bee3aacc1",
+     "end_line": 66,
+     "start_line": 34
+    },
+    "E2": {
+     "path": "src/requests/help.py",
+     "symbol": "info",
+     "chunk_id": "ch:023c167d0b4938012bee00f3",
+     "end_line": 125,
+     "start_line": 69
+    },
+    "E3": {
+     "path": "src/requests/help.py",
+     "symbol": "main",
+     "chunk_id": "ch:0698e073276a16c80b0365f5",
+     "end_line": 130,
+     "start_line": 128
+    },
+    "E4": {
+     "path": "src/requests/utils.py",
+     "symbol": null,
+     "chunk_id": "ch:ade7b1a9e960ee198d355699",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "src/requests/models.py",
+     "symbol": null,
+     "chunk_id": "ch:0a3b0818efd258c4ee4a0830",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E6": {
+     "path": "src/requests/utils.py",
+     "symbol": "proxy_bypass_registry",
+     "chunk_id": "ch:924068837572b14b0ae19b79",
+     "end_line": 112,
+     "start_line": 76
+    },
+    "E7": {
+     "path": "pyproject.toml",
+     "symbol": "tool.isort",
+     "chunk_id": "ch:5a512b2414b9d7f6c70d15e8",
+     "end_line": 5,
+     "start_line": 1
+    },
+    "E8": {
+     "path": "src/requests/models.py",
+     "symbol": "Request",
+     "chunk_id": "ch:b9152588bbd693ba7c2d999c",
+     "end_line": 257,
+     "start_line": 230
+    },
+    "E9": {
+     "path": "src/requests/utils.py",
+     "symbol": "dict_to_sequence",
+     "chunk_id": "ch:90a01523509d25080f3726e6",
+     "end_line": 132,
+     "start_line": 126
+    },
+    "E10": {
+     "path": "docs/index.rst",
+     "symbol": "Requests: HTTP for Humans\u2122",
+     "chunk_id": "ch:75b34c05142ff72a405da61a",
+     "end_line": 53,
+     "start_line": 6
+    },
+    "E11": {
+     "path": "docs/user/quickstart.rst",
+     "symbol": "Quickstart > Make a Request",
+     "chunk_id": "ch:c4aefb4533c469f90d7304e3",
+     "end_line": 53,
+     "start_line": 20
+    },
+    "E12": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:f3e20daf5843fae4a5b4600b",
+     "end_line": 57,
+     "start_line": 1
+    },
+    "E13": {
+     "path": "src/requests/help.py",
+     "symbol": null,
+     "chunk_id": "ch:db2125f9fbcede42e9fec4b5",
+     "end_line": 33,
+     "start_line": 1
+    },
+    "E14": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "RequestException.__init__",
+     "chunk_id": "ch:79bb2e4ea8d27e6ca4c29860",
+     "end_line": 24,
+     "start_line": 17
+    },
+    "E15": {
+     "path": "src/requests/auth.py",
+     "symbol": "HTTPBasicAuth.__ne__",
+     "chunk_id": "ch:627fb5d9aa08f39d5e2ad0b9",
+     "end_line": 92,
+     "start_line": 91
+    },
+    "E16": {
+     "path": "src/requests/auth.py",
+     "symbol": "HTTPDigestAuth.init_per_thread_state",
+     "chunk_id": "ch:598d8a84b0d666dfd7c556dd",
+     "end_line": 124,
+     "start_line": 116
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 2,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 2,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "public-api",
+   "title": "Public API and Adapters",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the public API and adapter interfaces of requests, focusing on sessions, transport adapters, cookie jars, and request preparation.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Public API and Adapters",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon the overview provided in the previous chapter on the requests library, this chapter examines the public-facing components that handle communication, connection pooling, and request preparation."
+     },
+     {
+      "type": "heading",
+      "text": "Core Session and Adapter Classes",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The public interface relies heavily on the Session class, which provides cookie persistence, connection-pooling, and configuration across requests [E2]. The Session class inherits from SessionRedirectMixin [E3] to manage redirect logic."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Session(SessionRedirectMixin):\n    \"\"\"A Requests session.\n\n    Provides cookie persistence, connection-pooling, and configuration.\n\n    Basic Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> s.get('https://httpbin.org/get')\n      <Response [200]>\n\n    Or as a context manager::\n\n      >>> with requests.Session() as s:\n      ...     s.get('https://httpbin.org/get')\n      <Response [200]>\n    \"\"\"",
+      "path": "src/requests/sessions.py",
+      "start_line": 356,
+      "caption": "Session class definition"
+     },
+     {
+      "type": "paragraph",
+      "text": "To communicate with HTTP and HTTPS URLs, Requests uses the HTTPAdapter class [E1]. It implements the transport adapter interface for urllib3, managing connection pools and retries [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class HTTPAdapter(BaseAdapter):\n    \"\"\"The built-in HTTP Adapter for urllib3.\n\n    Provides a general-case interface for Requests sessions to contact HTTP and\n    HTTPS urls by implementing the Transport Adapter interface. This class will\n    usually be created by the :class:`Session <Session>` class under the\n    covers.\n\n    :param pool_connections: The number of urllib3 connection pools to cache.\n    :param pool_maxsize: The maximum number of connections to save in the pool.\n    :param max_retries: The maximum number of retries each connection\n        should attempt. Note, this applies only to failed DNS lookups, socket\n        connections and connection timeouts, never to requests where data has\n        made it to the server. By default, Requests does not retry failed\n        connections. If you need granular control over the conditions under\n        which we retry a request, import urllib3's ``Retry`` class and pass\n        that instead.\n    :param pool_block: Whether the connection pool should block for connections.\n\n    Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> a = requests.adapters.HTTPAdapter(max_retries=3)\n      >>> s.mount('http://', a)\n    \"\"\"",
+      "path": "src/requests/adapters.py",
+      "start_line": 167,
+      "caption": "HTTPAdapter class definition"
+     },
+     {
+      "type": "heading",
+      "text": "Cookies and Request Preparation",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The cookie subsystem supports the public interface through classes such as RequestsCookieJar and MockRequest [E5, E6]. RequestsCookieJar is a compatibility class that inherits from http.cookiejar.CookieJar and MutableMapping to expose a dictionary interface [E5]. MockRequest wraps a requests.Request to mimic a urllib2.Request so that http.cookiejar.CookieJar can correctly manage cookie policies [E6]."
+     },
+     {
+      "type": "paragraph",
+      "text": "When a request is made through a session, prepare_request is called to construct a PreparedRequest for transmission [E7]."
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The Session class provides cookie persistence, connection-pooling, and configuration.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:115aa0a15dac15ca903c6a0d"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "HTTPAdapter is the built-in HTTP Adapter for urllib3 providing a general-case interface for sessions to contact HTTP and HTTPS URLs.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:b534f8e8565dc513a294f346"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "RequestsCookieJar is a compatibility class that extends http.cookiejar.CookieJar while exposing a dictionary interface.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:ee80a12ac57eec42920e49b5"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "MockRequest wraps a requests.Request object to mimic a urllib2.Request for cookie policies.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:aa060b0dea6e9670153c6599"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "RequestsCookieJar is a compatibility class that inherits from http.cookiejar.CookieJar and MutableMapping to expose a dictionary interface.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:ee80a12ac57eec42920e49b5"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "MockRequest wraps a requests.Request to mimic a urllib2.Request so that cookie policies can be correctly managed.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:aa060b0dea6e9670153c6599"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/adapters.py",
+     "symbol": "HTTPAdapter",
+     "chunk_id": "ch:b534f8e8565dc513a294f346",
+     "end_line": 201,
+     "start_line": 167
+    },
+    "E2": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session",
+     "chunk_id": "ch:115aa0a15dac15ca903c6a0d",
+     "end_line": 389,
+     "start_line": 356
+    },
+    "E3": {
+     "path": "src/requests/sessions.py",
+     "symbol": "SessionRedirectMixin",
+     "chunk_id": "ch:57952f95b3edf673a3aa5390",
+     "end_line": 106,
+     "start_line": 106
+    },
+    "E4": {
+     "path": "src/requests/sessions.py",
+     "symbol": null,
+     "chunk_id": "ch:dcba6679cd6a591dcd3143b2",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "src/requests/cookies.py",
+     "symbol": "RequestsCookieJar",
+     "chunk_id": "ch:ee80a12ac57eec42920e49b5",
+     "end_line": 193,
+     "start_line": 176
+    },
+    "E6": {
+     "path": "src/requests/cookies.py",
+     "symbol": "MockRequest",
+     "chunk_id": "ch:aa060b0dea6e9670153c6599",
+     "end_line": 34,
+     "start_line": 23
+    },
+    "E7": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session.prepare_request",
+     "chunk_id": "ch:2aa5e14da96ee0b961f2542e",
+     "end_line": 498,
+     "start_line": 457
+    },
+    "E8": {
+     "path": "docs/user/advanced.rst",
+     "symbol": "Advanced Usage > Session Objects",
+     "chunk_id": "ch:c1ce731be3778faf0c075407",
+     "end_line": 86,
+     "start_line": 10
+    },
+    "E9": {
+     "path": "src/requests/cookies.py",
+     "symbol": "RequestsCookieJar.items",
+     "chunk_id": "ch:b5b4bccab3a36d64ec5a7614",
+     "end_line": 275,
+     "start_line": 268
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 6,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 5,
+    "unsupported": 0,
+    "grounded_ratio": 0.83,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "internals",
+   "title": "Internal Structures and Exceptions",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the internal data structures, compatibility modules, and exception handling mechanisms of the requests library.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Internal Structures and Exceptions",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon Overview of Requests Library, this chapter delves deeper into how requests handles data structures, character detection compatibility, and exceptions. Public API and Adapters covers the public HTTP interfaces."
+     },
+     {
+      "type": "heading",
+      "text": "Compatibility and Character Detection",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The library includes compatibility modules to resolve character detection libraries dynamically [E1]. The _resolve_char_detection function attempts to import chardet or charset_normalizer [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def _resolve_char_detection():\n    \"\"\"Find supported character detection libraries.\"\"\"\n    chardet = None\n    for lib in (\"chardet\", \"charset_normalizer\"):\n        if chardet is None:\n            try:\n                chardet = importlib.import_module(lib)\n            except ImportError:\n                pass\n    return chardet",
+      "path": "src/requests/compat.py",
+      "start_line": 18,
+      "caption": "Character detection resolution"
+     },
+     {
+      "type": "heading",
+      "text": "Case-Insensitive Structures and Status Codes",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Responses and prepared requests utilize a CaseInsensitiveDict for headers, which implements MutableMapping so that querying and contains testing are case-insensitive while preserving the case of the last set key [E6, E5, E9]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class CaseInsensitiveDict(MutableMapping):\n    \"\"\"A case-insensitive ``dict``-like object.\n\n    Implements all methods and operations of\n    ``MutableMapping`` as well as dict's ``copy``. Also\n    provides ``lower_items``.\n\n    All keys are expected to be strings. The structure remembers the\n    case of the last key to be set, and ``iter(instance)``,\n    ``keys()``, ``items()``, ``iterkeys()``, and ``iteritems()``\n    will contain case-sensitive keys. However, querying and contains\n    testing is case insensitive::\n\n        cid = CaseInsensitiveDict()\n        cid['Accept'] = 'application/json'\n        cid['aCCEPT'] == 'application/json'  # True\n        list(cid) == ['Accept']  # True\n\n    For example, ``headers['content-encoding']`` will return the\n    value of a ``'Content-Encoding'`` response header, regardless\n    of how the header name was originally stored.\n\n    If the constructor, ``.update``, or equality comparison\n    operations are given keys that have equal ``.lower()``s, the\n    behavior is undefined.\n    \"\"\"",
+      "path": "src/requests/structures.py",
+      "start_line": 13,
+      "caption": "CaseInsensitiveDict definition"
+     },
+     {
+      "type": "heading",
+      "text": "Error Handling and Exceptions",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Requests defines a hierarchy of exceptions rooted at RequestException, which inherits from IOError [E2, E7]. All exceptions explicitly raised by Requests inherit from RequestException [E7], with specific error classes including InvalidJSONError and RetryError [E3, E8]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class RequestException(IOError):\n    \"\"\"There was an ambiguous exception that occurred while handling your\n    request.\n    \"\"\"",
+      "path": "src/requests/exceptions.py",
+      "start_line": 12,
+      "caption": "RequestException base class"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:1ff7be6e5c229ee4",
+      "caption": "Module dependencies"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The _resolve_char_detection function attempts to import chardet or charset_normalizer.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:e218044fb9efa9413d9c6db1"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Responses utilize a CaseInsensitiveDict for headers to ensure header querying is case-insensitive.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:0a5fda6f481ece20a9022f54"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "All exceptions explicitly raised by Requests inherit from RequestException.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:55c9c26b6d7f32f14f19b3dd",
+      "ch:c94ed178b46d9d5cecea3709"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Specific error classes include InvalidJSONError and RetryError.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a1cbe6fac02f43ed34bdf6c7",
+      "ch:ce3e96b01897b6af653d59eb"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Responses and prepared requests utilize a CaseInsensitiveDict for headers, which implements MutableMapping so that querying and contains testing are case-insensitive while preserving the case of the last set key.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:0a5fda6f481ece20a9022f54",
+      "ch:b6e17abdffe4c2187aa274a3",
+      "ch:c8ffb46b73a66fe1b8996a7d"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Requests defines a hierarchy of exceptions rooted at RequestException, which inherits from IOError.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:55c9c26b6d7f32f14f19b3dd",
+      "ch:c94ed178b46d9d5cecea3709"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "All exceptions explicitly raised by Requests inherit from RequestException, with specific error classes including InvalidJSONError and RetryError.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a1cbe6fac02f43ed34bdf6c7",
+      "ch:ce3e96b01897b6af653d59eb",
+      "ch:c94ed178b46d9d5cecea3709"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/compat.py",
+     "symbol": "_resolve_char_detection",
+     "chunk_id": "ch:e218044fb9efa9413d9c6db1",
+     "end_line": 27,
+     "start_line": 18
+    },
+    "E2": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "RequestException",
+     "chunk_id": "ch:55c9c26b6d7f32f14f19b3dd",
+     "end_line": 16,
+     "start_line": 12
+    },
+    "E3": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "InvalidJSONError",
+     "chunk_id": "ch:a1cbe6fac02f43ed34bdf6c7",
+     "end_line": 28,
+     "start_line": 27
+    },
+    "E4": {
+     "path": "src/requests/models.py",
+     "symbol": null,
+     "chunk_id": "ch:84034d18aa5637e6f193be14",
+     "end_line": 83,
+     "start_line": 51
+    },
+    "E5": {
+     "path": "src/requests/models.py",
+     "symbol": "Response.__init__",
+     "chunk_id": "ch:b6e17abdffe4c2187aa274a3",
+     "end_line": 703,
+     "start_line": 658
+    },
+    "E6": {
+     "path": "src/requests/structures.py",
+     "symbol": "CaseInsensitiveDict",
+     "chunk_id": "ch:0a5fda6f481ece20a9022f54",
+     "end_line": 39,
+     "start_line": 13
+    },
+    "E7": {
+     "path": "docs/user/quickstart.rst",
+     "symbol": "Quickstart > Errors and Exceptions",
+     "chunk_id": "ch:c94ed178b46d9d5cecea3709",
+     "end_line": 570,
+     "start_line": 549
+    },
+    "E8": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "RetryError",
+     "chunk_id": "ch:ce3e96b01897b6af653d59eb",
+     "end_line": 132,
+     "start_line": 131
+    },
+    "E9": {
+     "path": "src/requests/models.py",
+     "symbol": "PreparedRequest.prepare_headers",
+     "chunk_id": "ch:c8ffb46b73a66fe1b8996a7d",
+     "end_line": 492,
+     "start_line": 483
+    },
+    "E10": {
+     "path": "docs/api.rst",
+     "symbol": "Developer Interface > Exceptions",
+     "chunk_id": "ch:a3540f5b8c6fe8411ef3faa9",
+     "end_line": 41,
+     "start_line": 28
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 7,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 7,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "config-deploy",
+   "title": "Configuration and Documentation",
+   "position": 3,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter details the configuration files and documentation build processes for the requests repository.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Configuration and Documentation",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "This chapter builds upon the Overview of Requests Library chapter to explain how the project documentation and repository configurations are structured. Other chapters cover topics like Public API and Adapters and Internal Structures and Exceptions."
+     },
+     {
+      "type": "heading",
+      "text": "Documentation Build Process",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The documentation build process is controlled by configuration files such as .readthedocs.yaml and docs/conf.py [E2, E3]. ReadTheDocs uses Ubuntu 22.04 with Python 3.12 to build the documentation [E2]. Sphinx uses extensions like autodoc, intersphinx, todo, and viewcode [E3]."
+     },
+     {
+      "type": "code",
+      "language": "yaml",
+      "code": "build:\n  os: ubuntu-22.04\n  tools:\n    python: \"3.12\"",
+      "path": ".readthedocs.yaml",
+      "start_line": 8,
+      "caption": "ReadTheDocs build configuration"
+     },
+     {
+      "type": "paragraph",
+      "text": "Additionally, docs/make.bat provides Windows command file support for generating Sphinx documentation targets like html, singlehtml, and linkcheck [E4]."
+     },
+     {
+      "type": "heading",
+      "text": "Manifest Packaging",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Packaging and source distribution files are declared in MANIFEST.in, which includes README.md, LICENSE, NOTICE, HISTORY.md, requirements-dev.txt, tests, and test certificates [E1]."
+     },
+     {
+      "type": "code",
+      "language": "text",
+      "code": "include README.md LICENSE NOTICE HISTORY.md requirements-dev.txt\nrecursive-include tests *.py\nrecursive-include tests/certs *",
+      "path": "MANIFEST.in",
+      "start_line": 1,
+      "caption": "Manifest inclusion rules"
+     },
+     {
+      "type": "paragraph",
+      "text": "The documentation configuration in docs/conf.py sets the pygments style to flask_theme_support.FlaskyStyle [E5] and defines epub output options such as epub_exclude_files [E7], while documentation themes include a license detailing modifications by Kenneth Reitz and original work by Armin Ronacher [E8]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:b8bb1bbaa1fd3463",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The documentation build process is controlled by configuration files such as .readthedocs.yaml and docs/conf.py.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:f60bd406cde8df099ea10baa",
+      "ch:4933dcbbb606bca4d5aff199"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "ReadTheDocs uses Ubuntu 22.04 with Python 3.12 to build the documentation.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:f60bd406cde8df099ea10baa"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Sphinx uses extensions like autodoc, intersphinx, todo, and viewcode.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:4933dcbbb606bca4d5aff199"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "docs/make.bat provides Windows command file support for generating Sphinx documentation targets.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:48726ccebc5d00b366634477"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Packaging and source distribution files are declared in MANIFEST.in, which includes README.md, LICENSE, NOTICE, HISTORY.md, requirements-dev.txt, tests, and test certificates.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:2396d4c53a16236b5cc8e8e5"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The documentation configuration sets pygments_style to flask_theme_support.FlaskyStyle.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:b8ed71a537e3bb3c6618d7f2"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The documentation configuration sets epub_exclude_files for epub output.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:04b54bafdbe695f9bb2d1f5e"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The theme license details modifications by Kenneth Reitz and original work by Armin Ronacher.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:a6bd5f76325e26a984b2d925"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "MANIFEST.in",
+     "symbol": null,
+     "chunk_id": "ch:2396d4c53a16236b5cc8e8e5",
+     "end_line": 3,
+     "start_line": 1
+    },
+    "E2": {
+     "path": ".readthedocs.yaml",
+     "symbol": "build",
+     "chunk_id": "ch:f60bd406cde8df099ea10baa",
+     "end_line": 13,
+     "start_line": 8
+    },
+    "E3": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:4933dcbbb606bca4d5aff199",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "docs/make.bat",
+     "symbol": null,
+     "chunk_id": "ch:48726ccebc5d00b366634477",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:b8ed71a537e3bb3c6618d7f2",
+     "end_line": 160,
+     "start_line": 101
+    },
+    "E6": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:004d035e58b230b4a9bd587a",
+     "end_line": 210,
+     "start_line": 151
+    },
+    "E7": {
+     "path": "docs/conf.py",
+     "symbol": null,
+     "chunk_id": "ch:04b54bafdbe695f9bb2d1f5e",
+     "end_line": 360,
+     "start_line": 301
+    },
+    "E8": {
+     "path": "docs/_themes/LICENSE",
+     "symbol": null,
+     "chunk_id": "ch:a6bd5f76325e26a984b2d925",
+     "end_line": 45,
+     "start_line": 1
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 8,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 6,
+    "unsupported": 0,
+    "grounded_ratio": 0.75,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 2
+   }
+  }
+ ]
+}

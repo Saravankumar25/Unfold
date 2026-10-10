@@ -1,0 +1,54 @@
+{
+  "reviewer": null,
+  "date": null,
+  "chapters": [
+    {
+      "key": "overview",
+      "title": "Overview of FastAPI RAG service",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "request-lifecycle",
+      "title": "Request lifecycle and endpoints",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "data-persistence",
+      "title": "Data and persistence layer",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "background-jobs",
+      "title": "Background work and workers",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "config-deploy",
+      "title": "Configuration and deployment",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "versions",
+      "title": "Versions and migrations",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    }
+  ]
+}

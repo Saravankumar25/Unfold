@@ -1,0 +1,51 @@
+{
+ "name": "requests",
+ "source": "https://github.com/psf/requests/tree/0e322af87745eff34caffe4df68456ebc20d9068",
+ "commit_sha": "0e322af87745eff34caffe4df68456ebc20d9068",
+ "date": "2026-10-10",
+ "job": {
+  "status": "succeeded",
+  "stage": "READY",
+  "error_code": null
+ },
+ "attempts": 1,
+ "wall_seconds": 84.6,
+ "tokens": {
+  "input": 34716,
+  "output": 6530,
+  "calls": 13,
+  "by_purpose": {
+   "guide.plan": {
+    "calls": 1,
+    "input_tokens": 1335,
+    "output_tokens": 634
+   },
+   "guide.section": {
+    "calls": 4,
+    "input_tokens": 16922,
+    "output_tokens": 4071
+   },
+   "guide.critique": {
+    "calls": 4,
+    "input_tokens": 3133,
+    "output_tokens": 309
+   },
+   "guide.revise": {
+    "calls": 4,
+    "input_tokens": 13326,
+    "output_tokens": 1516
+   }
+  },
+  "by_model": {
+   "gemini-3.5-flash-lite": {
+    "calls": 13,
+    "input_tokens": 34716,
+    "output_tokens": 6530
+   }
+  }
+ },
+ "retries": 0,
+ "rate_limited": 0,
+ "cost_usd_estimate": null,
+ "cost_note": "not measured: no price table in the repo; free-tier keys bill $0"
+}
