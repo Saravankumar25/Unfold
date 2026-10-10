@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     model_cache_dir: str = ".model-cache"
+    # ONNX intra-op threads per local model; 0 = onnxruntime default (all physical cores, which oversubscribes a
+    # shared or hybrid-core machine: measured, default threads burn 3-5x the CPU of 6 for the same rerank)
+    model_threads: int = 6
 
     # limits
     session_ttl_seconds: int = 86_400
