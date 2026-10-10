@@ -102,7 +102,7 @@ async def test_github_project_lifecycle_and_ownership(client: httpx.AsyncClient)
     project = (await client.get(f"/api/v1/projects/{pid}")).json()
     assert project["name"] == "Hello-World"
     assert project["job"]["current_stage"] == "RECEIVED"
-    assert project["job"]["stage_total"] == 20
+    assert project["job"]["stage_total"] == 21
 
     current = (await client.get("/api/v1/sessions/current")).json()
     assert [p["id"] for p in current["projects"]] == [pid]

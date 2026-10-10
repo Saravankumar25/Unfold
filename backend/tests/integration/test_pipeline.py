@@ -216,8 +216,11 @@ async def test_fixture_repo_yields_guide_diagrams_and_cleans_up(runtime: Runtime
             assert sec.research["findings"] and 0.0 <= sec.research["coverage"] <= 1.0
             statuses = {c["status"] for c in sec.claims}
             assert "VERIFIED" in statuses  # cites a real label, names a real path
-            assert "UNSUPPORTED" in statuses  # the uncited claim
-            assert sec.quality_scores and sec.quality_scores["claims"] == 3
+            assert "UNSUPPORTED" in statuses  # the uncited claim, which names nothing to look for
+            # the claim about `NonexistentWidgetFactory` is one the chapter never makes: recorded, not kept
+            assert sec.quality_scores and sec.quality_scores["claims"] == 2
+            assert sec.quality_scores["claims_not_stated"] == 1
+            assert sec.verification and len(sec.verification["unstated"]) == 1
         arch = next(s for s in sections if s.section_key == "overview")
         assert any(b["type"] == "diagram" for b in arch.content["blocks"])  # attached by the visuals stage
 
