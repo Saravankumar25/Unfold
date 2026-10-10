@@ -1,0 +1,38 @@
+{
+  "reviewer": null,
+  "date": null,
+  "chapters": [
+    {
+      "key": "overview",
+      "title": "Quick Overview",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "architecture",
+      "title": "Architecture Walkthrough",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "deployment",
+      "title": "How to Run or Deploy",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "rag-pipeline",
+      "title": "AI Pipeline and RAG Subsystem",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    }
+  ]
+}
