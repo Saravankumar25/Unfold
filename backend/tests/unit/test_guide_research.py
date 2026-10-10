@@ -126,13 +126,22 @@ async def test_research_is_deterministic(fx: FixtureProject) -> None:
 async def test_unanswerable_questions_use_the_extra_round_then_stop_and_stay_open(fx: FixtureProject) -> None:
     cfg = RepoMap(fx.ir).symbol("app/core/config.py")
     assert cfg is not None
-    brief = await _inv(fx).research(_plan([cfg.id], UNANSWERABLE))
+    plan = _plan([cfg.id], UNANSWERABLE).model_copy(update={"expected_evidence": ["config", "test"]})
+    brief = await _inv(fx).research(plan)
     assert brief.coverage == 0.0 and brief.open_questions == UNANSWERABLE
     assert (
         brief.spent.rounds == 2 and brief.stopped_by == "rounds"
     )  # first pass + exactly one targeted extra round
     assert brief.spent.retrievals == 2 * len(UNANSWERABLE)
     assert all(f.proof is Proof.INFERRED for f in brief.findings)  # leads only, never counted as answers
+
+
+async def test_extra_round_needs_a_missing_facet(fx: FixtureProject) -> None:
+    cfg = RepoMap(fx.ir).symbol("app/core/config.py")
+    assert cfg is not None
+    plan = _plan([cfg.id], UNANSWERABLE[:2]).model_copy(update={"expected_evidence": ["definition"]})
+    brief = await _inv(fx).research(plan)
+    assert brief.spent.rounds == 1 and brief.spent.retrievals == 2 and brief.stopped_by == "exhausted"
 
 
 async def test_retrieval_cap(fx: FixtureProject) -> None:

@@ -352,9 +352,11 @@ class Investigator:
         facets: dict[int, str] = {}
         rounds = min(caps.rounds, MAX_ROUNDS)
 
-        for _ in range(rounds):
-            todo = [i for i in range(len(questions)) if i not in answered]
+        for round_no in range(rounds):
+            # the extra round is targeted: a question without a missing facet would only repeat its query
+            todo = [i for i in range(len(questions)) if i not in answered and (not round_no or facets.get(i))]
             if not todo:
+                stopped = stopped or ("exhausted" if round_no else None)
                 break
             spent.rounds += 1
             for qid in todo:

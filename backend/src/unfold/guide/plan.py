@@ -72,6 +72,11 @@ class _View:
             return label
         return ref.name if ref else target
 
+    def paths_of(self, target: str) -> list[str]:
+        comp = self.components.get(target)
+        ref = self.rm.ref(target)
+        return comp.member_paths if comp else ([ref.path] if ref else [])
+
     def is_valid(self, target: str) -> bool:
         return target in self.components or self.rm.ref(target) is not None
 
@@ -384,6 +389,9 @@ def build_skeleton(ir: ProjectIR, rm: RepoMap, arch: ArchitectureModel) -> list[
         if comp_id in used:
             continue
         comp = v.components[comp_id]
+        covered = {p for c in chapters for t in c.targets for p in v.paths_of(t)}
+        if len(set(comp.member_paths) & covered) * 10 >= len(comp.member_paths) * 6:
+            continue  # most of its files are already explained by earlier chapters: it would repeat them
         key, n = slugify(comp.title), 2
         while key in taken:
             key, n = f"{key}-{n}", n + 1

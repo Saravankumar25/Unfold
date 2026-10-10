@@ -44,14 +44,16 @@ _WRITER_SYSTEM = (
     "about the project add an entry to `claims` with the labels that support it in `evidence`; use kind "
     "'project_fact' for things the code shows, 'inference' for reasoned conclusions, 'improvement' for "
     "suggestions. Where the brief lists a question as not established, or the evidence does not cover something, "
-    "say so plainly instead of guessing. Explain how things work in order (what calls what, what is read or "
-    "written, what is returned) and name the real symbols and files. Add a Q&A block with kind 'failure' (what "
-    "can go wrong) only when a finding in the brief shows error or failure behaviour, and a Q&A block with kind "
-    "'extension' (how to change it) only when a finding shows where and how the code is changed or extended; "
-    "otherwise omit both. Chapters this one builds on are summarised in one line each: refer to them, do not "
-    "repeat them. Write for the stated reader level. Use headings (level 2/3), paragraphs, bullets, callouts, "
-    "code blocks quoting evidence verbatim with its path, tables and Q&A. Do not emit diagram blocks. summary is "
-    "one sentence.\n\n" + UNTRUSTED_POLICY
+    'say so plainly, one sentence per gap (for example: "The evidence does not show how X is retried."), instead '
+    "of guessing. Explain how things work in order: when the brief contains a traced flow, write it as an ordered "
+    "bullets block (ordered=true), one step per item in execution order, naming each real symbol and file. Add a "
+    "Q&A block with kind 'failure' (what can go wrong) only when a finding in the brief shows error or failure "
+    "behaviour, and a Q&A block with kind 'extension' (how to change it) only when a finding shows where and how "
+    "the code is changed or extended; otherwise omit both. Stay inside this chapter's objective. Chapters this "
+    "one builds on are summarised in one line each: refer to them, do not repeat them. Write for the stated "
+    "reader level. Use headings (level 2/3), paragraphs, bullets, callouts, code blocks quoting evidence "
+    "verbatim with its path, tables and Q&A. Do not emit diagram blocks. summary is one sentence.\n\n"
+    + UNTRUSTED_POLICY
 )
 
 

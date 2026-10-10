@@ -78,7 +78,7 @@ class ResearchBrief(BaseModel):
     open_questions: list[str]
     coverage: float  # answered / asked
     spent: ResearchSpent
-    stopped_by: str | None = None  # coverage | rounds | retrievals | llm_calls | tokens
+    stopped_by: str | None = None  # coverage | rounds | retrievals | llm_calls | tokens | exhausted
 
 
 # ---- content blocks --------------------------------------------------------------------------------------
