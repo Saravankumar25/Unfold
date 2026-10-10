@@ -1,0 +1,669 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Overview of Requests",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "This chapter provides an overview of the requests library, examining its codebase organization, utility functions, and diagnostic helper modules.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Overview of Requests",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The requests library is structured around core subsystems that handle HTTP requests, models, utilities, and diagnostic information. The main application logic resides inside the src/requests directory, supported by tests and documentation."
+     },
+     {
+      "type": "heading",
+      "text": "Main Code Structure and Modules",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The repository contains 36 Python code files [verified_facts]. Key modules include utils.py for helper functions like proxy bypass checks and sequence conversions [E1, E2, E7], models.py for primary request objects [E8], and help.py for diagnostic reporting [E4, E5, E6]."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "src/requests/help.py: Provides environment and bug-report information generation [E5, E6].",
+       "src/requests/utils.py: Houses utility functions such as proxy_bypass_registry and dict_to_sequence [E1, E2].",
+       "src/requests/models.py: Contains the primary objects that power Requests [E8]."
+      ],
+      "ordered": false
+     },
+     {
+      "type": "heading",
+      "text": "Diagnostic Flow Execution",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The diagnostic helper module executes through a defined sequence to gather system and implementation details:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "src/requests/help.py:main(): Pretty-prints the bug information as JSON [E6].",
+       "src/requests/help.py:info(): Generates the full dictionary of system, ssl, and dependency information [E5].",
+       "src/requests/help.py:_implementation(): Returns a dictionary with the Python implementation and version [E4]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "callout",
+      "tone": "note",
+      "text": "The evidence does not show which specific components and internal modules exist in src/requests beyond the analyzed utility, model, and helper files."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:5402f3b7076883d1",
+      "caption": "requests architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The requests project contains 36 Python code files.",
+     "kind": "project_fact",
+     "status": "UNSUPPORTED",
+     "evidence_ids": [],
+     "graph_node_ids": [],
+     "confidence": 0.0,
+     "note": "No evidence label cited."
+    },
+    {
+     "text": "The proxy_bypass_registry function checks Windows registry settings for proxy overrides.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:21176d0f0d480c4c3b956d90"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "dict_to_sequence returns an internal sequence dictionary update if items are present.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:35c9fd1569dc96f0a2adf737"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "_implementation function determines the running Python implementation and version.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:3b9383d89415f05a6b0ad4c6"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The info function gathers platform, SSL, and library version details for bug reports.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:75fe7991a1d33fa79dd3682b"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The help main function formats and prints bug information as JSON.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:7f460ecb11e2c83175466976"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/utils.py",
+     "symbol": "proxy_bypass_registry",
+     "chunk_id": "ch:21176d0f0d480c4c3b956d90",
+     "end_line": 112,
+     "start_line": 76
+    },
+    "E2": {
+     "path": "src/requests/utils.py",
+     "symbol": "dict_to_sequence",
+     "chunk_id": "ch:35c9fd1569dc96f0a2adf737",
+     "end_line": 132,
+     "start_line": 126
+    },
+    "E3": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestRequests",
+     "chunk_id": "ch:4d0306939193423ecd9f4b77",
+     "end_line": 82,
+     "start_line": 80
+    },
+    "E4": {
+     "path": "src/requests/help.py",
+     "symbol": "_implementation",
+     "chunk_id": "ch:3b9383d89415f05a6b0ad4c6",
+     "end_line": 66,
+     "start_line": 34
+    },
+    "E5": {
+     "path": "src/requests/help.py",
+     "symbol": "info",
+     "chunk_id": "ch:75fe7991a1d33fa79dd3682b",
+     "end_line": 125,
+     "start_line": 69
+    },
+    "E6": {
+     "path": "src/requests/help.py",
+     "symbol": "main",
+     "chunk_id": "ch:7f460ecb11e2c83175466976",
+     "end_line": 130,
+     "start_line": 128
+    },
+    "E7": {
+     "path": "src/requests/utils.py",
+     "symbol": null,
+     "chunk_id": "ch:7e058841f0dff79be5e12e75",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E8": {
+     "path": "src/requests/models.py",
+     "symbol": null,
+     "chunk_id": "ch:0f353b26a6dd43600aebb494",
+     "end_line": 60,
+     "start_line": 1
+    }
+   },
+   "quality": {
+    "claims": 6,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 4,
+    "unsupported": 1,
+    "grounded_ratio": 0.67,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "public-api",
+   "title": "Public API and Adapters",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the public API interface and connection adapters exposed by requests to manage HTTP and HTTPS transport via urllib3.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Public API and Adapters",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on Overview of Requests: This chapter provides an overview of the requests library, examining its codebase organization, utility functions, and diagnostic helper modules., we now focus on how Requests exposes its public interfaces and connection adapters to callers."
+     },
+     {
+      "type": "heading",
+      "text": "Compatibility and Initialization Checks",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The public module `src/requests/__init__.py` contains vital validation functions that run when Requests initializes, ensuring dependency versions are compatible [E1, E2]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def check_compatibility(urllib3_version, chardet_version, charset_normalizer_version):\n    urllib3_version = urllib3_version.split(\".\")\n    assert urllib3_version != [\"dev\"]  # Verify urllib3 isn't installed from git.",
+      "path": "src/requests/__init__.py",
+      "start_line": 58,
+      "caption": "Compatibility check function snippet"
+     },
+     {
+      "type": "heading",
+      "text": "Transport Adapters",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Requests relies on transport adapters to handle connection pooling and request dispatching. The base class for all adapters is `BaseAdapter` [E4]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class BaseAdapter:\n    \"\"\"The Base Transport Adapter\"\"\"",
+      "path": "src/requests/adapters.py",
+      "start_line": 137,
+      "caption": "BaseAdapter definition"
+     },
+     {
+      "type": "paragraph",
+      "text": "The built-in HTTP adapter, `HTTPAdapter`, inherits from `BaseAdapter` and interfaces with urllib3 to manage connection pools and retries [E3]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class HTTPAdapter(BaseAdapter):\n    \"\"\"The built-in HTTP Adapter for urllib3.\n\n    Provides a general-case interface for Requests sessions to contact HTTP and\n    HTTPS urls by implementing the Transport Adapter interface.\n    \"\"\"",
+      "path": "src/requests/adapters.py",
+      "start_line": 167,
+      "caption": "HTTPAdapter definition"
+     },
+     {
+      "type": "callout",
+      "tone": "note",
+      "text": "By default, Requests does not retry failed connections unless a `Retry` object or `max_retries` is explicitly configured on the `HTTPAdapter` [E3]."
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "check_compatibility validates urllib3 and character detection library versions upon initialization.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:3fa33656fef61e8051b21fce"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "_check_cryptography warns users if an old version of cryptography is detected.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:40d00536c70f395b49c7d6ec"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "BaseAdapter serves as the base transport adapter class.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:5833320c6bf957cc0a6bfa9a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "HTTPAdapter is the built-in HTTP adapter for urllib3 providing connection pooling and retry capabilities.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:497321c6b96023b00b4d84e1"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/__init__.py",
+     "symbol": "check_compatibility",
+     "chunk_id": "ch:3fa33656fef61e8051b21fce",
+     "end_line": 90,
+     "start_line": 58
+    },
+    "E2": {
+     "path": "src/requests/__init__.py",
+     "symbol": "_check_cryptography",
+     "chunk_id": "ch:40d00536c70f395b49c7d6ec",
+     "end_line": 104,
+     "start_line": 93
+    },
+    "E3": {
+     "path": "src/requests/adapters.py",
+     "symbol": "HTTPAdapter",
+     "chunk_id": "ch:497321c6b96023b00b4d84e1",
+     "end_line": 201,
+     "start_line": 167
+    },
+    "E4": {
+     "path": "src/requests/adapters.py",
+     "symbol": "BaseAdapter",
+     "chunk_id": "ch:5833320c6bf957cc0a6bfa9a",
+     "end_line": 139,
+     "start_line": 137
+    }
+   },
+   "quality": {
+    "claims": 4,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 4,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "internals",
+   "title": "Internal Utilities and Structure",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the internal utility functions, data structures, and exception handling mechanisms of the requests library.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Internal Utilities and Structure",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on Overview of Requests: This chapter provides an overview of the requests library, examining its codebase organization, utility functions, and diagnostic helper modules., we now dive deeper into the internal helper modules, exception hierarchies, and data structures that power the requests library. These utilities ensure robust string handling, character set detection, and error management across different environments."
+     },
+     {
+      "type": "heading",
+      "text": "Internal Helper Functions",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The library defines specific low-level helper functions in internal modules to handle text encoding and character set validation. For instance, `to_native_string` ensures that a given string object is represented in the native string type [E1]. Similarly, `unicode_is_ascii` checks whether a given unicode string contains only ASCII characters [E2]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def to_native_string(string, encoding=\"ascii\"):\n    if isinstance(string, builtin_str):\n        out = string\n    else:\n        out = string.decode(encoding)\n    return out",
+      "path": "src/requests/_internal_utils.py",
+      "start_line": 25,
+      "caption": "to_native_string implementation"
+     },
+     {
+      "type": "paragraph",
+      "text": "Character detection libraries are resolved dynamically using compatibility helpers that check for available modules such as chardet or charset_normalizer [E3]."
+     },
+     {
+      "type": "heading",
+      "text": "Exceptions and Error Handling",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Requests provides a structured hierarchy of exceptions rooted at `RequestException` [E4]. Specialized exceptions handle specific failure modes, such as `InvalidJSONError` [E5] and `JSONDecodeError` [E6], which inherit from both internal error classes and compatibility JSON decode errors to ensure proper pickling behavior via `__reduce__` [E8]."
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show how request timeouts are retried internally."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:12df2f5d09bf4fde",
+      "caption": "Module dependencies"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "to_native_string ensures string objects are represented in the native string type",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:aa79fcb2baead9681e065abe"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "unicode_is_ascii determines if a unicode string contains only ASCII characters",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a5e8f03b408b95341ae086b5"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "_resolve_char_detection finds supported character detection libraries like chardet or charset_normalizer",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:e2505931477d48480316974a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "RequestException serves as the base class for request-related exceptions",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:dce1c3a378ebba30654128f5"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "JSONDecodeError inherits from compatibility JSON decode errors and implements custom pickling via __reduce__",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:a2afe053e4d2f06a05220ef4",
+      "ch:7a2a029658022cb037a22de7"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": "to_native_string",
+     "chunk_id": "ch:aa79fcb2baead9681e065abe",
+     "end_line": 35,
+     "start_line": 25
+    },
+    "E2": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": "unicode_is_ascii",
+     "chunk_id": "ch:a5e8f03b408b95341ae086b5",
+     "end_line": 50,
+     "start_line": 38
+    },
+    "E3": {
+     "path": "src/requests/compat.py",
+     "symbol": "_resolve_char_detection",
+     "chunk_id": "ch:e2505931477d48480316974a",
+     "end_line": 27,
+     "start_line": 18
+    },
+    "E4": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "RequestException",
+     "chunk_id": "ch:dce1c3a378ebba30654128f5",
+     "end_line": 16,
+     "start_line": 12
+    },
+    "E5": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "InvalidJSONError",
+     "chunk_id": "ch:b977edf188ec5998ce1967ed",
+     "end_line": 28,
+     "start_line": 27
+    },
+    "E6": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "JSONDecodeError",
+     "chunk_id": "ch:a2afe053e4d2f06a05220ef4",
+     "end_line": 33,
+     "start_line": 31
+    },
+    "E7": {
+     "path": "src/requests/sessions.py",
+     "symbol": "SessionRedirectMixin.rebuild_method",
+     "chunk_id": "ch:246c73cd673a7654eb5cb782",
+     "end_line": 353,
+     "start_line": 333
+    },
+    "E8": {
+     "path": "src/requests/exceptions.py",
+     "symbol": "JSONDecodeError.__reduce__",
+     "chunk_id": "ch:7a2a029658022cb037a22de7",
+     "end_line": 52,
+     "start_line": 44
+    },
+    "E9": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:a9f7337ac92aedc835d19020",
+     "end_line": 184,
+     "start_line": 155
+    }
+   },
+   "quality": {
+    "claims": 5,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 5,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "config-deploy",
+   "title": "Configuration and Documentation",
+   "position": 3,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter explores the configuration, packaging files, and documentation structure of the requests library.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Configuration and Documentation",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon the overview of the requests library established in Overview of Requests, this chapter explains how requests is configured, documented, and maintained using workflows."
+     },
+     {
+      "type": "heading",
+      "text": "Build and Coverage Configuration Files",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project relies on standard configuration files to manage packaging and test coverage. Specifically, MANIFEST.in includes core documentation and requirements files alongside test directories [E1]."
+     },
+     {
+      "type": "code",
+      "language": "text",
+      "code": "include README.md LICENSE NOTICE HISTORY.md requirements-dev.txt\nrecursive-include tests *.py\nrecursive-include tests/certs *",
+      "path": "MANIFEST.in",
+      "start_line": 1,
+      "caption": "MANIFEST.in configuration"
+     },
+     {
+      "type": "paragraph",
+      "text": "Additionally, test coverage configuration is tracked via .coveragerc, which omits internal vendor packages from the run metrics [E2]."
+     },
+     {
+      "type": "code",
+      "language": "ini",
+      "code": "[run]\nomit = requests/packages/*",
+      "path": ".coveragerc",
+      "start_line": 1,
+      "caption": "Coverage configuration"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show how documentation is structured within the docs directory."
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show which settings and workflows in .github manage project quality and packaging."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:4738739d58d06010",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "MANIFEST.in includes README.md, LICENSE, NOTICE, HISTORY.md, requirements-dev.txt, and test directories.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:3262a31c3968889f11469ebb"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": ".coveragerc omits requests/packages/* from test run metrics.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:d5d984a70bdff8ee2fb6b826"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "MANIFEST.in",
+     "symbol": null,
+     "chunk_id": "ch:3262a31c3968889f11469ebb",
+     "end_line": 3,
+     "start_line": 1
+    },
+    "E2": {
+     "path": ".coveragerc",
+     "symbol": null,
+     "chunk_id": "ch:d5d984a70bdff8ee2fb6b826",
+     "end_line": 2,
+     "start_line": 1
+    }
+   },
+   "quality": {
+    "claims": 2,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 1,
+    "unsupported": 0,
+    "grounded_ratio": 0.5,
+    "strongly_inferred": 1
+   }
+  }
+ ]
+}

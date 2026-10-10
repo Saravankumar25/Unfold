@@ -1,0 +1,41 @@
+{
+ "name": "fastapi_rag",
+ "source": "evals/fixtures/repos/fastapi_rag",
+ "commit_sha": null,
+ "date": "2026-10-10",
+ "job": {
+  "status": "succeeded",
+  "stage": "READY",
+  "error_code": null
+ },
+ "attempts": 1,
+ "wall_seconds": 326.6,
+ "tokens": {
+  "input": 20951,
+  "output": 6940,
+  "calls": 7,
+  "by_purpose": {
+   "guide.plan": {
+    "calls": 1,
+    "input_tokens": 1613,
+    "output_tokens": 936
+   },
+   "guide.section": {
+    "calls": 6,
+    "input_tokens": 19338,
+    "output_tokens": 6004
+   }
+  },
+  "by_model": {
+   "gemini-3.5-flash-lite": {
+    "calls": 7,
+    "input_tokens": 20951,
+    "output_tokens": 6940
+   }
+  }
+ },
+ "retries": 0,
+ "rate_limited": 0,
+ "cost_usd_estimate": null,
+ "cost_note": "not measured: no price table in the repo; free-tier keys bill $0"
+}

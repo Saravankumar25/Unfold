@@ -1,0 +1,38 @@
+{
+  "reviewer": null,
+  "date": null,
+  "chapters": [
+    {
+      "key": "overview",
+      "title": "Overview of Requests",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "public-api",
+      "title": "Public API and Adapters",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "internals",
+      "title": "Internal Utilities and Structure",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    },
+    {
+      "key": "config-deploy",
+      "title": "Configuration and Documentation",
+      "readability": null,
+      "judged_depth": null,
+      "judged_specificity": null,
+      "notes": ""
+    }
+  ]
+}
