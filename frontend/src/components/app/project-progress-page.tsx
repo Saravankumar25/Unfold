@@ -12,7 +12,9 @@ import { ThemeToggle } from "./theme-toggle";
 function ProgressContent() {
   const { project, reload } = useProject();
   const progress = useProjectProgress(project!.id, project!.job);
-  useEffect(() => { if (progress.outcome !== "running" && project!.job.status === "running") reload(); }, [progress.outcome, project, reload]);
+  const settled = project!.job.status === "succeeded" || project!.job.status === "failed";
+  // The project was loaded while the job was queued or running: refresh it once polling has seen the end, so the guide and chat gates open.
+  useEffect(() => { if (progress.outcome !== "running" && !settled) reload(); }, [progress.outcome, settled, reload]);
   const percent = progress.total ? Math.round((progress.index / progress.total) * 100) : 0;
   const ready = project!.job.status === "succeeded" || progress.outcome === "ready";
   const failed = project!.job.status === "failed" || progress.outcome === "failed";

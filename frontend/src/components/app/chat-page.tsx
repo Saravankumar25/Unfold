@@ -36,6 +36,12 @@ function Conversation() {
     chats.mutate((current) => [{ id, project_id: project!.id, title: null, message_count: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...(current ?? [])]);
   });
   const slow = useSlow(thread.pending);
+  const wasPending = useRef(false);
+  const reloadChats = chats.reload;
+  useEffect(() => {
+    if (wasPending.current && !thread.pending) reloadChats(); // the thread list shows the new title and count
+    wasPending.current = thread.pending;
+  }, [thread.pending, reloadChats]);
   const [autoSelected, setAutoSelected] = useState(false);
   if (!autoSelected && selected === null && chats.data?.length) {
     const first = chats.data[0]!.id;
