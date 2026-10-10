@@ -222,11 +222,11 @@ Writer: retrieval (guide mode) → compile (≈9k tokens) → BALANCED structure
 
 ## 18. Chat (`unfold.chat`)
 
-`ChatService.answer(chat_id, text, mode) -> AsyncIterator[ChatEvent]` (api process): load session (recent 8 messages + summary + learning state) → deterministic intent/plan → chat-mode retrieval + relevant guide section summaries → sufficiency → if insufficient and intent ∈ {workflow, architecture, failure_analysis, implementation_location} → chat investigator Deep Agent (P0, ≤6 LLM calls) → compile → BALANCED stream (modes `default|simpler|deeper|quiz|interview`) → citation grounding (unknown `E#` stripped; evidence attached) → persist → learning state update → compaction (FAST) when > 16 unsummarized messages. Events: `chat.started, retrieval.started, retrieval.completed, agent.started, agent.tool, agent.completed, response.delta, response.evidence, response.completed, error`.
+`chat.answer.generate_answer(llm, retriever, AnswerRequest, context_tokens, transport) -> AsyncIterator[ChatEvent]` is the single implementation (ADR 0004). Steps: scan the question (logged, never refused) -> `HybridRetriever.search(query, CHAT)` (a short follow-up is searched with the previous question) -> `compile_context` (facts, evidence labelled `E#`, mode instructions `default|simpler|deeper|quiz|interview`) -> user message = context + fenced guide-section summary + fenced history (last `CHAT_HISTORY_MESSAGES`) + fenced question, all redacted -> `llm.stream` (BALANCED, P0, accounted under `chat:<id>` with `CHAT_LLM_CALL_BUDGET`/`CHAT_LLM_TOKEN_BUDGET`) -> redact output, drop unknown `[E#]`, grade each cited sentence with `guide.generate.grade_claims`, renumber citations to `[E1]..[Ek]` and return exactly the cited `EvidenceRef`s. No evidence -> no model call and a fixed "could not find" reply. Events: `chat.started, retrieval.completed, response.delta*, response.evidence, response.completed{message_id, seq, text, evidence, grounding, timings}, error`. `chat.service.run_turn` loads history/facts/section, then persists user and answer messages (`chat_messages`, one transaction, seq under the chat row lock) only after generation succeeded. `stream=false` collects the events into `ChatReplyOut`; `stream=true` writes them as NDJSON.
 
 ## 19. Exports (`unfold.exports`)
 
-Jinja2 templates render the **same structured content** (blocks, claim badges, diagrams as Mermaid via a vendored `mermaid.min.js`) → Playwright Chromium `page.pdf(A4, print_background)` in the worker `export` queue → object store `projects/{id}/exports/{artifact_id}.pdf` → artifact `ready`. All page network requests are blocked except the inlined content.
+`exports.service.run_export(rt, export_id, renderer)` is the body of the worker task `export <id>` (ADR 0005). Guide: `GuideSectionRow`/`GuidePlanRow`/`DiagramRow` -> `render_guide_html` (Jinja2, same structured blocks, claim badges, Mermaid via the vendored bundle) -> Playwright Chromium `page.pdf(A4)`, or `render_guide_markdown`. Chat: `ChatMessageRow` -> `render_chat_html` / `render_chat_markdown`. Output goes to `projects/{id}/exports/{artifact_id}.{pdf|md}` through `BlobStore.put_bytes`, then the artifact row is `ready` with size. Chromium runs offline with every request except `data:` aborted and a CSP allowing only the hashed Mermaid script. Kinds: `guide_pdf, guide_md, chat_pdf, chat_md`.
 
 ## 20. HTTP API (`unfold.api`, prefix `/api/v1`)
 
@@ -240,26 +240,26 @@ Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no he
 | `POST /projects/github` `{url, technical_level, instruction?}` | 202 `{project_id, job_id}` |
 | `POST /projects/zip` multipart `file, technical_level, instruction?` | 202 |
 | `GET /projects/{id}` | project + job status |
-| `DELETE /projects/{id}` | 202, cleanup queued |
-| `GET /projects/{id}/events` | SSE `stage`/`ready`/`failed` (replay via `Last-Event-ID`) |
+| `DELETE /projects/{id}` | 202; `deleting_at` marker written, cleanup enqueued, project invisible at once |
+| `GET /projects/{id}/progress?after=<seq>` | events after the cursor + durable job (short poll) |
 | `GET /projects/{id}/guide` | plan + sections |
 | `GET /projects/{id}/guide/sections/{key}` | section + claims |
-| `POST /projects/{id}/guide/sections/{key}/simplify` · `/deepen` | variant |
 | `GET /projects/{id}/evidence/{chunk_id}` | redacted evidence text, path, lines |
 | `GET /projects/{id}/architecture` | graph overview |
-| `GET /projects/{id}/diagrams` · `/diagrams/{diagram_id}` | DiagramSpec + mermaid |
+| `GET /projects/{id}/diagrams/{diagram_id}` | DiagramSpec + mermaid |
 | `POST /projects/{id}/chats` · `GET /projects/{id}/chats` | chat sessions |
 | `GET /chats/{chat_id}` | messages |
-| `POST /chats/{chat_id}/messages` `{text, mode}` | SSE stream of ChatEvents |
-| `POST /projects/{id}/exports/guide` · `POST /chats/{chat_id}/exports` | 202 `{artifact_id}` |
-| `GET /exports/{artifact_id}` · `/exports/{artifact_id}/download` | status · PDF |
+| `POST /chats/{chat_id}/messages?stream=false\|true` `{text, mode, section_key?}` | `ChatReplyOut` JSON, or NDJSON `ChatEvent` lines |
+| `POST /projects/{id}/exports/guide?format=pdf\|md` · `POST /chats/{chat_id}/exports?format=pdf\|md` | 202 `{artifact_id}` |
+| `GET /exports/{artifact_id}` · `/exports/{artifact_id}/download` | status · file (proxied, or 302 to a presigned URL) |
+| `GET /projects/{id}/artifacts` | the project's exports |
 | `GET /health` · `GET /ready` | liveness · readiness |
 
-Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (Redis token bucket per session): project creation 10/h, chat 30/min.
+Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (fixed windows behind `RateLimiter`): project creation 10/h per session, chat 30/min per session, exports 10/h per project; per-IP and global ceilings on session and project creation.
 
 ## 21. Cleanup & recovery (`unfold.cleanup`)
 
-arq cron every 10 min: expired sessions → `deleting` → object prefix delete → Qdrant filter delete → Neo4j `delete_project` → Redis keys → Postgres delete (cascade). Idempotent; failures leave `deleting` for the next run. Stale jobs (running, heartbeat > 5 min; or queued > 2 min without start) → re-enqueue if `attempt < 3` else `FAILED_ANALYSIS`. `DELETE /projects/{id}` enqueues the same per-project routine.
+`cleanup.sweeper.sweep(rt, queue=None)` (ADR 0006) is the one idempotent entry point: expired sessions and projects are marked (`projects.deleting_at`), every marked project goes through `cleanup_project` (blobs, IR cache, Qdrant points, Neo4j nodes, progress, project rate-limit and usage keys, then the project row and its cascade), emptied sessions are removed with their session rate-limit keys, stale analysis jobs (running with an old heartbeat, or queued) and exports pending > 5 min are re-enqueued, expired artifacts are deleted. A project whose analysis worker has a fresh heartbeat is deferred to the next pass. Callers: API start-up, the API's `SWEEP_INTERVAL_SECONDS` loop, `python -m unfold.worker.run sweep`. `DELETE /projects/{id}` sets the marker first, so a lost enqueue loses nothing.
 
 ## 22. Observability (`unfold.observability`)
 

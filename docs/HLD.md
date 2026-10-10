@@ -1,129 +1,146 @@
 # Unfold — High-Level Design (HLD)
 
-> Status: **implemented design** — this document describes the system as built. When code and this document disagree, fix one of them in the same change.
-> Requirements: [`specs/PRD.md`](specs/PRD.md) · Engineering spec: [`specs/ESD.md`](specs/ESD.md) · Original architecture intent: [`specs/architecture.md`](specs/architecture.md), [`specs/AI_infrastructure.md`](specs/AI_infrastructure.md)
-> Low-level design: [`LLD.md`](LLD.md)
+> Status: **as built after phases 1-3** (2026-10-10). When code and this document disagree, fix one of them in the same change.
+> Decisions: [`adr/`](adr/) · Low-level design: [`LLD.md`](LLD.md) (sections 14-15 predate ADRs 0001 and 0003 and describe a LangGraph/Deep Agents design that was dropped) · AWS target: [`infra/strategy.md`](infra/strategy.md) (phase 4, nothing deployed)
+> Requirements: [`specs/PRD.md`](specs/PRD.md) · [`specs/ESD.md`](specs/ESD.md)
 
 ---
 
 ## 1. What the system does
 
-A user submits a **public GitHub URL or a ZIP**, a technical level (beginner / intermediate / experienced) and an optional focus instruction. Unfold statically analyses the repository (never executing it), builds a **project knowledge system** (Project IR + Neo4j graph + BM25 + Qdrant + hierarchical summaries + evidence ledger), uses LangGraph + Deep Agents over a Gemini-backed LLM Gateway to plan and write a **45–60 minute Project Guide** with diagrams and verified claims, and offers **grounded Project Chat** on top of the same knowledge. Both can be exported as PDF. No sign-in; everything expires after a TTL.
+A user submits a **public GitHub URL or a ZIP**, a technical level and an optional focus instruction. Unfold
+statically analyses the repository (never executing it) into a **project knowledge system**: Project IR, Neo4j graph,
+BM25 index, Qdrant vectors, chunked evidence in Postgres. A fixed pipeline plans and writes a **chaptered guide** with
+deterministic diagrams and graded claims. On top of the same knowledge the user can **chat** with cited, graded
+answers and **export** the guide or a chat as PDF or Markdown. There is no sign-in; everything expires.
 
-## 2. Deployable units (modular monolith + workers)
+## 2. Deployable units
 
 ```mermaid
 flowchart LR
   U[Browser] --> WEB[web · Next.js]
   WEB -- /api/* same-origin proxy --> API[api · FastAPI]
   API --> PG[(PostgreSQL)]
-  API --> RD[(Redis)]
   API --> OBJ[(MinIO / S3)]
-  API -- arq job --> RD
-  RD --> WK[worker · arq + LangGraph]
-  WK --> PG & RD & OBJ
-  WK --> NEO[(Neo4j)]
-  WK --> QD[(Qdrant)]
+  API --> RD[(Redis)]
+  API --> NEO[(Neo4j)] & QD[(Qdrant)]
+  API -- JobQueue port --> WK[one-shot worker processes]
+  WK --> PG & OBJ & RD & NEO & QD
   WK --> GEM[Gemini API]
-  API --> NEO & QD
-  API -. chat LLM calls .-> GEM
+  API -. chat answers .-> GEM
 ```
 
-| Unit | Image | Responsibility |
-|---|---|---|
-| `web` | `unfold-web` | Landing, progress, guide reader, chat, export buttons. No analysis logic. Proxies `/api/*` to `api` so the session cookie is first-party. |
-| `api` | `unfold-api` | Validation, sessions, project/job creation, guide/chat/diagram reads, chat answering (streamed, P0), SSE progress, export requests. Never runs analysis inline. |
-| `worker` | `unfold-worker` (same Python package as api + Chromium + model cache) | Queues: `analysis` (the LangGraph pipeline), `export` (PDF), cron `maintenance` (TTL cleanup, stale-job recovery). |
-| `postgres` | postgres:16 | Application truth + LangGraph checkpoints. |
-| `redis` | redis:7 | arq queues, progress event streams, rate-limit windows, circuit/key health, LLM response cache, locks. |
-| `neo4j` | neo4j:5 community | Relationship truth (project knowledge graph). |
-| `qdrant` | qdrant | Dense vector index (one shared collection, `project_id` filter). |
-| `minio` | minio | ZIP uploads, IR snapshots, BM25 index artifacts, PDFs. |
+| Unit | Responsibility |
+|---|---|
+| `web` | Landing, progress (polled), guide reader, architecture, chat, exports. No analysis logic; proxies `/api/*` so the session cookie is first-party. |
+| `api` | Sessions, project creation and deletion, guide/diagram/evidence/progress reads, chat (retrieval + model call in this process), export requests and downloads, an in-process sweeper loop. Never analyses or renders PDFs inline. |
+| worker | **No long-lived loop.** `python -m unfold.worker.run <task> <ref>` runs one job and exits: `analysis <job_id>`, `export <export_id>`, `cleanup <project_id>`, `sweep`. Locally `SubprocessJobQueue` starts one process per job (bounded; retries on exit 75 or a crash). |
+| `postgres` | Application truth: sessions, projects, jobs, stage checkpoints, progress events, chunks, guide, diagrams, chats, artifacts. |
+| `redis` | Rate-limit windows (behind `RateLimiter`), LLM provider budgets/circuit/key health and per-job/per-chat usage, LLM response and embedding caches. No durable data. |
+| `neo4j` / `qdrant` | Relationship graph; dense vectors (one collection, `project_id` filter). Both optional per job: failure marks the job `degraded`, retrieval adapts. |
+| `minio` | ZIP uploads, IR snapshots, BM25 artifacts, export files (`projects/{id}/...`). |
 
-Chat runs in the **api** process (not the worker) because it is user-blocking (P0) and needs first-token latency independent of analysis queues; it uses the same library modules (retrieval, context, LLM gateway, agents) — there is one implementation of each, imported by both processes.
+Infrastructure is reached through four ports in `unfold/ports.py` (`BlobStore`, `JobQueue`, `RateLimiter`,
+`ProgressStore`; ADR 0002). `JobQueue` has `enqueue_analysis`, `enqueue_project_cleanup`, `enqueue_export`.
 
 ## 3. Logical modules (Python package `unfold`)
 
 ```text
-core            config, errors (envelope + codes), logging, ids, security primitives
-domain          enums (states, levels, capabilities, claim status), shared pydantic models
-persistence     postgres (SQLAlchemy async + Alembic), redis, neo4j, qdrant, object_store
-ingestion       github fetch (archive download), zip extraction with hard limits
-security        secret detection/redaction, prompt-injection scanner, trust labelling
-repo_intel      inventory + importance tiers, language/framework detection, analyzers
-project_ir      ProjectIR schema + builder (stable ids, provenance)
-graph           Neo4j builder (idempotent upserts), graph queries, community detection
-indexing        code-aware chunker, BM25 index (bm25s), dense indexer (fastembed → Qdrant)
-retrieval       planner, lexical/dense/graph/structural retrievers, RRF, reranker, expansion, sufficiency
-context         Context Compiler + token budgeter
-llm             LLMGateway, providers (gemini, groq), router, key pool, budgets, circuit breaker, LangChain adapter
-agents          Deep Agent investigators + read-only project tools + repository backend
-orchestration   LangGraph analysis graph, state, progress publisher
-guide           planner, section writer, claim verifier, consistency pass
-diagrams        DiagramSpec builders (deterministic from IR/graph) + Mermaid rendering
-chat            chat pipeline, memory/compaction, learning state
-exports         HTML templates + Chromium PDF rendering
-evaluation      metrics, golden dataset runner (offline) and LLM-judged evals (online)
-observability   OpenTelemetry setup, spans, metrics helpers
-cleanup         TTL cleanup + stale-job recovery
-api             FastAPI app, routes, dependencies, middleware, SSE
-worker          arq WorkerSettings + task entrypoints
+core            config, errors (envelope + codes), logging, ids
+domain          enums (stages, claim status, artifact kinds), shared models
+ports           BlobStore, JobQueue, RateLimiter, ProgressStore, rate-limit key helpers
+persistence     postgres (SQLAlchemy async + Alembic), redis, neo4j, qdrant, object_store adapters
+ingestion       github archive fetch, zip extraction with hard limits
+security        secret redaction, prompt-injection scanner, untrusted-data fence
+repo_intel      inventory, language/framework detection, analyzers (ast + tree-sitter)
+project_ir      ProjectIR schema + builder
+graph           Neo4j builder, queries, community detection
+indexing        chunker, BM25, dense index, embeddings, reranker
+retrieval       planner, lexical/dense/graph/structural retrievers, RRF, sufficiency, expansion
+context         context compiler + token budget (redact -> fence -> label evidence)
+llm             gateway, providers (gemini, groq), router, key pool, budgets, circuit breaker
+orchestration   analysis pipeline (plain async stage groups + checkpoints), progress
+guide           planner, section writer, deterministic claim grading
+diagrams        DiagramSpec builders + Mermaid
+chat            answer generator (retrieve, compile, stream, cite, grade), turn persistence
+exports         HTML templates, Chromium PDF, Markdown, export job
+cleanup         cleanup_project, sweeper
+evaluation      offline evals, scripted model, in-memory stores (test tooling, not imported by runtime code)
+agents          WorkflowFinding contracts only (no agent runtime; ADR 0001, 0009)
+api / worker    the two composition roots
 ```
 
-Dependency rule (enforced by `tests/unit/test_architecture.py`): `domain`/`core` import nothing internal except each other; provider SDKs (`google.genai`, `groq`) are imported **only** under `unfold.llm.providers`; `api` and `worker` are the only composition roots.
+Dependency rules (enforced by `tests/unit/test_architecture.py`): `core`/`domain` are leaves; provider SDKs only under
+`llm.providers`; `redis`/`minio`/`arq`/`boto3` only in adapters (documented exceptions in ADR 0002); only `api` and
+`worker` are composition roots; production code never imports `evaluation`.
 
-## 4. End-to-end analysis flow
+## 4. Flows
+
+### Analysis (ADR 0003)
 
 ```mermaid
 sequenceDiagram
   participant W as web
   participant A as api
   participant P as Postgres
-  participant R as Redis
-  participant K as worker (LangGraph)
-  W->>A: POST /projects/github {url, level, focus}
-  A->>P: tx: session? + project + analysis_job(RECEIVED)
-  A->>R: enqueue run_analysis(job_id) (after commit)
-  A-->>W: 202 {project_id}
-  W->>A: GET /projects/{id}/events (SSE, replayable)
-  K->>K: validate → ingest → security scan → inventory → structural analysis
-  K->>P: IR snapshot ref, source files, chunks
-  K->>NEO: graph (deterministic, then inferred)
-  K->>QD: dense vectors ; K->>OBJ: BM25 artifact
-  K->>GEM: summaries, investigations (Deep Agents), plan, sections, verification
-  K->>P: guide sections, diagrams, claims
-  K->>R: progress events (XADD) at every stage
-  A-->>W: stage events … READY
+  participant K as worker (analysis)
+  W->>A: POST /projects/github|zip
+  A->>P: project + job (queued), progress event
+  A-->>W: 202 {project_id, job_id}
+  A->>K: JobQueue.enqueue_analysis
+  W->>A: GET /projects/{id}/progress?after=seq (polled, backoff)
+  K->>K: acquire, inventory, analyse, IR, graph, BM25, vectors, subsystems, plan, sections, grade, diagrams
+  K->>P: stage checkpoint after each group; progress events
+  A-->>W: events ... ready
 ```
 
-State machine (ESD §5) is implemented verbatim in `domain.enums.JobStage` with the failure states; a stage only advances after its durable writes commit. LangGraph checkpoints (Postgres) make the pipeline resumable: a crashed or retried job resumes from the last completed node.
+A rerun skips finished groups, so no stage duplicates rows. Limits: wall clock, per-job model-call and token budget,
+stage retry cap with a failed (dead-letter) state. The hierarchy summaries, workflow investigation and LangGraph
+checkpoints of the original design do not exist.
+
+### Chat (ADR 0004)
+`POST /projects/{id}/chats` -> `POST /chats/{id}/messages` (`stream=false` JSON, or `stream=true` NDJSON): history and
+project facts -> hybrid retrieval -> fenced context -> gateway stream (per-chat budget, P0) -> unknown citations
+dropped, sentences graded against cited text, citations renumbered -> user and answer persisted together.
+
+### Export (ADR 0005)
+`POST .../exports/...?format=pdf|md` -> artifact row + `enqueue_export` -> worker renders -> `BlobStore` ->
+`GET /exports/{id}` (poll) -> `GET /exports/{id}/download` (proxied or presigned). `GET /projects/{id}/artifacts` lists.
+
+### Delete and expiry (ADR 0006)
+`DELETE /projects/{id}` writes `deleting_at` and enqueues; the sweeper (API loop, `worker.run sweep`, start-up) finishes
+every marked project, expires sessions, projects and exports, restarts stale jobs and exports.
 
 ## 5. Key design decisions (as built)
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | **Gemini-only V1, provider-agnostic gateway.** 4 Gemini keys = credentials, not quota multipliers; capacity is budgeted per *model* in Redis. Fallback is across Gemini model tiers (reasoning → balanced → fast). Groq adapter exists but is disabled without keys. | User supplies 4 Gemini keys only (2026-09-22). PRD §17 forbids assuming keys multiply quota. |
-| D2 | **arq** (asyncio Redis queue) for jobs; LangGraph Postgres checkpointer for durable progress. | Async-native, tiny, Redis already required; LangGraph gives node-level resume. |
-| D3 | **Source files and chunks persisted in Postgres** (per project, TTL-cleaned). | Agents/chat need read access to the repo after the worker that ingested it is gone; makes evidence resolution a primary-key lookup. |
-| D4 | **fastembed (ONNX, CPU)** for embeddings (`BAAI/bge-small-en-v1.5`, 384d) and cross-encoder (`Xenova/ms-marco-MiniLM-L-6-v2`); names configurable, stored in collection metadata. | No torch, small images, CPU-only per ESD §19; saves Gemini quota. |
-| D5 | **tree-sitter-language-pack** for multi-language structure/imports; Python `ast` for deeper Python semantics (routes, models, calls). Grammars prefetched into the image. | Broad coverage without executing code. |
-| D6 | **Deep Agents = LangChain `deepagents`**, model = `GatewayChatModel` (LangChain adapter over our gateway), filesystem = read-only `ProjectRepositoryBackend` mounted at `/repo/` + in-state scratch; no `execute`. | Keeps budgets, circuit breakers, redaction and tracing on every agent call; agents can browse the repo but never touch disk or shell. |
-| D7 | **Deterministic-first verification**: claims cite evidence ids; a lexical/structural verifier checks support; only unresolved claims go to one batched LLM verification call per section. | Free-tier quota. "Do not ask a model to infer what the system can determine directly." |
-| D8 | **Diagrams are DiagramSpec built from IR/graph**, never LLM-emitted SVG. Web renders React Flow; PDF renders Mermaid generated from the same spec. | ESD §22. One source of truth. |
-| D9 | **Session = HttpOnly cookie** holding a random token (only its SHA-256 is stored). Every project/chat route checks ownership. | No sign-in, yet projects are not enumerable by id. |
-| D10 | **SSE from Redis Streams** (`XADD`/`XREAD`, `Last-Event-ID`). | Replayable progress after reconnect; progress reflects real stages. |
+| D1 | **Gemini-only V1, provider-agnostic gateway.** Keys are credentials, not quota multipliers; capacity is budgeted per model in Redis; fallback across model tiers. Groq adapter present, off without keys. | Free-tier quota reality. |
+| D2 | **One-shot workers + stage checkpoints in Postgres**; no queue server, no LangGraph (ADR 0001, 0003). | Fits scale-to-zero task launchers; resume semantics we own. |
+| D3 | **Source files and chunks persisted in Postgres** (TTL-cleaned). | Chat and exports need the evidence after the ingesting worker is gone. |
+| D4 | **fastembed (ONNX, CPU)** for embeddings and cross-encoder. | No torch, small images, saves model quota. |
+| D5 | **tree-sitter + Python ast**, never executing repository code. | Broad coverage, safe. |
+| D6 | **No agent runtime.** Retrieval-then-write for guide and chat (ADR 0009). | Evals show no gap an agent would close; cost per turn is bounded. |
+| D7 | **Deterministic claim grading**: a claim is VERIFIED only when it cites real evidence and its identifiers occur in the cited text; the model never grades itself. | Free-tier quota; honest labels. |
+| D8 | **Diagrams are DiagramSpecs built from IR/graph**; web renders React Flow, PDF renders Mermaid from the same spec. | One source of truth. |
+| D9 | **Session = HttpOnly cookie** (SHA-256 stored); every route is owner-scoped, foreign ids are 404. | No sign-in, ids not enumerable. |
+| D10 | **Progress by short polling** over `job_events` with a cursor; the response also carries the durable job. | Replayable, no persistent connection (ADR 0003). |
+| D11 | **Chat transport is a thin wrapper** over one generator; JSON is the default (ADR 0004). | Runtime may not support streaming. |
+| D12 | **Deletion is a durable marker + idempotent sweeper**, never TTL alone (ADR 0006). | Restart-safe cleanup. |
 
-## 6. Quality attributes → mechanisms
+## 6. Quality attributes -> mechanisms
 
 | Attribute | Mechanism |
 |---|---|
-| Grounded | Evidence ids on every chunk/claim; claim verifier; UNKNOWN/INFERRED labels shown in UI. |
-| Secure | ZIP limits (size/count/depth/traversal/symlink/bomb ratio), GitHub host allow-list, no code execution, secret redaction before any LLM call, prompt-injection scanner + untrusted-data fencing, project-scoped tools, session ownership checks. |
-| Recoverable | LangGraph checkpoints, arq retries with job heartbeat, stale-job sweeper, per-section retry, provider circuit breakers. |
-| Observable | structlog JSON logs with request/project/job/trace ids; OpenTelemetry spans for API, stages, retrieval, LLM calls, agent tools; LLM usage accounting in Redis + stage metrics. |
-| Evaluable | Offline golden benchmark (retrieval + IR + graph + security) as a quality gate; online DeepEval suite over Gemini (bounded). |
-| Portable | All infra via env config; S3-compatible object store; no cloud SDKs in app code. |
+| Grounded | Evidence ids on chunks and claims; deterministic grading; UNSUPPORTED/INFERRED shown; chat returns graded evidence. |
+| Secure | ZIP limits, GitHub host allow-list, no code execution, secret redaction before any prompt, injection scanner + fenced untrusted data + policy in every system prompt, owner-scoped routes, per-session and per-IP limits, production config guard. CSP nonce is a follow-up. |
+| Recoverable | Stage checkpoints, heartbeats, requeue of stale jobs and exports, kill/retry-safe exports, supervisor give-up recording. |
+| Observable | structlog JSON with request/project/job ids; spans for API, stages, retrieval, LLM; chat first-token histogram; per-job and per-chat LLM usage. |
+| Evaluable | Offline evals gate (ADR 0007): groundedness, retrieval, graph, injection, with `evals/baseline.json`. |
+| Portable | Ports for blob, queue, limiter, progress; S3-compatible object store; no cloud SDKs in application code. |
 
-## 7. Out of scope for this phase
+## 7. Not built (do not assume)
 
-GCP topology, Terraform, CI/CD workflows (explicitly deferred by the user), private repos, accounts, cross-session memory.
+Deep Agents / LangGraph / workflow investigation and sequence diagrams from investigations; section "simpler/deeper"
+variants; chat summary compaction and learning state; online (LLM-judged) evals; private repositories, accounts,
+cross-session memory; any AWS resource (phase 4: ports have local adapters only); CSP nonce for the web app.
