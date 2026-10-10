@@ -38,6 +38,7 @@ from typing import Any
 from unfold.core.errors import ErrorCode, UnfoldError
 from unfold.core.ids import entity_id
 from unfold.core.logging import get_logger
+from unfold.domain.enums import Proof
 from unfold.domain.models import Provenance
 from unfold.project_ir.schema import (
     AIComponentIR,
@@ -58,6 +59,7 @@ from unfold.project_ir.schema import (
     SchemaIR,
     ServiceIR,
     SymbolIR,
+    UnresolvedCallIR,
 )
 from unfold.repo_intel.models import (
     Binding,
@@ -83,6 +85,9 @@ _UNRESOLVED_CALL_CONFIDENCE = 0.7  # resolved by the analyzer but no confidence 
 _FALLBACK_CONFIDENCE = 0.6
 _NAME_MATCH_CONFIDENCE = 0.7
 _ROOT_MATCH_CONFIDENCE = 0.8
+MAX_UNRESOLVED_CALLS = 5000
+# Callees that dispatch dynamically: recorded as unresolved even when no project symbol shares the name.
+DYNAMIC_CALLEES = frozenset({"getattr", "import_module", "__import__", "eval", "exec"})
 
 CODE_LANGUAGES = frozenset(
     {
@@ -302,6 +307,7 @@ class _Builder:
         self.frameworks: dict[str, FrameworkInfo] = {}
         self.dependencies: dict[str, DependencyIR] = {}
         self.rels: dict[tuple[str, str, str], RelationshipIR] = {}
+        self.unresolved: list[UnresolvedCallIR] = []
         self.dropped_self_loops = 0
         self._schema_lookup: dict[str, list[SchemaIR]] = defaultdict(list)  # normalized name/table
         self._deps_by_name: dict[str, list[DependencyIR]] = defaultdict(list)
@@ -336,6 +342,9 @@ class _Builder:
             type=rel_type,
             provenance=_prov(analyzer, confidence),
             properties=props,
+            proof=Proof.HEURISTIC
+            if rel_type in ("CALLS", "INHERITS") or analyzer in (RESOLVE, LINK, DETECT)
+            else Proof.STATIC,
         )
 
     def eid(self, kind: str, path: str, qualname: str = "") -> str:
@@ -489,6 +498,8 @@ class _Builder:
     # --- imports / calls / inheritance ---------------------------------------------------------------------
 
     def build_code_relationships(self) -> None:
+        # Unresolved calls that matter: the callee name is a project symbol (receiver type unknown) or dynamic.
+        known = {s.qualname.rsplit(".", 1)[-1] for s in self.symbols.values()} | DYNAMIC_CALLEES
         for path, fa in self.fa.items():
             file_id = self.files[path].id
             for imp in sorted(fa.imports, key=lambda i: (i.line, i.module)):
@@ -513,6 +524,11 @@ class _Builder:
                     analyzer, confidence = RESOLVE, _FALLBACK_CONFIDENCE
                 if target is not None:
                     self.rel("CALLS", source, target.id, analyzer, confidence, line=call.line)
+                elif call.parts and call.parts[-1] in known and len(self.unresolved) < MAX_UNRESOLVED_CALLS:
+                    name = ".".join(call.parts)
+                    self.unresolved.append(
+                        UnresolvedCallIR(source_id=source, name=name, path=path, line=call.line)
+                    )
             for sym in self.sym_by_path.get(path, {}).values():
                 for base in sym.bases:
                     parent = self.resolve_ref(path, base.split("."))
@@ -1188,6 +1204,10 @@ class _Builder:
                 self.dependencies.values(), key=lambda x: (x.manifest_path, x.ecosystem, x.name, x.id)
             ),
             relationships=relationships,
+            unresolved_calls=sorted(
+                (u for u in self.unresolved if u.source_id in entities),
+                key=lambda u: (u.path, u.line, u.name, u.source_id),
+            ),
         )
         ir.stats = self.stats(ir, dangling)
         log.info(

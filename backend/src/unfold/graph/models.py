@@ -141,6 +141,7 @@ class GraphEdge(BaseModel):
     type: str
     provenance: str | None = None  # deterministic | inferred
     confidence: float | None = None
+    proof: str | None = None  # static | heuristic | inferred (None on edges written before 3.2)
 
 
 class Neighborhood(BaseModel):

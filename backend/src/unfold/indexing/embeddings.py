@@ -26,20 +26,32 @@ log = get_logger(__name__)
 EMBED_BATCH = 64
 
 
+def length_order(texts: Sequence[str]) -> list[int]:
+    """Indices that put texts of similar length in the same batch: ONNX pads each batch to its longest text, so
+    one long text among short ones multiplies the work (scores are unaffected, padding is masked)."""
+    return sorted(range(len(texts)), key=lambda i: len(texts[i]))
+
+
 class Embedder:
     def __init__(
-        self, model_name: str, cache_dir: str | None = None, *, batch_size: int = EMBED_BATCH
+        self,
+        model_name: str,
+        cache_dir: str | None = None,
+        *,
+        batch_size: int = EMBED_BATCH,
+        threads: int | None = None,
     ) -> None:
         self.model_name = model_name
         self.cache_dir = cache_dir
         self.batch_size = batch_size
+        self.threads = threads
         self._model: Any = None
         self._dimension: int | None = None
         self._lock = threading.Lock()
 
     @classmethod
     def from_settings(cls, settings: Settings) -> Embedder:
-        return cls(settings.embedding_model, settings.model_cache_dir)
+        return cls(settings.embedding_model, settings.model_cache_dir, threads=settings.model_threads or None)
 
     def _load(self) -> Any:
         if self._model is not None:
@@ -49,7 +61,9 @@ class Embedder:
                 try:
                     from fastembed import TextEmbedding
 
-                    self._model = TextEmbedding(model_name=self.model_name, cache_dir=self.cache_dir)
+                    self._model = TextEmbedding(
+                        model_name=self.model_name, cache_dir=self.cache_dir, threads=self.threads
+                    )
                     self._dimension = int(self._model.embedding_size)
                 except Exception as exc:
                     raise ModelUnavailable(
@@ -79,7 +93,9 @@ class Embedder:
             if query:
                 vectors = list(model.query_embed(list(texts)))
             else:
-                vectors = list(model.passage_embed(list(texts), batch_size=self.batch_size))
+                order = length_order(texts)
+                got = list(model.passage_embed([texts[i] for i in order], batch_size=self.batch_size))
+                vectors = [v for _, v in sorted(zip(order, got, strict=True), key=lambda p: p[0])]
         except Exception as exc:
             raise ModelUnavailable(
                 f"Embedding inference failed: {type(exc).__name__}", detail={"model": self.model_name}

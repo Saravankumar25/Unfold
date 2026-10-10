@@ -12,7 +12,9 @@ import { ThemeToggle } from "./theme-toggle";
 function ProgressContent() {
   const { project, reload } = useProject();
   const progress = useProjectProgress(project!.id, project!.job);
-  useEffect(() => { if (progress.outcome !== "running" && project!.job.status === "running") reload(); }, [progress.outcome, project, reload]);
+  const settled = project!.job.status === "succeeded" || project!.job.status === "failed";
+  // The project was loaded while the job was queued or running: refresh it once polling has seen the end, so the guide and chat gates open.
+  useEffect(() => { if (progress.outcome !== "running" && !settled) reload(); }, [progress.outcome, settled, reload]);
   const percent = progress.total ? Math.round((progress.index / progress.total) * 100) : 0;
   const ready = project!.job.status === "succeeded" || progress.outcome === "ready";
   const failed = project!.job.status === "failed" || progress.outcome === "failed";
@@ -30,6 +32,7 @@ function ProgressContent() {
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             {["Repository secured", "System reconstructed", "Guide assembled"].map((label, i) => { const done = ready || percent >= [10, 55, 90][i]!; return <div key={label} className="flex items-center gap-2 text-[12px] text-ink-soft">{done ? <Check size={14} className="text-ok" /> : i === Math.floor(percent / 35) ? <LoaderCircle size={14} className="animate-spin text-signal" /> : <CircleDashed size={14} className="text-ink-faint" />}{label}</div>; })}
           </div>
+          {!ready && !failed && progress.connection !== "live" && progress.connection !== "connecting" ? <p role="status" className="mb-0 mt-5 border-t border-line pt-4 text-[12.5px] leading-relaxed text-ink-soft">{progress.connection === "waking" ? "Waking the service up. The first request after a quiet period can take a little longer." : progress.connection === "lost" ? "Can't reach the service. Still trying; this page will recover on its own." : "Connection interrupted. Retrying…"}</p> : null}
           {progress.detail ? <p className="mb-0 mt-5 border-t border-line pt-4 font-mono text-[11px] leading-relaxed text-ink-faint">{progress.detail}</p> : null}
         </div>
 

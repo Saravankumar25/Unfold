@@ -1,0 +1,362 @@
+{
+ "ch:248aba24c54db449fe9a6bf3": {
+  "path": ".github/workflows/run-tests.yml",
+  "start_line": 1,
+  "end_line": 1,
+  "text": ".github/workflows/run-tests.yml :: name\nname: Tests"
+ },
+ "ch:2f860d0aa06bbf8bc0910eea": {
+  "path": ".github/workflows/run-tests.yml",
+  "start_line": 3,
+  "end_line": 3,
+  "text": ".github/workflows/run-tests.yml :: on\non: [push, pull_request]"
+ },
+ "ch:ea4eef3b28d0382129234be0": {
+  "path": ".github/workflows/run-tests.yml",
+  "start_line": 5,
+  "end_line": 6,
+  "text": ".github/workflows/run-tests.yml :: permissions\npermissions:\n  contents: read"
+ },
+ "ch:ebe9cc7c5cb3d8340b535b71": {
+  "path": "pyproject.toml",
+  "start_line": 1,
+  "end_line": 5,
+  "text": "pyproject.toml :: tool.isort\n[tool.isort]\nprofile = \"black\"\nsrc_paths = [\"src/requests\", \"test\"]\nhonor_noqa = true\n"
+ },
+ "ch:910e42a2da9b734e70367902": {
+  "path": "src/requests/api.py",
+  "start_line": 14,
+  "end_line": 59,
+  "text": "src/requests/api.py :: request\ndef request(method, url, **kwargs):\n    \"\"\"Constructs and sends a :class:`Request <Request>`.\n\n    :param method: method for the new :class:`Request` object: ``GET``, ``OPTIONS``, ``HEAD``, ``POST``, ``PUT``, ``PATCH``, or ``DELETE``.\n    :param url: URL for the new :class:`Request` object.\n    :param params: (optional) Dictionary, list of tuples or bytes to send\n        in the query string for the :class:`Request`.\n    :param data: (optional) Dictionary, list of tuples, bytes, or file-like\n        object to send in the body of the :class:`Request`.\n    :param json: (optional) A JSON serializable Python object to send in the body of the :class:`Request`.\n    :param headers: (optional) Dictionary of HTTP Headers to send with the :class:`Request`.\n    :param cookies: (optional) Dict or CookieJar object to send with the :class:`Request`.\n    :param files: (optional) Dictionary of ``'name': file-like-objects`` (or ``{'name': file-tuple}``) for multipart encoding upload.\n        ``file-tuple`` can be a 2-tuple ``('filename', fileobj)``, 3-tuple ``('filename', fileobj, 'content_type')``\n        or a 4-tuple ``('filename', fileobj, 'content_type', custom_headers)``, where ``'content_type'`` is a string\n        defining the content type of the given file and ``custom_headers`` a dict-like object containing additional headers\n        to add for the file.\n    :param auth: <REDACTED_SECRET> Auth tuple to enable Basic/Digest/Custom HTTP Auth.\n    :param timeout: (optional) How many seconds to wait for the server to send data\n        before giving up, as a float, or a :ref:`(connect timeout, read\n        timeout) <timeouts>` tuple.\n    :type timeout: float or tuple\n    :param allow_redirects: (optional) Boolean. Enable/disable GET/OPTIONS/POST/PUT/PATCH/DELETE/HEAD redirection. Defaults to ``True``.\n    :type allow_redirects: bool\n    :param proxies: (optional) Dictionary mapping protocol to the URL of the proxy.\n    :param verify: (optional) Either a boolean, in which case it controls whether we verify\n            the server's TLS certificate, or a string, in which case it must be a path\n            to a CA bundle to use. Defaults to ``True``.\n    :param stream: (optional) if ``False``, the response content will be immediately downloaded.\n    :param cert: (optional) if String, path to ssl client cert file (.pem). If Tuple, ('cert', 'key') pair.\n    :return: :class:`Response <Response>` object\n    :rtype: requests.Response\n\n    Usage::\n\n      >>> import requests\n      >>> req = requests.request('GET', 'https://httpbin.org/get')\n      >>> req\n      <Response [200]>\n    \"\"\"\n\n    # By using the 'with' statement we are sure the session is closed, thus we\n    # avoid leaving sockets open which can trigger a ResourceWarning in some\n    # cases, and look like a memory leak in others.\n    with sessions.Session() as session:\n        return session.request(method=method, url=url, **kwargs)"
+ },
+ "ch:b3494cb5e2cdbb13fc61210b": {
+  "path": "tests/certs/valid/server/server.pem",
+  "start_line": 1,
+  "end_line": 47,
+  "text": "tests/certs/valid/server/server.pem :: lines 1-47\n-----BEGIN CERTIFICATE-----\nMIIEhTCCA22gAwIBAgIUTzbDp+B1umRS0Q7rgefxif9Im3wwDQYJKoZIhvcNAQEL\nBQAwajELMAkGA1UEBhMCVVMxIzAhBgNVBAoMGlB5dGhvbiBTb2Z0d2FyZSBGb3Vu\nZGF0aW9uMRgwFgYDVQQLDA9weXRob24tcmVxdWVzdHMxHDAaBgNVBAMME1NlbGYt\nU2lnbmVkIFJvb3QgQ0EwHhcNMjQwMzE0MDAxMDAzWhcNNDMxMTMwMDAxMDAzWjBt\nMQswCQYDVQQGEwJVUzELMAkGA1UECAwCREUxIzAhBgNVBAoMGlB5dGhvbiBTb2Z0\nd2FyZSBGb3VuZGF0aW9uMRgwFgYDVQQLDA9weXRob24tcmVxdWVzdHMxEjAQBgNV\nBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKEQ\no7HfvvKa4ODbcHLlF7UMeLZGIEpIevzn9lNm7A//r2Uc3upNAQ7/8QwQVn35nB7N\n4kmx6OM/Yc7mVBltyxaiTeFszTBVP68CmSiA+8nxY0UVYV5kGcYuL/VYz1xJmlSw\nMnRcKwbRFO07bvB+BlCUpAxnFOR+L3vWg9jE1VKNObYlwtOS/BgjDGMlc8NM6BGj\n1MQBjdxaQKsEk3jDvgZYFMzkoMMDbfRPtbAu6/zVcPYu9iNhh0wEZzE+vm1hMiWn\ncudxtysNE2TelthCTRtEmCTDa9SS16JEaOS352BWctzr4whb5UtcSmP7Ow5nn9Hh\n3Wmh+qP2wPIM+G02vUkCAwEAAaOCAR4wggEaMAwGA1UdEwEB/wQCMAAwDgYDVR0P\nAQH/BAQDAgWgMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMBMC8GA1UdEQEB/wQlMCOC\nCWxvY2FsaG9zdIcEfwAAAYcQAAAAAAAAAAAAAAAAAAAAATAdBgNVHQ4EFgQUJ90a\nUnXKPP13yDprLhG39fUrnu8wgZEGA1UdIwSBiTCBhqFupGwwajELMAkGA1UEBhMC\nVVMxIzAhBgNVBAoMGlB5dGhvbiBTb2Z0d2FyZSBGb3VuZGF0aW9uMRgwFgYDVQQL\nDA9weXRob24tcmVxdWVzdHMxHDAaBgNVBAMME1NlbGYtU2lnbmVkIFJvb3QgQ0GC\nFA9wdtNh/V99DRwYp8vXjPxSjJnWMA0GCSqGSIb3DQEBCwUAA4IBAQCVh4hiraRv\nJzYbS/TombP//xfVEWHXDBEYsT5GgWf7GPJ/QtSvv6uJFsK7heqLzf9f+r4Z5xMh\nYAkb0oe/Ge0T30Mo1YaBEqkKuQL9lOMcP69S9uFz2VT6I/76I8qqAu2AFhu74p8f\nqudwmQyRYo1Ryg4R/SgRhSJKF/ST/2wOusNWSsBe1s8S2PmtOb4dr3cMBGihrUzS\nDmCQpWjuiuE23HXnnYDc/EUAnEEPkLDgCsE9iLq37FPUHcHjqdYIAhmImPBpv2EL\nftXeRWfxN2hRHpS5Fn3QuAOwfJw5tUcVXojJCJfSpL+Ac97iSjxNaDIPlyomauKw\n1rgbUkSw+9JQ\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIIDWzCCAkMCFA9wdtNh/V99DRwYp8vXjPxSjJnWMA0GCSqGSIb3DQEBCwUAMGox\nCzAJBgNVBAYTAlVTMSMwIQYDVQQKDBpQeXRob24gU29mdHdhcmUgRm91bmRhdGlv\nbjEYMBYGA1UECwwPcHl0aG9uLXJlcXVlc3RzMRwwGgYDVQQDDBNTZWxmLVNpZ25l\nZCBSb290IENBMB4XDTI0MDMxMjIxMDQwM1oXDTQ0MDMwNzIxMDQwM1owajELMAkG\nA1UEBhMCVVMxIzAhBgNVBAoMGlB5dGhvbiBTb2Z0d2FyZSBGb3VuZGF0aW9uMRgw\nFgYDVQQLDA9weXRob24tcmVxdWVzdHMxHDAaBgNVBAMME1NlbGYtU2lnbmVkIFJv\nb3QgQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDHlIhe7GLCeSk8\nRZOKdtmyKns6KdZgGw/LcxPkYvQlu1g0zV8X0DqVr2LdMumWUTNCc9sPdSlAG+He\nmQp2TMoWUMumMuwDtit9RT0Sb6Eh9svWgjY9ferovPJRfCWUTsA2Ug8uoh0wyEXK\nna7X6fHt5E3B9vj0+b9a4vDibdBXV11FheLT02/uEmAEJDdP/zeBgvVbhcVyumO6\nfAGMIWzR2ukhe8z/ma5H9zoi4gZA8nsK6reZUD8+6affnPe+jIt/AdzggtV9jkWm\nzSpr+RHeZ0y+q4eik2ZNUGg4XcF6JsJ9yu/AqLBXxd38uLdFfgyhP2y6K628yzgy\ne6lzFyWnAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAGymNVTsKSAq8Ju6zV+AWAyV\nGcUNBmLpgzDA0e7pkVYhHTdWKlGH4GnrRcp0nvnSbr6iq1Ob/8yEUUoRzK55Flws\nKt1OLwnZyhfRoSUesoEqpP68vzWEgiYv0QuIWvzNt0YfAAvEgGoc3iri44MelKLn\n9ZMT8m91nVamA35R8ZjfeAkNp2xcz0a67V0ww6o4wSXrG7o5ZRXyjqZ/9K7SfwUJ\nrV9RciccsjH/MzKbfrx73QwsbPWiFmjzHopdasIO0lDlmgm/r9gKfkbzfKoGCgLZ\n6an6FlmLftLSXijf/QwtqeSP9fODeE3dzBmnTM3jdoVS53ZegUDWNl14o25v2Kg=\n-----END CERTIFICATE-----"
+ },
+ "ch:b0eb392c3dc00f350de9b9d1": {
+  "path": "MANIFEST.in",
+  "start_line": 1,
+  "end_line": 3,
+  "text": "MANIFEST.in :: lines 1-3\ninclude README.md LICENSE NOTICE HISTORY.md requirements-dev.txt\nrecursive-include tests *.py\nrecursive-include tests/certs *"
+ },
+ "ch:4d28ee886441199b5d10290c": {
+  "path": "README.md",
+  "start_line": 1,
+  "end_line": 27,
+  "text": "README.md :: Requests\n# Requests\n\n**Requests** is a simple, yet elegant, HTTP library.\n\n```python\n>>> import requests\n>>> r = requests.get('https://httpbin.org/basic-auth/user/pass', auth=('user', 'pass'))\n>>> r.status_code\n200\n>>> r.headers['content-type']\n'application/json; charset=utf8'\n>>> r.encoding\n'utf-8'\n>>> r.text\n'{\"authenticated\": true, ...'\n>>> r.json()\n{'authenticated': True, ...}\n```\n\nRequests allows you to send HTTP/1.1 requests extremely easily. There\u2019s no need to manually add query strings to your URLs, or to form-encode your `PUT` & `POST` data \u2014 but nowadays, just use the `json` method!\n\nRequests is one of the most downloaded Python packages today, pulling in around `30M downloads / week`\u2014 according to GitHub, Requests is currently [depended upon](https://github.com/psf/requests/network/dependents?package_id=UGFja2FnZS01NzA4OTExNg%3D%3D) by `1,000,000+` repositories. You may certainly put your trust in this code.\n\n[![Downloads](https://static.pepy.tech/badge/requests/month)](https://pepy.tech/project/requests)\n[![Supported Versions](https://img.shields.io/pypi/pyversions/requests.svg)](https://pypi.org/project/requests)\n[![Contributors](https://img.shields.io/github/contributors/psf/requests.svg)](https://github.com/psf/requests/graphs/contributors)\n"
+ },
+ "ch:2bfcac5b65d69c9141dc61dc": {
+  "path": "setup.cfg",
+  "start_line": 1,
+  "end_line": 17,
+  "text": "setup.cfg :: lines 1-17\n[metadata]\nlicense_file = LICENSE\nprovides-extra =\n    socks\n    use_chardet_on_py3\nrequires-dist =\n    certifi>=2017.4.17\n    charset_normalizer>=2,<4\n    idna>=2.5,<4\n    urllib3>=1.21.1,<3\n\n[flake8]\nignore = E203, E501, W503\nper-file-ignores =\n    src/requests/__init__.py:E402, F401\n    src/requests/compat.py:E402, F401\n    tests/compat.py:F401"
+ },
+ "ch:963c0edf9ce9aebf1dcc4db4": {
+  "path": "setup.py",
+  "start_line": 48,
+  "end_line": 52,
+  "text": "setup.py :: PyTest.run_tests\n    def run_tests(self):\n        import pytest\n\n        errno = pytest.main(self.pytest_args)\n        sys.exit(errno)"
+ },
+ "ch:0bd2b32b0eb92ca4e48ffccc": {
+  "path": "tests/certs/README.md",
+  "start_line": 1,
+  "end_line": 10,
+  "text": "tests/certs/README.md :: Testing Certificates\n# Testing Certificates\n\nThis is a collection of certificates useful for testing aspects of Requests'\nbehaviour.\n\nThe certificates include:\n\n* [expired](./expired) server certificate with a valid certificate authority\n* [mtls](./mtls) provides a valid client certificate with a 2 year validity\n* [valid](./valid) has a valid server certificate"
+ },
+ "ch:7ea3c3496c789b178c55bb1b": {
+  "path": "tests/certs/expired/README.md",
+  "start_line": 1,
+  "end_line": 11,
+  "text": "tests/certs/expired/README.md :: Expired Certificates and Configuration for Testing\n# Expired Certificates and Configuration for Testing\n\nThis has a valid certificate authority in [ca](./ca) and an invalid server\ncertificate in [server](./server).\n\nThis can all be regenerated with:\n\n```\nmake clean\nmake all\n```"
+ },
+ "ch:75dd62da8015d739c47f904c": {
+  "path": "tests/certs/mtls/README.md",
+  "start_line": 1,
+  "end_line": 4,
+  "text": "tests/certs/mtls/README.md :: Certificate Examples for mTLS\n# Certificate Examples for mTLS\n\nThis has some generated certificates for mTLS utilization. The idea is to be\nable to have testing around how Requests handles client certificates."
+ },
+ "ch:51e4ece4ecc3e50f8a804a03": {
+  "path": "docs/api.rst",
+  "start_line": 51,
+  "end_line": 60,
+  "text": "docs/api.rst :: Developer Interface > Lower-Level Classes\nLower-Level Classes\n-------------------\n\n.. autoclass:: requests.Request\n   :inherited-members:\n\n.. autoclass:: Response\n   :inherited-members:\n\n"
+ },
+ "ch:0af9afc8312e2622db5891fe": {
+  "path": "docs/_templates/sidebarintro.html",
+  "start_line": 1,
+  "end_line": 37,
+  "text": "docs/_templates/sidebarintro.html :: lines 1-37\n<p class=\"logo\">\n  <a href=\"{{ pathto(master_doc) }}\">\n    <img class=\"logo\" src=\"{{ pathto('_static/requests-sidebar.png', 1) }}\" alt=\"Requests logo\" />\n  </a>\n</p>\n\n<p>\n  <iframe src=\"https://ghbtns.com/github-btn.html?user=psf&repo=requests&type=watch&count=true&size=large\"\n    allowtransparency=\"true\" frameborder=\"0\" scrolling=\"0\" width=\"200px\" height=\"35px\"></iframe>\n</p>\n\n<p>\n  Requests is an elegant and simple HTTP library for Python, built for\n  human beings.\n</p>\n\n<h3>Useful Links</h3>\n<ul>\n  <li><a href=\"{{ pathto('user/quickstart') }}\">Quickstart</a></li>\n  <li><a href=\"{{ pathto('user/advanced') }}\">Advanced Usage</a></li>\n  <li><a href=\"{{ pathto('api') }}\">API Reference</a></li>\n  <li><a href=\"{{ pathto('community/updates') + '#release-history' }}\">Release History</a></li>\n  <li><a href=\"{{ pathto('dev/contributing') }}\">Contributors Guide</a></li>\n\n  <p></p>\n\n  <li><a href=\"{{ pathto('community/recommended') }}\">Recommended Packages and Extensions</a></li>\n\n  <p></p>\n\n  <li><a href=\"https://github.com/psf/requests\">Requests @ GitHub</a></li>\n  <li><a href=\"https://pypi.org/project/requests/\">Requests @ PyPI</a></li>\n  <li><a href=\"https://github.com/psf/requests/issues\">Issue Tracker</a></li>\n</ul>\n\n<div id=\"native-ribbon\">\n</div>"
+ },
+ "ch:944db4398e73194a4c2fec7d": {
+  "path": "docs/api.rst",
+  "start_line": 61,
+  "end_line": 72,
+  "text": "docs/api.rst :: Developer Interface > Lower-Lower-Level Classes\nLower-Lower-Level Classes\n-------------------------\n\n.. autoclass:: requests.PreparedRequest\n   :inherited-members:\n\n.. autoclass:: requests.adapters.BaseAdapter\n   :inherited-members:\n\n.. autoclass:: requests.adapters.HTTPAdapter\n   :inherited-members:\n"
+ },
+ "ch:7de06e06a38bde733038416b": {
+  "path": "docs/api.rst",
+  "start_line": 116,
+  "end_line": 204,
+  "text": "docs/api.rst :: Developer Interface > Migrating to 1.x\nMigrating to 1.x\n----------------\n\nThis section details the main differences between 0.x and 1.x and is meant\nto ease the pain of upgrading.\n\n\nAPI Changes\n~~~~~~~~~~~\n\n* ``Response.json`` is now a callable and not a property of a response.\n\n  ::\n\n      import requests\n      r = requests.get('https://api.github.com/events')\n      r.json()   # This *call* raises an exception if JSON decoding fails\n\n* The ``Session`` API has changed. Sessions objects no longer take parameters.\n  ``Session`` is also now capitalized, but it can still be\n  instantiated with a lowercase ``session`` for backwards compatibility.\n\n  ::\n\n      s = requests.Session()    # formerly, session took parameters\n      s.auth = auth\n      s.headers.update(headers)\n      r = s.get('https://httpbin.org/headers')\n\n* All request hooks have been removed except 'response'.\n\n* Authentication helpers have been broken out into separate modules. See\n  requests-oauthlib_ and requests-kerberos_.\n\n.. _requests-oauthlib: <REDACTED_SECRET>\n.. _requests-kerberos: https://github.com/requests/requests-kerberos\n\n* The parameter for streaming requests was changed from ``prefetch`` to\n  ``stream`` and the logic was inverted. In addition, ``stream`` is now\n  required for raw response reading.\n\n  ::\n\n      # in 0.x, passing prefetch=False would accomplish the same thing\n      r = requests.get('https://api.github.com/events', stream=True)\n      for chunk in r.iter_content(8192):\n          ...\n\n* The ``config`` parameter to the requests method has been removed. Some of\n  these options are now configured on a ``Session`` such as keep-alive and\n  maximum number of redirects. The verbosity option should be handled by\n  configuring logging.\n\n  ::\n\n      import requests\n      import logging\n\n      # Enabling debugging at http.client level (requests->urllib3->http.client)\n      # you will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.\n      # the only thing missing will be the response.body which is not logged.\n      try: # for Python 3\n          from http.client import HTTPConnection\n      except ImportError:\n          from httplib import HTTPConnection\n      HTTPConnection.debuglevel = 1\n\n      logging.basicConfig() # you need to initialize logging, otherwise you will not see anything from requests\n      logging.getLogger().setLevel(logging.DEBUG)\n      requests_log = logging.getLogger(\"urllib3\")\n      requests_log.setLevel(logging.DEBUG)\n      requests_log.propagate = True\n\n      requests.get('https://httpbin.org/headers')\n\n\n\nLicensing\n~~~~~~~~~\n\nOne key difference that has nothing to do with the API is a change in the\nlicense from the ISC_ license to the `Apache 2.0`_ license. The Apache 2.0\nlicense ensures that contributions to Requests are also covered by the Apache\n2.0 license.\n\n.. _ISC: https://opensource.org/licenses/ISC\n.. _Apache 2.0: https://opensource.org/licenses/Apache-2.0\n\n"
+ },
+ "ch:0c7295f2b47ab15c0c7307ec": {
+  "path": "docs/community/faq.rst",
+  "start_line": 29,
+  "end_line": 54,
+  "text": "docs/community/faq.rst :: Frequently Asked Questions > Why not Httplib2?\nWhy not Httplib2?\n-----------------\n\nChris Adams gave an excellent summary on\n`Hacker News <http://news.ycombinator.com/item?id=2884406>`_:\n\n    httplib2 is part of why you should use requests: it's far more respectable\n    as a client but not as well documented and it still takes way too much code\n    for basic operations. I appreciate what httplib2 is trying to do, that\n    there's a ton of hard low-level annoyances in building a modern HTTP\n    client, but really, just use requests instead. Kenneth Reitz is very\n    motivated and he gets the degree to which simple things should be simple\n    whereas httplib2 feels more like an academic exercise than something\n    people should use to build production systems[1].\n\n    Disclosure: I'm listed in the requests AUTHORS file but can claim credit\n    for, oh, about 0.0001% of the awesomeness.\n\n    1. http://code.google.com/p/httplib2/issues/detail?id=96 is a good example:\n    an annoying bug which affect many people, there was a fix available for\n    months, which worked great when I applied it in a fork and pounded a couple\n    TB of data through it, but it took over a year to make it into trunk and\n    even longer to make it onto PyPI where any other project which required \"\n    httplib2\" would get the working version.\n\n"
+ },
+ "ch:6358a343ef8452910f8dda85": {
+  "path": "docs/dev/contributing.rst",
+  "start_line": 64,
+  "end_line": 121,
+  "text": "docs/dev/contributing.rst :: Contributor's Guide > Code Contributions\nCode Contributions\n------------------\n\nSteps for Submitting Code\n~~~~~~~~~~~~~~~~~~~~~~~~~\n\nWhen contributing code, you'll want to follow this checklist:\n\n1. Fork the repository on GitHub.\n2. Run the tests to confirm they all pass on your system. If they don't, you'll\n   need to investigate why they fail. If you're unable to diagnose this\n   yourself, raise it as a bug report by following the guidelines in this\n   document: :ref:`bug-reports`.\n3. Write tests that demonstrate your bug or feature. Ensure that they fail.\n4. Make your change.\n5. Run the entire test suite again, confirming that all tests pass *including\n   the ones you just added*.\n6. Send a GitHub Pull Request to the main repository's ``main`` branch.\n   GitHub Pull Requests are the expected method of code collaboration on this\n   project.\n\nThe following sub-sections go into more detail on some of the points above.\n\nCode Review\n~~~~~~~~~~~\n\nContributions will not be merged until they've been code reviewed. You should\nimplement any code review feedback unless you strongly object to it. In the\nevent that you object to the code review feedback, you should make your case\nclearly and calmly. If, after doing so, the feedback is judged to still apply,\nyou must either apply the feedback or withdraw your contribution.\n\nCode Style\n~~~~~~~~~~\n\nRequests uses a collection of tools to ensure the code base has a consistent\nstyle as it grows. We have these orchestrated using a tool called\n`pre-commit`_. This can be installed locally and run over your changes prior\nto opening a PR, and will also be run as part of the CI approval process\nbefore a change is merged.\n\nYou can find the full list of formatting requirements specified in the\n`.pre-commit-config.yaml`_ at the top level directory of Requests.\n\n.. _pre-commit: https://pre-commit.com/\n.. _.pre-commit-config.yaml: https://github.com/psf/requests/blob/main/.pre-commit-config.yaml\n\nNew Contributors\n~~~~~~~~~~~~~~~~\n\nIf you are new or relatively new to Open Source, welcome! Requests aims to\nbe a gentle introduction to the world of Open Source. If you're concerned about\nhow best to contribute, please consider mailing a maintainer (listed above) and\nasking for help.\n\nPlease also check the :ref:`early-feedback` section.\n\n"
+ },
+ "ch:d8782aa1d7129c482acdea3a": {
+  "path": "docs/user/advanced.rst",
+  "start_line": 10,
+  "end_line": 86,
+  "text": "docs/user/advanced.rst :: Advanced Usage > Session Objects\nSession Objects\n---------------\n\nThe Session object allows you to persist certain parameters across\nrequests. It also persists cookies across all requests made from the\nSession instance, and will use ``urllib3``'s `connection pooling`_. So if\nyou're making several requests to the same host, the underlying TCP\nconnection will be reused, which can result in a significant performance\nincrease (see `HTTP persistent connection`_).\n\nA Session object has all the methods of the main Requests API.\n\nLet's persist some cookies across requests::\n\n    s = requests.Session()\n\n    s.get('https://httpbin.org/cookies/set/sessioncookie/123456789')\n    r = s.get('https://httpbin.org/cookies')\n\n    print(r.text)\n    # '{\"cookies\": {\"sessioncookie\": \"123456789\"}}'\n\n\nSessions can also be used to provide default data to the request methods. This\nis done by providing data to the properties on a Session object::\n\n    s = requests.Session()\n    s.auth = ('user', 'pass')\n    s.headers.update({'x-test': 'true'})\n\n    # both 'x-test' and 'x-test2' are sent\n    s.get('https://httpbin.org/headers', headers={'x-test2': 'true'})\n\n\nAny dictionaries that you pass to a request method will be merged with the\nsession-level values that are set. The method-level parameters override session\nparameters.\n\nNote, however, that method-level parameters will *not* be persisted across\nrequests, even if using a session. This example will only send the cookies\nwith the first request, but not the second::\n\n    s = requests.Session()\n\n    r = s.get('https://httpbin.org/cookies', cookies={'from-my': 'browser'})\n    print(r.text)\n    # '{\"cookies\": {\"from-my\": \"browser\"}}'\n\n    r = s.get('https://httpbin.org/cookies')\n    print(r.text)\n    # '{\"cookies\": {}}'\n\n\nIf you want to manually add cookies to your session, use the\n:ref:`Cookie utility functions <api-cookies>` to manipulate\n:attr:`Session.cookies <requests.Session.cookies>`.\n\nSessions can also be used as context managers::\n\n    with requests.Session() as s:\n        s.get('https://httpbin.org/cookies/set/sessioncookie/123456789')\n\nThis will make sure the session is closed as soon as the ``with`` block is\nexited, even if unhandled exceptions occurred.\n\n\n.. admonition:: Remove a Value From a Dict Parameter\n\n    Sometimes you'll want to omit session-level keys from a dict parameter. To\n    do this, you simply set that key's value to ``None`` in the method-level\n    parameter. It will automatically be omitted.\n\nAll values that are contained within a session are directly available to you.\nSee the :ref:`Session API Docs <sessionapi>` to learn more.\n\n.. _request-and-response-objects:\n"
+ },
+ "ch:8b93dad674422e47a15b5dca": {
+  "path": "docs/user/advanced.rst",
+  "start_line": 1008,
+  "end_line": 1034,
+  "text": "docs/user/advanced.rst :: Advanced Usage > Example: Specific SSL Version\nExample: Specific SSL Version\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nThe Requests team has made a specific choice to use whatever SSL version is\ndefault in the underlying library (`urllib3`_). Normally this is fine, but from\ntime to time, you might find yourself needing to connect to a service-endpoint\nthat uses a version that isn't compatible with the default.\n\nYou can use Transport Adapters for this by taking most of the existing\nimplementation of HTTPAdapter, and adding a parameter *ssl_version* that gets\npassed-through to `urllib3`. We'll make a Transport Adapter that instructs the\nlibrary to use SSLv3::\n\n    import ssl\n    from urllib3.poolmanager import PoolManager\n\n    from requests.adapters import HTTPAdapter\n\n\n    class Ssl3HttpAdapter(HTTPAdapter):\n        \"\"\"\"Transport adapter\" that allows us to use SSLv3.\"\"\"\n\n        def init_poolmanager(self, connections, maxsize, block=False):\n            self.poolmanager = PoolManager(\n                num_pools=connections, maxsize=maxsize,\n                block=block, ssl_version=ssl.PROTOCOL_SSLv3)\n"
+ },
+ "ch:ab25df81ab5765e9fc48eeb4": {
+  "path": "docs/user/advanced.rst",
+  "start_line": 969,
+  "end_line": 1007,
+  "text": "docs/user/advanced.rst :: Advanced Usage > Transport Adapters\nTransport Adapters\n------------------\n\nAs of v1.0.0, Requests has moved to a modular internal design. Part of the\nreason this was done was to implement Transport Adapters, originally\n`described here`_. Transport Adapters provide a mechanism to define interaction\nmethods for an HTTP service. In particular, they allow you to apply per-service\nconfiguration.\n\nRequests ships with a single Transport Adapter, the :class:`HTTPAdapter\n<requests.adapters.HTTPAdapter>`. This adapter provides the default Requests\ninteraction with HTTP and HTTPS using the powerful `urllib3`_ library. Whenever\na Requests :class:`Session <requests.Session>` is initialized, one of these is\nattached to the :class:`Session <requests.Session>` object for HTTP, and one\nfor HTTPS.\n\nRequests enables users to create and use their own Transport Adapters that\nprovide specific functionality. Once created, a Transport Adapter can be\nmounted to a Session object, along with an indication of which web services\nit should apply to.\n\n::\n\n    >>> s = requests.Session()\n    >>> s.mount('https://github.com/', MyAdapter())\n\nThe mount call registers a specific instance of a Transport Adapter to a\nprefix. Once mounted, any HTTP request made using that session whose URL starts\nwith the given prefix will use the given Transport Adapter.\n\n.. note:: The adapter will be chosen based on a longest prefix match. Be mindful\n   prefixes such as ``http://localhost`` will also match ``http://localhost.other.com``\n   or ``http://localhost@other.com``. It's recommended to terminate full hostnames with a ``/``.\n\nMany of the details of implementing a Transport Adapter are beyond the scope of\nthis documentation, but take a look at the next example for a simple SSL use-\ncase. For more than that, you might look at subclassing the\n:class:`BaseAdapter <requests.adapters.BaseAdapter>`.\n"
+ },
+ "ch:7b3bcf3dd639294564f4f02c": {
+  "path": "docs/user/install.rst",
+  "start_line": 17,
+  "end_line": 36,
+  "text": "docs/user/install.rst :: Installation of Requests > Get the Source Code\nGet the Source Code\n-------------------\n\nRequests is actively developed on GitHub, where the code is\n`always available <https://github.com/psf/requests>`_.\n\nYou can either clone the public repository::\n\n    $ git clone https://github.com/psf/requests.git\n\nOr, download the `tarball <https://github.com/psf/requests/tarball/main>`_::\n\n    $ curl -OL https://github.com/psf/requests/tarball/main\n    # optionally, zipball is also available (for Windows users).\n\nOnce you have a copy of the source, you can embed it in your own Python\npackage, or install it into your site-packages easily::\n\n    $ cd requests\n    $ python -m pip install ."
+ },
+ "ch:8c7986e5f9798b83a2142753": {
+  "path": "src/requests/__init__.py",
+  "start_line": 1,
+  "end_line": 57,
+  "text": "src/requests/__init__.py :: lines 1-57\n#   __\n#  /__)  _  _     _   _ _/   _\n# / (   (- (/ (/ (- _)  /  _)\n#          /\n\n\"\"\"\nRequests HTTP Library\n~~~~~~~~~~~~~~~~~~~~~\n\nRequests is an HTTP library, written in Python, for human beings.\nBasic GET usage:\n\n   >>> import requests\n   >>> r = requests.get('https://www.python.org')\n   >>> r.status_code\n   200\n   >>> b'Python is a programming language' in r.content\n   True\n\n... or POST:\n\n   >>> payload = dict(key1='value1', key2='value2')\n   >>> r = requests.post('https://httpbin.org/post', data=payload)\n   >>> print(r.text)\n   {\n     ...\n     \"form\": {\n       \"key1\": \"value1\",\n       \"key2\": \"value2\"\n     },\n     ...\n   }\n\nThe other HTTP methods are supported - see `requests.api`. Full documentation\nis at <https://requests.readthedocs.io>.\n\n:copyright: (c) 2017 by Kenneth Reitz.\n:license: Apache 2.0, see LICENSE for more details.\n\"\"\"\n\nimport warnings\n\nimport urllib3\n\nfrom .exceptions import RequestsDependencyWarning\n\ntry:\n    from charset_normalizer import __version__ as charset_normalizer_version\nexcept ImportError:\n    charset_normalizer_version = None\n\ntry:\n    from chardet import __version__ as chardet_version\nexcept ImportError:\n    chardet_version = None\n\n"
+ },
+ "ch:202503f5ad982ff87fa94b61": {
+  "path": "src/requests/__init__.py",
+  "start_line": 58,
+  "end_line": 90,
+  "text": "src/requests/__init__.py :: check_compatibility\ndef check_compatibility(urllib3_version, chardet_version, charset_normalizer_version):\n    urllib3_version = urllib3_version.split(\".\")\n    assert urllib3_version != [\"dev\"]  # Verify urllib3 isn't installed from git.\n\n    # Sometimes, urllib3 only reports its version as 16.1.\n    if len(urllib3_version) == 2:\n        urllib3_version.append(\"0\")\n\n    # Check urllib3 for compatibility.\n    major, minor, patch = urllib3_version  # noqa: F811\n    major, minor, patch = int(major), int(minor), int(patch)\n    # urllib3 >= 1.21.1\n    assert major >= 1\n    if major == 1:\n        assert minor >= 21\n\n    # Check charset_normalizer for compatibility.\n    if chardet_version:\n        major, minor, patch = chardet_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # chardet_version >= 3.0.2, < 6.0.0\n        assert (3, 0, 2) <= (major, minor, patch) < (6, 0, 0)\n    elif charset_normalizer_version:\n        major, minor, patch = charset_normalizer_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # charset_normalizer >= 2.0.0 < 4.0.0\n        assert (2, 0, 0) <= (major, minor, patch) < (4, 0, 0)\n    else:\n        warnings.warn(\n            \"Unable to find acceptable character detection dependency \"\n            \"(chardet or charset_normalizer).\",\n            RequestsDependencyWarning,\n        )"
+ },
+ "ch:2a50872a8c40dc9e67418135": {
+  "path": "src/requests/__init__.py",
+  "start_line": 93,
+  "end_line": 104,
+  "text": "src/requests/__init__.py :: _check_cryptography\ndef _check_cryptography(cryptography_version):\n    # cryptography < 1.3.4\n    try:\n        cryptography_version = list(map(int, cryptography_version.split(\".\")))\n    except ValueError:\n        return\n\n    if cryptography_version < [1, 3, 4]:\n        warning = \"Old version of cryptography ({}) may cause slowdown.\".format(\n            cryptography_version\n        )\n        warnings.warn(warning, RequestsDependencyWarning)"
+ },
+ "ch:2b63e99c416959fc2b808704": {
+  "path": "src/requests/__init__.py",
+  "start_line": 105,
+  "end_line": 164,
+  "text": "src/requests/__init__.py :: lines 105-164\n\n\n# Check imported dependencies for compatibility.\ntry:\n    check_compatibility(\n        urllib3.__version__, chardet_version, charset_normalizer_version\n    )\nexcept (AssertionError, ValueError):\n    warnings.warn(\n        \"urllib3 ({}) or chardet ({})/charset_normalizer ({}) doesn't match a supported \"\n        \"version!\".format(\n            urllib3.__version__, chardet_version, charset_normalizer_version\n        ),\n        RequestsDependencyWarning,\n    )\n\n# Attempt to enable urllib3's fallback for SNI support\n# if the standard library doesn't support SNI or the\n# 'ssl' library isn't available.\ntry:\n    try:\n        import ssl\n    except ImportError:\n        ssl = None\n\n    if not getattr(ssl, \"HAS_SNI\", False):\n        from urllib3.contrib import pyopenssl\n\n        pyopenssl.inject_into_urllib3()\n\n        # Check cryptography version\n        from cryptography import __version__ as cryptography_version\n\n        _check_cryptography(cryptography_version)\nexcept ImportError:\n    pass\n\n# urllib3's DependencyWarnings should be silenced.\nfrom urllib3.exceptions import DependencyWarning\n\nwarnings.simplefilter(\"ignore\", DependencyWarning)\n\n# Set default logging handler to avoid \"No handler found\" warnings.\nimport logging\nfrom logging import NullHandler\n\nfrom . import packages, utils\nfrom .__version__ import (\n    __author__,\n    __author_email__,\n    __build__,\n    __cake__,\n    __copyright__,\n    __description__,\n    __license__,\n    __title__,\n    __url__,\n    __version__,\n)\nfrom .api import delete, get, head, options, patch, post, put, request"
+ },
+ "ch:5c8efe4157489683c0be629a": {
+  "path": "src/requests/__init__.py",
+  "start_line": 155,
+  "end_line": 184,
+  "text": "src/requests/__init__.py :: lines 155-184\n    __build__,\n    __cake__,\n    __copyright__,\n    __description__,\n    __license__,\n    __title__,\n    __url__,\n    __version__,\n)\nfrom .api import delete, get, head, options, patch, post, put, request\nfrom .exceptions import (\n    ConnectionError,\n    ConnectTimeout,\n    FileModeWarning,\n    HTTPError,\n    JSONDecodeError,\n    ReadTimeout,\n    RequestException,\n    Timeout,\n    TooManyRedirects,\n    URLRequired,\n)\nfrom .models import PreparedRequest, Request, Response\nfrom .sessions import Session, session\nfrom .status_codes import codes\n\nlogging.getLogger(__name__).addHandler(NullHandler())\n\n# FileModeWarnings go off per the default.\nwarnings.simplefilter(\"default\", FileModeWarning, append=True)"
+ },
+ "ch:aad7a13c397edfd2dd97292a": {
+  "path": "src/requests/__version__.py",
+  "start_line": 1,
+  "end_line": 14,
+  "text": "src/requests/__version__.py :: lines 1-14\n# .-. .-. .-. . . .-. .-. .-. .-.\n# |(  |-  |.| | | |-  `-.  |  `-.\n# ' ' `-' `-`.`-' `-' `-'  '  `-'\n\n__title__ = \"requests\"\n__description__ = \"Python HTTP for Humans.\"\n__url__ = \"https://requests.readthedocs.io\"\n__version__ = \"2.32.3\"\n__build__ = 0x023203\n__author__ = \"Kenneth Reitz\"\n__author_email__ = \"<REDACTED_SECRET>\"\n__license__ = \"Apache-2.0\"\n__copyright__ = \"Copyright Kenneth Reitz\"\n__cake__ = \"\\u2728 \\U0001f370 \\u2728\""
+ },
+ "ch:8feb63feb3d20ff9ea0ec160": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 1,
+  "end_line": 24,
+  "text": "src/requests/_internal_utils.py :: lines 1-24\n\"\"\"\nrequests._internal_utils\n~~~~~~~~~~~~~~\n\nProvides utility functions that are consumed internally by Requests\nwhich depend on extremely few external helpers (such as compat)\n\"\"\"\nimport re\n\nfrom .compat import builtin_str\n\n_VALID_HEADER_NAME_RE_BYTE = re.compile(rb\"^[^:\\s][^:\\r\\n]*$\")\n_VALID_HEADER_NAME_RE_STR = re.compile(r\"^[^:\\s][^:\\r\\n]*$\")\n_VALID_HEADER_VALUE_RE_BYTE = re.compile(rb\"^\\S[^\\r\\n]*$|^$\")\n_VALID_HEADER_VALUE_RE_STR = re.compile(r\"^\\S[^\\r\\n]*$|^$\")\n\n_HEADER_VALIDATORS_STR = (_VALID_HEADER_NAME_RE_STR, _VALID_HEADER_VALUE_RE_STR)\n_HEADER_VALIDATORS_BYTE = (_VALID_HEADER_NAME_RE_BYTE, _VALID_HEADER_VALUE_RE_BYTE)\nHEADER_VALIDATORS = {\n    bytes: _HEADER_VALIDATORS_BYTE,\n    str: _HEADER_VALIDATORS_STR,\n}\n\n"
+ },
+ "ch:5d41ad4746297522bff2b0e4": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 25,
+  "end_line": 35,
+  "text": "src/requests/_internal_utils.py :: to_native_string\ndef to_native_string(string, encoding=\"ascii\"):\n    \"\"\"Given a string object, regardless of type, returns a representation of\n    that string in the native string type, encoding and decoding where\n    necessary. This assumes ASCII unless told otherwise.\n    \"\"\"\n    if isinstance(string, builtin_str):\n        out = string\n    else:\n        out = string.decode(encoding)\n\n    return out"
+ },
+ "ch:f88cc30408350aae971a8ba2": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 38,
+  "end_line": 50,
+  "text": "src/requests/_internal_utils.py :: unicode_is_ascii\ndef unicode_is_ascii(u_string):\n    \"\"\"Determine if unicode string only contains ASCII characters.\n\n    :param str u_string: unicode string to check. Must be unicode\n        and not Python 2 `str`.\n    :rtype: bool\n    \"\"\"\n    assert isinstance(u_string, str)\n    try:\n        u_string.encode(\"ascii\")\n        return True\n    except UnicodeEncodeError:\n        return False"
+ },
+ "ch:0d458241b187e0c2f8e1a844": {
+  "path": "src/requests/adapters.py",
+  "start_line": 90,
+  "end_line": 134,
+  "text": "src/requests/adapters.py :: _urllib3_request_context\ndef _urllib3_request_context(\n    request: \"PreparedRequest\",\n    verify: \"bool | str | None\",\n    client_cert: \"typing.Tuple[str, str] | str | None\",\n    poolmanager: \"PoolManager\",\n) -> \"(typing.Dict[str, typing.Any], typing.Dict[str, typing.Any])\":\n    host_params = {}\n    pool_kwargs = {}\n    parsed_request_url = urlparse(request.url)\n    scheme = parsed_request_url.scheme.lower()\n    port = parsed_request_url.port\n\n    # Determine if we have and should use our default SSLContext\n    # to optimize performance on standard requests.\n    poolmanager_kwargs = getattr(poolmanager, \"connection_pool_kw\", {})\n    has_poolmanager_ssl_context = poolmanager_kwargs.get(\"ssl_context\")\n    should_use_default_ssl_context = (\n        _preloaded_ssl_context is not None and not has_poolmanager_ssl_context\n    )\n\n    cert_reqs = \"CERT_REQUIRED\"\n    if verify is False:\n        cert_reqs = \"CERT_NONE\"\n    elif verify is True and should_use_default_ssl_context:\n        pool_kwargs[\"ssl_context\"] = _preloaded_ssl_context\n    elif isinstance(verify, str):\n        if not os.path.isdir(verify):\n            pool_kwargs[\"ca_certs\"] = verify\n        else:\n            pool_kwargs[\"ca_cert_dir\"] = verify\n    pool_kwargs[\"cert_reqs\"] = cert_reqs\n    if client_cert is not None:\n        if isinstance(client_cert, tuple) and len(client_cert) == 2:\n            pool_kwargs[\"cert_file\"] = client_cert[0]\n            pool_kwargs[\"key_file\"] = client_cert[1]\n        else:\n            # According to our docs, we allow users to specify just the client\n            # cert path\n            pool_kwargs[\"cert_file\"] = client_cert\n    host_params = {\n        \"scheme\": scheme,\n        \"host\": parsed_request_url.hostname,\n        \"port\": port,\n    }\n    return host_params, pool_kwargs"
+ },
+ "ch:8d775a156e147bca17fb59b8": {
+  "path": "src/requests/api.py",
+  "start_line": 1,
+  "end_line": 13,
+  "text": "src/requests/api.py :: lines 1-13\n\"\"\"\nrequests.api\n~~~~~~~~~~~~\n\nThis module implements the Requests API.\n\n:copyright: (c) 2012 by Kenneth Reitz.\n:license: Apache2, see LICENSE for more details.\n\"\"\"\n\nfrom . import sessions\n\n"
+ },
+ "ch:154dec6a8823be0f0dd4f887": {
+  "path": "src/requests/auth.py",
+  "start_line": 1,
+  "end_line": 24,
+  "text": "src/requests/auth.py :: lines 1-24\n\"\"\"\nrequests.auth\n~~~~~~~~~~~~~\n\nThis module contains the authentication handlers for Requests.\n\"\"\"\n\nimport hashlib\nimport os\nimport re\nimport threading\nimport time\nimport warnings\nfrom base64 import b64encode\n\nfrom ._internal_utils import to_native_string\nfrom .compat import basestring, str, urlparse\nfrom .cookies import extract_cookies_to_jar\nfrom .utils import parse_dict_header\n\nCONTENT_TYPE_FORM_URLENCODED = \"application/x-www-form-urlencoded\"\nCONTENT_TYPE_MULTI_PART = \"multipart/form-data\"\n\n"
+ },
+ "ch:bf3ef1c901dabd04f9916de4": {
+  "path": "src/requests/compat.py",
+  "start_line": 1,
+  "end_line": 17,
+  "text": "src/requests/compat.py :: lines 1-17\n\"\"\"\nrequests.compat\n~~~~~~~~~~~~~~~\n\nThis module previously handled import compatibility issues\nbetween Python 2 and Python 3. It remains for backwards\ncompatibility until the next major version.\n\"\"\"\n\nimport importlib\nimport sys\n\n# -------------------\n# Character Detection\n# -------------------\n\n"
+ },
+ "ch:0ab924fd222d6923d0518fa2": {
+  "path": "src/requests/certs.py",
+  "start_line": 1,
+  "end_line": 17,
+  "text": "src/requests/certs.py :: lines 1-17\n#!/usr/bin/env python\n\n\"\"\"\nrequests.certs\n~~~~~~~~~~~~~~\n\nThis module returns the preferred default CA certificate bundle. There is\nonly one \u2014 the one from the certifi package.\n\nIf you are packaging Requests, e.g., for a Linux distribution or a managed\nenvironment, you can change the definition of where() to return a separately\npackaged CA bundle.\n\"\"\"\nfrom certifi import where\n\nif __name__ == \"__main__\":\n    print(where())"
+ },
+ "ch:d1986d1548d9f5d303f2a713": {
+  "path": "src/requests/cookies.py",
+  "start_line": 35,
+  "end_line": 38,
+  "text": "src/requests/cookies.py :: MockRequest.__init__\n    def __init__(self, request):\n        self._r = request\n        self._new_headers = {}\n        self.type = urlparse(self._r.url).scheme"
+ },
+ "ch:b4107dc504b40108ebc7eebe": {
+  "path": "src/requests/help.py",
+  "start_line": 1,
+  "end_line": 33,
+  "text": "src/requests/help.py :: lines 1-33\n\"\"\"Module containing bug report helper(s).\"\"\"\n\nimport json\nimport platform\nimport ssl\nimport sys\n\nimport idna\nimport urllib3\n\nfrom . import __version__ as requests_version\n\ntry:\n    import charset_normalizer\nexcept ImportError:\n    charset_normalizer = None\n\ntry:\n    import chardet\nexcept ImportError:\n    chardet = None\n\ntry:\n    from urllib3.contrib import pyopenssl\nexcept ImportError:\n    pyopenssl = None\n    OpenSSL = None\n    cryptography = None\nelse:\n    import cryptography\n    import OpenSSL\n\n"
+ },
+ "ch:cd794f029740685aead45e0b": {
+  "path": "src/requests/help.py",
+  "start_line": 69,
+  "end_line": 125,
+  "text": "src/requests/help.py :: info\ndef info():\n    \"\"\"Generate information for a bug report.\"\"\"\n    try:\n        platform_info = {\n            \"system\": platform.system(),\n            \"release\": platform.release(),\n        }\n    except OSError:\n        platform_info = {\n            \"system\": \"Unknown\",\n            \"release\": \"Unknown\",\n        }\n\n    implementation_info = _implementation()\n    urllib3_info = {\"version\": urllib3.__version__}\n    charset_normalizer_info = {\"version\": None}\n    chardet_info = {\"version\": None}\n    if charset_normalizer:\n        charset_normalizer_info = {\"version\": charset_normalizer.__version__}\n    if chardet:\n        chardet_info = {\"version\": chardet.__version__}\n\n    pyopenssl_info = {\n        \"version\": None,\n        \"openssl_version\": \"\",\n    }\n    if OpenSSL:\n        pyopenssl_info = {\n            \"version\": OpenSSL.__version__,\n            \"openssl_version\": f\"{OpenSSL.SSL.OPENSSL_VERSION_NUMBER:x}\",\n        }\n    cryptography_info = {\n        \"version\": getattr(cryptography, \"__version__\", \"\"),\n    }\n    idna_info = {\n        \"version\": getattr(idna, \"__version__\", \"\"),\n    }\n\n    system_ssl = ssl.OPENSSL_VERSION_NUMBER\n    system_ssl_info = {\"version\": f\"{system_ssl:x}\" if system_ssl is not None else \"\"}\n\n    return {\n        \"platform\": platform_info,\n        \"implementation\": implementation_info,\n        \"system_ssl\": system_ssl_info,\n        \"using_pyopenssl\": pyopenssl is not None,\n        \"using_charset_normalizer\": chardet is None,\n        \"pyOpenSSL\": pyopenssl_info,\n        \"urllib3\": urllib3_info,\n        \"chardet\": chardet_info,\n        \"charset_normalizer\": charset_normalizer_info,\n        \"cryptography\": cryptography_info,\n        \"idna\": idna_info,\n        \"requests\": {\n            \"version\": requests_version,\n        },\n    }"
+ },
+ "ch:b8836fc4eedeae13be02af72": {
+  "path": "src/requests/help.py",
+  "start_line": 128,
+  "end_line": 130,
+  "text": "src/requests/help.py :: main\ndef main():\n    \"\"\"Pretty-print the bug information as JSON.\"\"\"\n    print(json.dumps(info(), sort_keys=True, indent=2))"
+ },
+ "ch:32933ce452aaef364932e8f0": {
+  "path": "src/requests/hooks.py",
+  "start_line": 1,
+  "end_line": 14,
+  "text": "src/requests/hooks.py :: lines 1-14\n\"\"\"\nrequests.hooks\n~~~~~~~~~~~~~~\n\nThis module provides the capabilities for the Requests hooks system.\n\nAvailable hooks:\n\n``response``:\n    The response generated from a Request.\n\"\"\"\nHOOKS = [\"response\"]\n\n"
+ },
+ "ch:b054d14faeaca6eb8792b6c6": {
+  "path": "src/requests/models.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "src/requests/models.py :: lines 1-60\n\"\"\"\nrequests.models\n~~~~~~~~~~~~~~~\n\nThis module contains the primary objects that power Requests.\n\"\"\"\n\nimport datetime\n\n# Import encoding now, to avoid implicit import later.\n# Implicit import within threads may cause LookupError when standard library is in a ZIP,\n# such as in Embedded Python. See https://github.com/psf/requests/issues/3578.\nimport encodings.idna  # noqa: F401\nfrom io import UnsupportedOperation\n\nfrom urllib3.exceptions import (\n    DecodeError,\n    LocationParseError,\n    ProtocolError,\n    ReadTimeoutError,\n    SSLError,\n)\nfrom urllib3.fields import RequestField\nfrom urllib3.filepost import encode_multipart_formdata\nfrom urllib3.util import parse_url\n\nfrom ._internal_utils import to_native_string, unicode_is_ascii\nfrom .auth import HTTPBasicAuth\nfrom .compat import (\n    Callable,\n    JSONDecodeError,\n    Mapping,\n    basestring,\n    builtin_str,\n    chardet,\n    cookielib,\n)\nfrom .compat import json as complexjson\nfrom .compat import urlencode, urlsplit, urlunparse\nfrom .cookies import _copy_cookie_jar, cookiejar_from_dict, get_cookie_header\nfrom .exceptions import (\n    ChunkedEncodingError,\n    ConnectionError,\n    ContentDecodingError,\n    HTTPError,\n    InvalidJSONError,\n    InvalidURL,\n)\nfrom .exceptions import JSONDecodeError as RequestsJSONDecodeError\nfrom .exceptions import MissingSchema\nfrom .exceptions import SSLError as RequestsSSLError\nfrom .exceptions import StreamConsumedError\nfrom .hooks import default_hooks\nfrom .status_codes import codes\nfrom .structures import CaseInsensitiveDict\nfrom .utils import (\n    check_header_validity,\n    get_auth_from_url,\n    guess_filename,\n    guess_json_utf,"
+ },
+ "ch:eca30fa8e55fc72a71782ff8": {
+  "path": "src/requests/models.py",
+  "start_line": 334,
+  "end_line": 349,
+  "text": "src/requests/models.py :: PreparedRequest.__init__\n    def __init__(self):\n        #: HTTP verb to send to the server.\n        self.method = None\n        #: HTTP URL to send the request to.\n        self.url = None\n        #: dictionary of HTTP headers.\n        self.headers = None\n        # The `CookieJar` used to create the Cookie header will be stored here\n        # after prepare_cookies is called\n        self._cookies = None\n        #: request body to send to the server.\n        self.body = None\n        #: dictionary of callback hooks, for internal usage.\n        self.hooks = default_hooks()\n        #: integer denoting starting position of a readable file-like body.\n        self._body_position = None"
+ },
+ "ch:4e5b391ebba41c5dd08e975c": {
+  "path": "src/requests/models.py",
+  "start_line": 658,
+  "end_line": 703,
+  "text": "src/requests/models.py :: Response.__init__\n    def __init__(self):\n        self._content = False\n        self._content_consumed = False\n        self._next = None\n\n        #: Integer Code of responded HTTP Status, e.g. 404 or 200.\n        self.status_code = None\n\n        #: Case-insensitive Dictionary of Response Headers.\n        #: For example, ``headers['content-encoding']`` will return the\n        #: value of a ``'Content-Encoding'`` response header.\n        self.headers = CaseInsensitiveDict()\n\n        #: File-like object representation of response (for advanced usage).\n        #: Use of ``raw`` requires that ``stream=True`` be set on the request.\n        #: This requirement does not apply for use internally to Requests.\n        self.raw = None\n\n        #: Final URL location of Response.\n        self.url = None\n\n        #: Encoding to decode with when accessing r.text.\n        self.encoding = None\n\n        #: A list of :class:`Response <Response>` objects from\n        #: the history of the Request. Any redirect responses will end\n        #: up here. The list is sorted from the oldest to the most recent request.\n        self.history = []\n\n        #: Textual reason of responded HTTP Status, e.g. \"Not Found\" or \"OK\".\n        self.reason = None\n\n        #: A CookieJar of Cookies the server sent back.\n        self.cookies = cookiejar_from_dict({})\n\n        #: The amount of time elapsed between sending the request\n        #: and the arrival of the response (as a timedelta).\n        #: This property specifically measures the time taken between sending\n        #: the first byte of the request and finishing parsing the headers. It\n        #: is therefore unaffected by consuming the response content or the\n        #: value of the ``stream`` keyword argument.\n        self.elapsed = datetime.timedelta(0)\n\n        #: The :class:`PreparedRequest <PreparedRequest>` object to which this\n        #: is a response.\n        self.request = None"
+ },
+ "ch:0b7092a224b2b9cddc7ddd7f": {
+  "path": "src/requests/packages.py",
+  "start_line": 1,
+  "end_line": 23,
+  "text": "src/requests/packages.py :: lines 1-23\nimport sys\n\nfrom .compat import chardet\n\n# This code exists for backwards compatibility reasons.\n# I don't like it either. Just look the other way. :)\n\nfor package in (\"urllib3\", \"idna\"):\n    locals()[package] = __import__(package)\n    # This traversal is apparently necessary such that the identities are\n    # preserved (requests.packages.urllib3.* is urllib3.*)\n    for mod in list(sys.modules):\n        if mod == package or mod.startswith(f\"{package}.\"):\n            sys.modules[f\"requests.packages.{mod}\"] = sys.modules[mod]\n\nif chardet is not None:\n    target = chardet.__name__\n    for mod in list(sys.modules):\n        if mod == target or mod.startswith(f\"{target}.\"):\n            imported_mod = sys.modules[mod]\n            sys.modules[f\"requests.packages.{mod}\"] = imported_mod\n            mod = mod.replace(target, \"chardet\")\n            sys.modules[f\"requests.packages.{mod}\"] = imported_mod"
+ },
+ "ch:d38d7aeb6bc0b58a0fdc0052": {
+  "path": "src/requests/sessions.py",
+  "start_line": 500,
+  "end_line": 591,
+  "text": "src/requests/sessions.py :: Session.request\n    def request(\n        self,\n        method,\n        url,\n        params=None,\n        data=None,\n        headers=None,\n        cookies=None,\n        files=None,\n        auth=None,\n        timeout=None,\n        allow_redirects=True,\n        proxies=None,\n        hooks=None,\n        stream=None,\n        verify=None,\n        cert=None,\n        json=None,\n    ):\n        \"\"\"Constructs a :class:`Request <Request>`, prepares it and sends it.\n        Returns :class:`Response <Response>` object.\n\n        :param method: method for the new :class:`Request` object.\n        :param url: URL for the new :class:`Request` object.\n        :param params: (optional) Dictionary or bytes to be sent in the query\n            string for the :class:`Request`.\n        :param data: (optional) Dictionary, list of tuples, bytes, or file-like\n            object to send in the body of the :class:`Request`.\n        :param json: (optional) json to send in the body of the\n            :class:`Request`.\n        :param headers: (optional) Dictionary of HTTP Headers to send with the\n            :class:`Request`.\n        :param cookies: (optional) Dict or CookieJar object to send with the\n            :class:`Request`.\n        :param files: (optional) Dictionary of ``'filename': file-like-objects``\n            for multipart encoding upload.\n        :param auth: <REDACTED_SECRET> Auth tuple or callable to enable\n            Basic/Digest/Custom HTTP Auth.\n        :param timeout: (optional) How long to wait for the server to send\n            data before giving up, as a float, or a :ref:`(connect timeout,\n            read timeout) <timeouts>` tuple.\n        :type timeout: float or tuple\n        :param allow_redirects: (optional) Set to True by default.\n        :type allow_redirects: bool\n        :param proxies: (optional) Dictionary mapping protocol or protocol and\n            hostname to the URL of the proxy.\n        :param hooks: (optional) Dictionary mapping hook name to one event or\n            list of events, event must be callable.\n        :param stream: (optional) whether to immediately download the response\n            content. Defaults to ``False``.\n        :param verify: (optional) Either a boolean, in which case it controls whether we verify\n            the server's TLS certificate, or a string, in which case it must be a path\n            to a CA bundle to use. Defaults to ``True``. When set to\n            ``False``, requests will accept any TLS certificate presented by\n            the server, and will ignore hostname mismatches and/or expired\n            certificates, which will make your application vulnerable to\n            man-in-the-middle (MitM) attacks. Setting verify to ``False``\n            may be useful during local development or testing.\n        :param cert: (optional) if String, path to ssl client cert file (.pem).\n            If Tuple, ('cert', 'key') pair.\n        :rtype: requests.Response\n        \"\"\"\n        # Create the Request.\n        req = Request(\n            method=method.upper(),\n            url=url,\n            headers=headers,\n            files=files,\n            data=data or {},\n            json=json,\n            params=params or {},\n            auth=auth,\n            cookies=cookies,\n            hooks=hooks,\n        )\n        prep = self.prepare_request(req)\n\n        proxies = proxies or {}\n\n        settings = self.merge_environment_settings(\n            prep.url, proxies, stream, verify, cert\n        )\n\n        # Send the request.\n        send_kwargs = {\n            \"timeout\": timeout,\n            \"allow_redirects\": allow_redirects,\n        }\n        send_kwargs.update(settings)\n        resp = self.send(prep, **send_kwargs)\n\n        return resp"
+ },
+ "ch:fdc0edfe8da5d86db928003a": {
+  "path": "src/requests/sessions.py",
+  "start_line": 356,
+  "end_line": 389,
+  "text": "src/requests/sessions.py :: Session\nclass Session(SessionRedirectMixin):\n    \"\"\"A Requests session.\n\n    Provides cookie persistence, connection-pooling, and configuration.\n\n    Basic Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> s.get('https://httpbin.org/get')\n      <Response [200]>\n\n    Or as a context manager::\n\n      >>> with requests.Session() as s:\n      ...     s.get('https://httpbin.org/get')\n      <Response [200]>\n    \"\"\"\n\n    __attrs__ = [\n        \"headers\",\n        \"cookies\",\n        \"auth\",\n        \"proxies\",\n        \"hooks\",\n        \"params\",\n        \"verify\",\n        \"cert\",\n        \"adapters\",\n        \"stream\",\n        \"trust_env\",\n        \"max_redirects\",\n    ]\n\n# members: (self), (self), (self, *args), (self, request), (self, method, url, params=None, data=None, headers=None, cookies=None, files=None, auth=None, timeout=None, allow_redir, (self, url, **kwargs), (self, url, **kwargs), (self, url, **kwargs), (self, url, data=None, json=None, **kwargs), (self, url, data=None, **kwargs), (self, url, data=None, **kwargs), (self, url, **kwargs), (self, request, **kwargs), (self, url, proxies, stream, verify, cert), (self, url), (self), (self, prefix, adapter), (self), (self, state)"
+ },
+ "ch:8a775f9aadf797978f9ae1d7": {
+  "path": "src/requests/sessions.py",
+  "start_line": 390,
+  "end_line": 449,
+  "text": "src/requests/sessions.py :: Session.__init__\n    def __init__(self):\n        #: A case-insensitive dictionary of headers to be sent on each\n        #: :class:`Request <Request>` sent from this\n        #: :class:`Session <Session>`.\n        self.headers = default_headers()\n\n        #: Default Authentication tuple or object to attach to\n        #: :class:`Request <Request>`.\n        self.auth = None\n\n        #: Dictionary mapping protocol or protocol and host to the URL of the proxy\n        #: (e.g. {'http': 'foo.bar:3128', 'http://host.name': 'foo.bar:4012'}) to\n        #: be used on each :class:`Request <Request>`.\n        self.proxies = {}\n\n        #: Event-handling hooks.\n        self.hooks = default_hooks()\n\n        #: Dictionary of querystring data to attach to each\n        #: :class:`Request <Request>`. The dictionary values may be lists for\n        #: representing multivalued query parameters.\n        self.params = {}\n\n        #: Stream response content default.\n        self.stream = False\n\n        #: SSL Verification default.\n        #: Defaults to `True`, requiring requests to verify the TLS certificate at the\n        #: remote end.\n        #: If verify is set to `False`, requests will accept any TLS certificate\n        #: presented by the server, and will ignore hostname mismatches and/or\n        #: expired certificates, which will make your application vulnerable to\n        #: man-in-the-middle (MitM) attacks.\n        #: Only set this to `False` for testing.\n        self.verify = True\n\n        #: SSL client certificate default, if String, path to ssl client\n        #: cert file (.pem). If Tuple, ('cert', 'key') pair.\n        self.cert = None\n\n        #: Maximum number of redirects allowed. If the request exceeds this\n        #: limit, a :class:`TooManyRedirects` exception is raised.\n        #: This defaults to requests.models.DEFAULT_REDIRECT_LIMIT, which is\n        #: 30.\n        self.max_redirects = DEFAULT_REDIRECT_LIMIT\n\n        #: Trust environment settings for proxy configuration, default\n        #: authentication and similar.\n        self.trust_env = True\n\n        #: A CookieJar containing all currently outstanding cookies set on this\n        #: session. By default it is a\n        #: :class:`RequestsCookieJar <requests.cookies.RequestsCookieJar>`, but\n        #: may be any other ``cookielib.CookieJar`` compatible object.\n        self.cookies = cookiejar_from_dict({})\n\n        # Default connection adapters.\n        self.adapters = OrderedDict()\n        self.mount(\"https://\", HTTPAdapter())\n        self.mount(\"http://\", HTTPAdapter())"
+ },
+ "ch:6d9f2089a76e36a8485ba564": {
+  "path": "src/requests/status_codes.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "src/requests/status_codes.py :: lines 1-60\nr\"\"\"\nThe ``codes`` object defines a mapping from common names for HTTP statuses\nto their numerical codes, accessible either as attributes or as dictionary\nitems.\n\nExample::\n\n    >>> import requests\n    >>> requests.codes['temporary_redirect']\n    307\n    >>> requests.codes.teapot\n    418\n    >>> requests.codes['\\o/']\n    200\n\nSome codes have multiple names, and both upper- and lower-case versions of\nthe names are allowed. For example, ``codes.ok``, ``codes.OK``, and\n``codes.okay`` all correspond to the HTTP status code 200.\n\"\"\"\n\nfrom .structures import LookupDict\n\n_codes = {\n    # Informational.\n    100: (\"continue\",),\n    101: (\"switching_protocols\",),\n    102: (\"processing\", \"early-hints\"),\n    103: (\"checkpoint\",),\n    122: (\"uri_too_long\", \"request_uri_too_long\"),\n    200: (\"ok\", \"okay\", \"all_ok\", \"all_okay\", \"all_good\", \"\\\\o/\", \"\u2713\"),\n    201: (\"created\",),\n    202: (\"accepted\",),\n    203: (\"non_authoritative_info\", \"non_authoritative_information\"),\n    204: (\"no_content\",),\n    205: (\"reset_content\", \"reset\"),\n    206: (\"partial_content\", \"partial\"),\n    207: (\"multi_status\", \"multiple_status\", \"multi_stati\", \"multiple_stati\"),\n    208: (\"already_reported\",),\n    226: (\"im_used\",),\n    # Redirection.\n    300: (\"multiple_choices\",),\n    301: (\"moved_permanently\", \"moved\", \"\\\\o-\"),\n    302: (\"found\",),\n    303: (\"see_other\", \"other\"),\n    304: (\"not_modified\",),\n    305: (\"use_proxy\",),\n    306: (\"switch_proxy\",),\n    307: (\"temporary_redirect\", \"temporary_moved\", \"temporary\"),\n    308: (\n        \"permanent_redirect\",\n        \"resume_incomplete\",\n        \"resume\",\n    ),  # \"resume\" and \"resume_incomplete\" to be removed in 3.0\n    # Client Error.\n    400: (\"bad_request\", \"bad\"),\n    401: (\"unauthorized\",),\n    402: (\"payment_required\", \"payment\"),\n    403: (\"forbidden\",),\n    404: (\"not_found\", \"-o-\"),\n    405: (\"method_not_allowed\", \"not_allowed\"),"
+ },
+ "ch:22ba004e1b47a55fbd91d504": {
+  "path": "src/requests/status_codes.py",
+  "start_line": 109,
+  "end_line": 125,
+  "text": "src/requests/status_codes.py :: _init\ndef _init():\n    for code, titles in _codes.items():\n        for title in titles:\n            setattr(codes, title, code)\n            if not title.startswith((\"\\\\\", \"/\")):\n                setattr(codes, title.upper(), code)\n\n    def doc(code):\n        names = \", \".join(f\"``{n}``\" for n in _codes[code])\n        return \"* %d: %s\" % (code, names)\n\n    global __doc__\n    __doc__ = (\n        __doc__ + \"\\n\" + \"\\n\".join(doc(code) for code in sorted(_codes))\n        if __doc__ is not None\n        else None\n    )"
+ },
+ "ch:6bdf0cab65ad0317ee716944": {
+  "path": "src/requests/structures.py",
+  "start_line": 1,
+  "end_line": 12,
+  "text": "src/requests/structures.py :: lines 1-12\n\"\"\"\nrequests.structures\n~~~~~~~~~~~~~~~~~~~\n\nData structures that power Requests.\n\"\"\"\n\nfrom collections import OrderedDict\n\nfrom .compat import Mapping, MutableMapping\n\n"
+ },
+ "ch:9c498b1fe5fad3793dd78dad": {
+  "path": "src/requests/utils.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "src/requests/utils.py :: lines 1-60\n\"\"\"\nrequests.utils\n~~~~~~~~~~~~~~\n\nThis module provides utility functions that are used within Requests\nthat are also useful for external consumption.\n\"\"\"\n\nimport codecs\nimport contextlib\nimport io\nimport os\nimport re\nimport socket\nimport struct\nimport sys\nimport tempfile\nimport warnings\nimport zipfile\nfrom collections import OrderedDict\n\nfrom urllib3.util import make_headers, parse_url\n\nfrom . import certs\nfrom .__version__ import __version__\n\n# to_native_string is unused here, but imported here for backwards compatibility\nfrom ._internal_utils import (  # noqa: F401\n    _HEADER_VALIDATORS_BYTE,\n    _HEADER_VALIDATORS_STR,\n    HEADER_VALIDATORS,\n    to_native_string,\n)\nfrom .compat import (\n    Mapping,\n    basestring,\n    bytes,\n    getproxies,\n    getproxies_environment,\n    integer_types,\n)\nfrom .compat import parse_http_list as _parse_list_header\nfrom .compat import (\n    proxy_bypass,\n    proxy_bypass_environment,\n    quote,\n    str,\n    unquote,\n    urlparse,\n    urlunparse,\n)\nfrom .cookies import cookiejar_from_dict\nfrom .exceptions import (\n    FileModeWarning,\n    InvalidHeader,\n    InvalidURL,\n    UnrewindableBodyError,\n)\nfrom .structures import CaseInsensitiveDict\n"
+ },
+ "ch:3ade9d60851e0929ea00647b": {
+  "path": "tests/test_requests.py",
+  "start_line": 1581,
+  "end_line": 1617,
+  "text": "tests/test_requests.py :: TestRequests.test_transport_adapter_ordering\n    def test_transport_adapter_ordering(self):\n        s = requests.Session()\n        order = [\"https://\", \"http://\"]\n        assert order == list(s.adapters)\n        s.mount(\"http://git\", HTTPAdapter())\n        s.mount(\"http://github\", HTTPAdapter())\n        s.mount(\"http://github.com\", HTTPAdapter())\n        s.mount(\"http://github.com/about/\", HTTPAdapter())\n        order = [\n            \"http://github.com/about/\",\n            \"http://github.com\",\n            \"http://github\",\n            \"http://git\",\n            \"https://\",\n            \"http://\",\n        ]\n        assert order == list(s.adapters)\n        s.mount(\"http://gittip\", HTTPAdapter())\n        s.mount(\"http://gittip.com\", HTTPAdapter())\n        s.mount(\"http://gittip.com/about/\", HTTPAdapter())\n        order = [\n            \"http://github.com/about/\",\n            \"http://gittip.com/about/\",\n            \"http://github.com\",\n            \"http://gittip.com\",\n            \"http://github\",\n            \"http://gittip\",\n            \"http://git\",\n            \"https://\",\n            \"http://\",\n        ]\n        assert order == list(s.adapters)\n        s2 = requests.Session()\n        s2.adapters = {\"http://\": HTTPAdapter()}\n        s2.mount(\"https://\", HTTPAdapter())\n        assert \"http://\" in s2.adapters\n        assert \"https://\" in s2.adapters"
+ },
+ "ch:8e3ca5dba566f401a8787c8c": {
+  "path": "tests/test_requests.py",
+  "start_line": 2833,
+  "end_line": 2862,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_True\n    def test_different_connection_pool_for_tls_settings_verify_True(self):\n        def response_handler(sock):\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=3,\n            cert_chain=\"tests/certs/expired/server/server.pem\",\n            keyfile=\"tests/certs/expired/server/server.key\",\n        )\n\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False)\n            assert r1.status_code == 200\n\n            # Cannot verify self-signed certificate\n            with pytest.raises(requests.exceptions.SSLError):\n                s.get(url)\n\n            close_server.set()\n        assert 2 == len(s.adapters[\"https://\"].poolmanager.pools)"
+ },
+ "ch:5f7cea8f5951600d05e36e91": {
+  "path": "tests/test_requests.py",
+  "start_line": 2864,
+  "end_line": 2895,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_expired_cert\n    def test_different_connection_pool_for_tls_settings_verify_bundle_expired_cert(\n        self,\n    ):\n        def response_handler(sock):\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=3,\n            cert_chain=\"tests/certs/expired/server/server.pem\",\n            keyfile=\"tests/certs/expired/server/server.key\",\n        )\n\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False)\n            assert r1.status_code == 200\n\n            # Has right trust bundle, but certificate expired\n            with pytest.raises(requests.exceptions.SSLError):\n                s.get(url, verify=\"tests/certs/expired/ca/ca.crt\")\n\n            close_server.set()\n        assert 2 == len(s.adapters[\"https://\"].poolmanager.pools)"
+ },
+ "ch:1158a6cd5f1f56d05e33b2b4": {
+  "path": "tests/test_requests.py",
+  "start_line": 2897,
+  "end_line": 2927,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert\n    def test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert(\n        self,\n    ):\n        def response_handler(sock):\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=3,\n            cert_chain=\"tests/certs/valid/server/server.pem\",\n            keyfile=\"tests/certs/valid/server/server.key\",\n        )\n\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False)\n            assert r1.status_code == 200\n\n            r2 = s.get(url, verify=\"tests/certs/valid/ca/ca.crt\")\n            assert r2.status_code == 200\n\n            close_server.set()\n        assert 2 == len(s.adapters[\"https://\"].poolmanager.pools)"
+ },
+ "ch:738c9a02c41b6dac5cae047e": {
+  "path": "tests/test_requests.py",
+  "start_line": 2929,
+  "end_line": 2966,
+  "text": "tests/test_requests.py :: TestPreparingURLs.test_different_connection_pool_for_mtls_settings\n    def test_different_connection_pool_for_mtls_settings(self):\n        client_cert = None\n\n        def response_handler(sock):\n            nonlocal client_cert\n            client_cert = sock.getpeercert()\n            consume_socket_content(sock, timeout=0.5)\n            sock.send(\n                b\"HTTP/1.1 200 OK\\r\\n\"\n                b\"Content-Length: 18\\r\\n\\r\\n\"\n                b'\\xff\\xfe{\\x00\"\\x00K0\"\\x00=\\x00\"\\x00\\xab0\"\\x00\\r\\n'\n            )\n\n        s = requests.Session()\n        close_server = threading.Event()\n        server = TLSServer(\n            handler=response_handler,\n            wait_to_close_event=close_server,\n            requests_to_handle=2,\n            cert_chain=\"tests/certs/expired/server/server.pem\",\n            keyfile=\"tests/certs/expired/server/server.key\",\n            mutual_tls=True,\n            cacert=\"tests/certs/expired/ca/ca.crt\",\n        )\n\n        cert = (\n            \"tests/certs/mtls/client/client.pem\",\n            \"tests/certs/mtls/client/client.key\",\n        )\n        with server as (host, port):\n            url = f\"https://{host}:{port}\"\n            r1 = s.get(url, verify=False, cert=cert)\n            assert r1.status_code == 200\n            with pytest.raises(requests.exceptions.SSLError):\n                s.get(url, cert=cert)\n            close_server.set()\n\n        assert client_cert is not None"
+ },
+ "ch:bbfe384c61b634d4fdbbc304": {
+  "path": "tests/testserver/server.py",
+  "start_line": 25,
+  "end_line": 29,
+  "text": "tests/testserver/server.py :: Server\nclass Server(threading.Thread):\n    \"\"\"Dummy server using for unit testing\"\"\"\n\n    WAIT_EVENT_TIMEOUT = 5\n\n# members: (self, handler=None, host='localhost', port=0, requests_to_handle=1, wait_to_close_event=None), (cls, text, request_timeout=0.5, **kwargs), (cls, **kwargs), (self), (self), (self), (self), (self), (self), (self, exc_type, exc_value, traceback)"
+ },
+ "ch:62e0cdb2ccc7807ff036b0a9": {
+  "path": "tests/testserver/server.py",
+  "start_line": 138,
+  "end_line": 138,
+  "text": "tests/testserver/server.py :: TLSServer\nclass TLSServer(Server):\n# members: (self, *, handler=None, host='localhost', port=0, requests_to_handle=1, wait_to_close_event=None, cert_chain=None, keyfi, (self)"
+ }
+}

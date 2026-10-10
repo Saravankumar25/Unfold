@@ -64,7 +64,7 @@ export function useExport(start: () => Promise<ExportCreated>, filename: string)
           return;
         }
         if (artifact.status === "failed") {
-          setState({ phase: "failed", artifact, error: new Error(artifact.error || "The PDF export failed. Please try again.") });
+          setState({ phase: "failed", artifact, error: new Error(artifact.error || "The export failed. Please try again.") });
           return;
         }
         setState({ phase: "pending", artifact, error: null });

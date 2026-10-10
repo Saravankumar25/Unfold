@@ -4,7 +4,8 @@
  */
 import type { JobOut, ProgressEvent } from "./api/types";
 
-export type ConnectionState = "connecting" | "live" | "reconnecting" | "lost";
+/** `waking`: the first request has not been answered yet (a scaled-to-zero service is starting). */
+export type ConnectionState = "connecting" | "waking" | "live" | "reconnecting" | "lost";
 export type Outcome = "running" | "ready" | "failed";
 
 export interface StageEntry {
@@ -35,7 +36,7 @@ export function initialProgress(job?: JobOut | null): ProgressState {
     stage: job?.current_stage ?? "RECEIVED",
     label: job?.stage_label ?? "Connecting…",
     index: job?.stage_index ?? 0,
-    total: job?.stage_total ?? 19,
+    total: job?.stage_total ?? 21,
     detail: null,
     outcome: ready ? "ready" : failed ? "failed" : "running",
     error: failed ? { code: job?.error_code ?? null, message: job?.error_message ?? null, retryable: !!job?.retryable } : null,

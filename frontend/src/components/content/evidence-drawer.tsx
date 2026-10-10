@@ -4,7 +4,6 @@ import { ArrowLeft, FileCode, ShieldAlert } from "lucide-react";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { ErrorPanel } from "@/components/app/error-panel";
 import { LoadingLines } from "@/components/app/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { api } from "@/lib/api/endpoints";
 import type { EvidenceRef } from "@/lib/api/types";
@@ -45,7 +44,6 @@ function EvidenceDetail({ projectId, item }: { projectId: string; item: Evidence
   return (
     <div className="px-5 py-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="blueprint">{item.label}</Badge>
         <span className="min-w-0 break-all font-mono text-[12.5px] text-ink">
           {ev ? evidenceLocation(ev) : item.ref.path ? evidenceLocation(item.ref) : "Loading source…"}
         </span>
@@ -122,10 +120,9 @@ export function EvidenceProvider({ projectId, children }: { projectId: string; c
                       <span className="block break-all font-mono text-[12.5px] text-ink">
                         {item.ref.path ? evidenceLocation(item.ref) : item.ref.chunk_id}
                       </span>
-                      <span className="block font-mono text-[11px] text-ink-faint">
-                        {item.label}
-                        {item.ref.symbol ? ` · ${item.ref.symbol}` : ""}
-                      </span>
+                      {item.ref.symbol ? (
+                        <span className="block font-mono text-[11px] text-ink-faint">{item.ref.symbol}</span>
+                      ) : null}
                     </span>
                   </button>
                 </li>

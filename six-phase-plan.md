@@ -39,13 +39,14 @@ regressed and hardened in phase 5 and verified live in phase 6. It adds no phase
 |---|---|---|---|---|
 | 1 | Foundation: green gates, CI, security, ports | [x] | [x] | [x] |
 | 2 | Core pipeline end to end (local) | [x] | [x] | [x] |
-| 3 | Chat, exports, cleanup, evals, frontend contract | [ ] | [ ] | [ ] |
+| 3 | Chat, exports, cleanup, evals, frontend contract, investigation engine | [x] | [ ] | [ ] |
 | 4 | AWS-native adapters + Terraform | [ ] | [ ] | [ ] |
 | 5 | Hardening and full verification | [ ] | [ ] | [ ] |
 | 6 | Deploy to AWS and ship | n/a | n/a | n/a |
 
-Phases 1-2 are complete and unchanged by the quality strategy. The phase 3 branch holds 3A (features) built and reviewed;
-3B (engine) is open. The phase 4 branch holds stages A-B and part of C. Both branches are unmerged.
+Phases 1-2 are complete and unchanged by the quality strategy. Phase 3 (3A features, 3B engine) is built,
+reviewed, gated and merged to `main`; the v2 rubric gate holds (`docs/design/quality-report.md`); human review sheets are
+unfilled. The phase 4 branch holds stages A-F plus a review pass and is unmerged.
 
 ---
 
@@ -108,7 +109,7 @@ Goal: every feature the frontend and HLD claim exists and is proven, and guides 
 | 3.5 | **Investigator.** Per-chapter bounded loop: symbol lookup, hybrid retrieve, flow trace, tests; `ResearchBrief` with coverage and budget caps | `HybridRetriever`, sufficiency, `compile_context` | `guide/research.py`, stage `RESEARCHING_GUIDE` | 3.2, 3.4 |
 | 3.6 | **Writer from brief.** Same `SectionDraft` blocks, plus failure-mode and change-guidance blocks when the brief supports them | `write_section` | `guide/write.py` | 3.5 |
 | 3.7 | **Verifier and reviser.** Deterministic path/line/symbol/excerpt/edge checks, existing `grade_claims`, one semantic critique, <= 2 targeted revision rounds, unsupported statements qualified or removed | `grade_claims`, `_verify` | `guide/verify.py`, `guide/revise.py`, stage `REVISING_GUIDE` | 3.6 |
-| 3.8 | **Reading experience and regeneration.** Compact commit-pinned citations, evidence appendix, exports read canonical content, `input_hash`, `POST /projects/{id}/sections/{key}/regenerate`, per-chapter progress | `GuideSectionRow.version`, exports, guide page | additive columns `research`, `verification`, `input_hash` | 3.7 |
+| 3.8 | **Reading experience and regeneration.** Compact commit-pinned citations, evidence appendix, exports read canonical content, `POST /projects/{id}/sections/{key}/regenerate`, per-chapter progress | `GuideSectionRow.version`, exports, guide page | additive columns `research`, `verification` (`input_hash` column reserved, reuse not built: one analysis job per project) | 3.7 |
 | 3.9 | **Rubric and A/B.** Automated scorers, human review sheet, run v2 vs baseline, record in `evals/baselines/pipeline-v2/` and `docs/design/quality-report.md` | 3A.4 harness | `evaluation/rubric.py`, `poe eval-guide` | 3.1, 3.8 |
 
 Rules: ports only (no SDK imports); no new store; additive migrations only; chat reuses RepoMap lookups where it

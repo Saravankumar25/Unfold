@@ -16,7 +16,7 @@ const MESSAGES: Record<string, string> = {
   PROVIDER_NOT_CONFIGURED: "The AI provider is not configured on this server.",
   LLM_BUDGET_EXHAUSTED: "The AI budget for this project is exhausted. Please try again later.",
   GENERATION_FAILED: "Generation failed. Please try again.",
-  EXPORT_FAILED: "The PDF export failed. Please try again.",
+  EXPORT_FAILED: "The export failed. Please try again.",
   STORE_UNAVAILABLE: "A storage service is unavailable. Please try again shortly.",
   QUEUE_UNAVAILABLE: "The analysis queue is unavailable. Please try again shortly.",
   SESSION_REQUIRED: "Your session could not be started. Please reload the page.",

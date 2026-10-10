@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from unfold.domain.enums import Proof
 from unfold.domain.models import ClaimRecord
+from unfold.understand.models import FlowTrace
 
-PLANNER_VERSION = "1"
+PLANNER_VERSION = "2"  # v1 rows are `GuideSectionPlan`s; they load as `ChapterPlan`s without research fields
+EvidenceKind = Literal["definition", "flow", "config", "test", "route", "model"]
 
 
 class GuideSectionPlan(BaseModel):
@@ -24,9 +27,68 @@ class GuideSectionPlan(BaseModel):
     related_subsystems: list[str] = Field(default_factory=list)
 
 
+class ChapterPlan(GuideSectionPlan):
+    """v2 plan entry (investigation engine §4). `purpose` mirrors `objective` for v1 readers (API, exports)."""
+
+    objective: str = ""
+    questions: list[str] = Field(default_factory=list)  # 2-6, answerable from code
+    targets: list[str] = Field(default_factory=list)  # RepoMap entity id | component id
+    depends_on: list[str] = Field(
+        default_factory=list
+    )  # chapter keys, acyclic; ordering and reader links only
+    expected_evidence: list[EvidenceKind] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _objective_is_purpose(self) -> ChapterPlan:
+        if not self.objective:
+            self.objective = self.purpose
+        elif not self.purpose:
+            self.purpose = self.objective
+        return self
+
+
 class GuidePlan(BaseModel):
     estimated_read_minutes: int
-    sections: list[GuideSectionPlan]
+    sections: list[ChapterPlan]
+
+
+# ---- research ---------------------------------------------------------------------------------------------
+
+
+class EdgeRef(BaseModel):
+    """A call edge a finding or flow states, by entity id (what an edge claim's `graph_node_ids` carry)."""
+
+    src: str
+    dst: str
+    src_name: str
+    dst_name: str
+
+
+class Finding(BaseModel):
+    question_id: int  # index into `ResearchBrief.questions`
+    statement: str  # built deterministically from retrieved chunks / IR / flows, never model prose
+    evidence: list[str]  # chunk ids
+    proof: Proof
+    edges: list[EdgeRef] = Field(default_factory=list)  # the call edges named in `statement`
+
+
+class ResearchSpent(BaseModel):
+    rounds: int = 0
+    retrievals: int = 0
+    llm_calls: int = 0
+    tokens: int = 0  # estimated size of the brief
+
+
+class ResearchBrief(BaseModel):
+    chapter_key: str
+    questions: list[str]
+    findings: list[Finding]
+    flows: list[FlowTrace]
+    tests: list[str]
+    open_questions: list[str]
+    coverage: float  # answered / asked
+    spent: ResearchSpent
+    stopped_by: str | None = None  # coverage | rounds | retrievals | llm_calls | tokens | exhausted | budget
 
 
 # ---- content blocks --------------------------------------------------------------------------------------

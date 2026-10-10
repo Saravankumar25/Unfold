@@ -1,0 +1,140 @@
+{
+ "ch:d5d984a70bdff8ee2fb6b826": {
+  "path": ".coveragerc",
+  "start_line": 1,
+  "end_line": 2,
+  "text": ".coveragerc :: lines 1-2\n[run]\nomit = requests/packages/*"
+ },
+ "ch:3262a31c3968889f11469ebb": {
+  "path": "MANIFEST.in",
+  "start_line": 1,
+  "end_line": 3,
+  "text": "MANIFEST.in :: lines 1-3\ninclude README.md LICENSE NOTICE HISTORY.md requirements-dev.txt\nrecursive-include tests *.py\nrecursive-include tests/certs *"
+ },
+ "ch:3fa33656fef61e8051b21fce": {
+  "path": "src/requests/__init__.py",
+  "start_line": 58,
+  "end_line": 90,
+  "text": "src/requests/__init__.py :: check_compatibility\ndef check_compatibility(urllib3_version, chardet_version, charset_normalizer_version):\n    urllib3_version = urllib3_version.split(\".\")\n    assert urllib3_version != [\"dev\"]  # Verify urllib3 isn't installed from git.\n\n    # Sometimes, urllib3 only reports its version as 16.1.\n    if len(urllib3_version) == 2:\n        urllib3_version.append(\"0\")\n\n    # Check urllib3 for compatibility.\n    major, minor, patch = urllib3_version  # noqa: F811\n    major, minor, patch = int(major), int(minor), int(patch)\n    # urllib3 >= 1.21.1\n    assert major >= 1\n    if major == 1:\n        assert minor >= 21\n\n    # Check charset_normalizer for compatibility.\n    if chardet_version:\n        major, minor, patch = chardet_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # chardet_version >= 3.0.2, < 6.0.0\n        assert (3, 0, 2) <= (major, minor, patch) < (6, 0, 0)\n    elif charset_normalizer_version:\n        major, minor, patch = charset_normalizer_version.split(\".\")[:3]\n        major, minor, patch = int(major), int(minor), int(patch)\n        # charset_normalizer >= 2.0.0 < 4.0.0\n        assert (2, 0, 0) <= (major, minor, patch) < (4, 0, 0)\n    else:\n        warnings.warn(\n            \"Unable to find acceptable character detection dependency \"\n            \"(chardet or charset_normalizer).\",\n            RequestsDependencyWarning,\n        )"
+ },
+ "ch:40d00536c70f395b49c7d6ec": {
+  "path": "src/requests/__init__.py",
+  "start_line": 93,
+  "end_line": 104,
+  "text": "src/requests/__init__.py :: _check_cryptography\ndef _check_cryptography(cryptography_version):\n    # cryptography < 1.3.4\n    try:\n        cryptography_version = list(map(int, cryptography_version.split(\".\")))\n    except ValueError:\n        return\n\n    if cryptography_version < [1, 3, 4]:\n        warning = \"Old version of cryptography ({}) may cause slowdown.\".format(\n            cryptography_version\n        )\n        warnings.warn(warning, RequestsDependencyWarning)"
+ },
+ "ch:a9f7337ac92aedc835d19020": {
+  "path": "src/requests/__init__.py",
+  "start_line": 155,
+  "end_line": 184,
+  "text": "src/requests/__init__.py :: lines 155-184\n    __build__,\n    __cake__,\n    __copyright__,\n    __description__,\n    __license__,\n    __title__,\n    __url__,\n    __version__,\n)\nfrom .api import delete, get, head, options, patch, post, put, request\nfrom .exceptions import (\n    ConnectionError,\n    ConnectTimeout,\n    FileModeWarning,\n    HTTPError,\n    JSONDecodeError,\n    ReadTimeout,\n    RequestException,\n    Timeout,\n    TooManyRedirects,\n    URLRequired,\n)\nfrom .models import PreparedRequest, Request, Response\nfrom .sessions import Session, session\nfrom .status_codes import codes\n\nlogging.getLogger(__name__).addHandler(NullHandler())\n\n# FileModeWarnings go off per the default.\nwarnings.simplefilter(\"default\", FileModeWarning, append=True)"
+ },
+ "ch:aa79fcb2baead9681e065abe": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 25,
+  "end_line": 35,
+  "text": "src/requests/_internal_utils.py :: to_native_string\ndef to_native_string(string, encoding=\"ascii\"):\n    \"\"\"Given a string object, regardless of type, returns a representation of\n    that string in the native string type, encoding and decoding where\n    necessary. This assumes ASCII unless told otherwise.\n    \"\"\"\n    if isinstance(string, builtin_str):\n        out = string\n    else:\n        out = string.decode(encoding)\n\n    return out"
+ },
+ "ch:a5e8f03b408b95341ae086b5": {
+  "path": "src/requests/_internal_utils.py",
+  "start_line": 38,
+  "end_line": 50,
+  "text": "src/requests/_internal_utils.py :: unicode_is_ascii\ndef unicode_is_ascii(u_string):\n    \"\"\"Determine if unicode string only contains ASCII characters.\n\n    :param str u_string: unicode string to check. Must be unicode\n        and not Python 2 `str`.\n    :rtype: bool\n    \"\"\"\n    assert isinstance(u_string, str)\n    try:\n        u_string.encode(\"ascii\")\n        return True\n    except UnicodeEncodeError:\n        return False"
+ },
+ "ch:5833320c6bf957cc0a6bfa9a": {
+  "path": "src/requests/adapters.py",
+  "start_line": 137,
+  "end_line": 139,
+  "text": "src/requests/adapters.py :: BaseAdapter\nclass BaseAdapter:\n    \"\"\"The Base Transport Adapter\"\"\"\n\n# members: (self), (self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None), (self)"
+ },
+ "ch:497321c6b96023b00b4d84e1": {
+  "path": "src/requests/adapters.py",
+  "start_line": 167,
+  "end_line": 201,
+  "text": "src/requests/adapters.py :: HTTPAdapter\nclass HTTPAdapter(BaseAdapter):\n    \"\"\"The built-in HTTP Adapter for urllib3.\n\n    Provides a general-case interface for Requests sessions to contact HTTP and\n    HTTPS urls by implementing the Transport Adapter interface. This class will\n    usually be created by the :class:`Session <Session>` class under the\n    covers.\n\n    :param pool_connections: The number of urllib3 connection pools to cache.\n    :param pool_maxsize: The maximum number of connections to save in the pool.\n    :param max_retries: The maximum number of retries each connection\n        should attempt. Note, this applies only to failed DNS lookups, socket\n        connections and connection timeouts, never to requests where data has\n        made it to the server. By default, Requests does not retry failed\n        connections. If you need granular control over the conditions under\n        which we retry a request, import urllib3's ``Retry`` class and pass\n        that instead.\n    :param pool_block: Whether the connection pool should block for connections.\n\n    Usage::\n\n      >>> import requests\n      >>> s = requests.Session()\n      >>> a = requests.adapters.HTTPAdapter(max_retries=3)\n      >>> s.mount('http://', a)\n    \"\"\"\n\n    __attrs__ = [\n        \"max_retries\",\n        \"config\",\n        \"_pool_connections\",\n        \"_pool_maxsize\",\n        \"_pool_block\",\n    ]\n\n# members: (self, pool_connections=DEFAULT_POOLSIZE, pool_maxsize=DEFAULT_POOLSIZE, max_retries=DEFAULT_RETRIES, pool_block=DEFAULT, (self), (self, state), (self, connections, maxsize, block=DEFAULT_POOLBLOCK, **pool_kwargs), (self, proxy, **proxy_kwargs), (self, conn, url, verify, cert), (self, req, resp), (self, request, verify, cert=None), (self, request, verify, proxies=None, cert=None), (self, url, proxies=None), (self), (self, request, proxies), (self, request, **kwargs), (self, proxy), (self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None)"
+ },
+ "ch:e2505931477d48480316974a": {
+  "path": "src/requests/compat.py",
+  "start_line": 18,
+  "end_line": 27,
+  "text": "src/requests/compat.py :: _resolve_char_detection\ndef _resolve_char_detection():\n    \"\"\"Find supported character detection libraries.\"\"\"\n    chardet = None\n    for lib in (\"chardet\", \"charset_normalizer\"):\n        if chardet is None:\n            try:\n                chardet = importlib.import_module(lib)\n            except ImportError:\n                pass\n    return chardet"
+ },
+ "ch:7a2a029658022cb037a22de7": {
+  "path": "src/requests/exceptions.py",
+  "start_line": 44,
+  "end_line": 52,
+  "text": "src/requests/exceptions.py :: JSONDecodeError.__reduce__\n    def __reduce__(self):\n        \"\"\"\n        The __reduce__ method called when pickling the object must\n        be the one from the JSONDecodeError (be it json/simplejson)\n        as it expects all the arguments for instantiation, not just\n        one like the IOError, and the MRO would by default call the\n        __reduce__ method from the IOError due to the inheritance order.\n        \"\"\"\n        return CompatJSONDecodeError.__reduce__(self)"
+ },
+ "ch:dce1c3a378ebba30654128f5": {
+  "path": "src/requests/exceptions.py",
+  "start_line": 12,
+  "end_line": 16,
+  "text": "src/requests/exceptions.py :: RequestException\nclass RequestException(IOError):\n    \"\"\"There was an ambiguous exception that occurred while handling your\n    request.\n    \"\"\"\n\n# members: (self, *args, **kwargs)"
+ },
+ "ch:b977edf188ec5998ce1967ed": {
+  "path": "src/requests/exceptions.py",
+  "start_line": 27,
+  "end_line": 28,
+  "text": "src/requests/exceptions.py :: InvalidJSONError\nclass InvalidJSONError(RequestException):\n    \"\"\"A JSON error occurred.\"\"\""
+ },
+ "ch:a2afe053e4d2f06a05220ef4": {
+  "path": "src/requests/exceptions.py",
+  "start_line": 31,
+  "end_line": 33,
+  "text": "src/requests/exceptions.py :: JSONDecodeError\nclass JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\n    \"\"\"Couldn't decode the text into json\"\"\"\n\n# members: (self, *args, **kwargs), (self)"
+ },
+ "ch:3b9383d89415f05a6b0ad4c6": {
+  "path": "src/requests/help.py",
+  "start_line": 34,
+  "end_line": 66,
+  "text": "src/requests/help.py :: _implementation\ndef _implementation():\n    \"\"\"Return a dict with the Python implementation and version.\n\n    Provide both the name and the version of the Python implementation\n    currently running. For example, on CPython 3.10.3 it will return\n    {'name': 'CPython', 'version': '3.10.3'}.\n\n    This function works best on CPython and PyPy: in particular, it probably\n    doesn't work for Jython or IronPython. Future investigation should be done\n    to work out the correct shape of the code for those platforms.\n    \"\"\"\n    implementation = platform.python_implementation()\n\n    if implementation == \"CPython\":\n        implementation_version = platform.python_version()\n    elif implementation == \"PyPy\":\n        implementation_version = \"{}.{}.{}\".format(\n            sys.pypy_version_info.major,\n            sys.pypy_version_info.minor,\n            sys.pypy_version_info.micro,\n        )\n        if sys.pypy_version_info.releaselevel != \"final\":\n            implementation_version = \"\".join(\n                [implementation_version, sys.pypy_version_info.releaselevel]\n            )\n    elif implementation == \"Jython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    elif implementation == \"IronPython\":\n        implementation_version = platform.python_version()  # Complete Guess\n    else:\n        implementation_version = \"Unknown\"\n\n    return {\"name\": implementation, \"version\": implementation_version}"
+ },
+ "ch:75fe7991a1d33fa79dd3682b": {
+  "path": "src/requests/help.py",
+  "start_line": 69,
+  "end_line": 125,
+  "text": "src/requests/help.py :: info\ndef info():\n    \"\"\"Generate information for a bug report.\"\"\"\n    try:\n        platform_info = {\n            \"system\": platform.system(),\n            \"release\": platform.release(),\n        }\n    except OSError:\n        platform_info = {\n            \"system\": \"Unknown\",\n            \"release\": \"Unknown\",\n        }\n\n    implementation_info = _implementation()\n    urllib3_info = {\"version\": urllib3.__version__}\n    charset_normalizer_info = {\"version\": None}\n    chardet_info = {\"version\": None}\n    if charset_normalizer:\n        charset_normalizer_info = {\"version\": charset_normalizer.__version__}\n    if chardet:\n        chardet_info = {\"version\": chardet.__version__}\n\n    pyopenssl_info = {\n        \"version\": None,\n        \"openssl_version\": \"\",\n    }\n    if OpenSSL:\n        pyopenssl_info = {\n            \"version\": OpenSSL.__version__,\n            \"openssl_version\": f\"{OpenSSL.SSL.OPENSSL_VERSION_NUMBER:x}\",\n        }\n    cryptography_info = {\n        \"version\": getattr(cryptography, \"__version__\", \"\"),\n    }\n    idna_info = {\n        \"version\": getattr(idna, \"__version__\", \"\"),\n    }\n\n    system_ssl = ssl.OPENSSL_VERSION_NUMBER\n    system_ssl_info = {\"version\": f\"{system_ssl:x}\" if system_ssl is not None else \"\"}\n\n    return {\n        \"platform\": platform_info,\n        \"implementation\": implementation_info,\n        \"system_ssl\": system_ssl_info,\n        \"using_pyopenssl\": pyopenssl is not None,\n        \"using_charset_normalizer\": chardet is None,\n        \"pyOpenSSL\": pyopenssl_info,\n        \"urllib3\": urllib3_info,\n        \"chardet\": chardet_info,\n        \"charset_normalizer\": charset_normalizer_info,\n        \"cryptography\": cryptography_info,\n        \"idna\": idna_info,\n        \"requests\": {\n            \"version\": requests_version,\n        },\n    }"
+ },
+ "ch:7f460ecb11e2c83175466976": {
+  "path": "src/requests/help.py",
+  "start_line": 128,
+  "end_line": 130,
+  "text": "src/requests/help.py :: main\ndef main():\n    \"\"\"Pretty-print the bug information as JSON.\"\"\"\n    print(json.dumps(info(), sort_keys=True, indent=2))"
+ },
+ "ch:0f353b26a6dd43600aebb494": {
+  "path": "src/requests/models.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "src/requests/models.py :: lines 1-60\n\"\"\"\nrequests.models\n~~~~~~~~~~~~~~~\n\nThis module contains the primary objects that power Requests.\n\"\"\"\n\nimport datetime\n\n# Import encoding now, to avoid implicit import later.\n# Implicit import within threads may cause LookupError when standard library is in a ZIP,\n# such as in Embedded Python. See https://github.com/psf/requests/issues/3578.\nimport encodings.idna  # noqa: F401\nfrom io import UnsupportedOperation\n\nfrom urllib3.exceptions import (\n    DecodeError,\n    LocationParseError,\n    ProtocolError,\n    ReadTimeoutError,\n    SSLError,\n)\nfrom urllib3.fields import RequestField\nfrom urllib3.filepost import encode_multipart_formdata\nfrom urllib3.util import parse_url\n\nfrom ._internal_utils import to_native_string, unicode_is_ascii\nfrom .auth import HTTPBasicAuth\nfrom .compat import (\n    Callable,\n    JSONDecodeError,\n    Mapping,\n    basestring,\n    builtin_str,\n    chardet,\n    cookielib,\n)\nfrom .compat import json as complexjson\nfrom .compat import urlencode, urlsplit, urlunparse\nfrom .cookies import _copy_cookie_jar, cookiejar_from_dict, get_cookie_header\nfrom .exceptions import (\n    ChunkedEncodingError,\n    ConnectionError,\n    ContentDecodingError,\n    HTTPError,\n    InvalidJSONError,\n    InvalidURL,\n)\nfrom .exceptions import JSONDecodeError as RequestsJSONDecodeError\nfrom .exceptions import MissingSchema\nfrom .exceptions import SSLError as RequestsSSLError\nfrom .exceptions import StreamConsumedError\nfrom .hooks import default_hooks\nfrom .status_codes import codes\nfrom .structures import CaseInsensitiveDict\nfrom .utils import (\n    check_header_validity,\n    get_auth_from_url,\n    guess_filename,\n    guess_json_utf,"
+ },
+ "ch:246c73cd673a7654eb5cb782": {
+  "path": "src/requests/sessions.py",
+  "start_line": 333,
+  "end_line": 353,
+  "text": "src/requests/sessions.py :: SessionRedirectMixin.rebuild_method\n    def rebuild_method(self, prepared_request, response):\n        \"\"\"When being redirected we may want to change the method of the request\n        based on certain specs or browser behavior.\n        \"\"\"\n        method = prepared_request.method\n\n        # https://tools.ietf.org/html/rfc7231#section-6.4.4\n        if response.status_code == codes.see_other and method != \"HEAD\":\n            method = \"GET\"\n\n        # Do what the browsers do, despite standards...\n        # First, turn 302s into GETs.\n        if response.status_code == codes.found and method != \"HEAD\":\n            method = \"GET\"\n\n        # Second, if a POST is responded to with a 301, turn it into a GET.\n        # This bizarre behaviour is explained in Issue 1704.\n        if response.status_code == codes.moved and method == \"POST\":\n            method = \"GET\"\n\n        prepared_request.method = method"
+ },
+ "ch:7e058841f0dff79be5e12e75": {
+  "path": "src/requests/utils.py",
+  "start_line": 1,
+  "end_line": 60,
+  "text": "src/requests/utils.py :: lines 1-60\n\"\"\"\nrequests.utils\n~~~~~~~~~~~~~~\n\nThis module provides utility functions that are used within Requests\nthat are also useful for external consumption.\n\"\"\"\n\nimport codecs\nimport contextlib\nimport io\nimport os\nimport re\nimport socket\nimport struct\nimport sys\nimport tempfile\nimport warnings\nimport zipfile\nfrom collections import OrderedDict\n\nfrom urllib3.util import make_headers, parse_url\n\nfrom . import certs\nfrom .__version__ import __version__\n\n# to_native_string is unused here, but imported here for backwards compatibility\nfrom ._internal_utils import (  # noqa: F401\n    _HEADER_VALIDATORS_BYTE,\n    _HEADER_VALIDATORS_STR,\n    HEADER_VALIDATORS,\n    to_native_string,\n)\nfrom .compat import (\n    Mapping,\n    basestring,\n    bytes,\n    getproxies,\n    getproxies_environment,\n    integer_types,\n)\nfrom .compat import parse_http_list as _parse_list_header\nfrom .compat import (\n    proxy_bypass,\n    proxy_bypass_environment,\n    quote,\n    str,\n    unquote,\n    urlparse,\n    urlunparse,\n)\nfrom .cookies import cookiejar_from_dict\nfrom .exceptions import (\n    FileModeWarning,\n    InvalidHeader,\n    InvalidURL,\n    UnrewindableBodyError,\n)\nfrom .structures import CaseInsensitiveDict\n"
+ },
+ "ch:21176d0f0d480c4c3b956d90": {
+  "path": "src/requests/utils.py",
+  "start_line": 76,
+  "end_line": 112,
+  "text": "src/requests/utils.py :: proxy_bypass_registry\n    def proxy_bypass_registry(host):\n        try:\n            import winreg\n        except ImportError:\n            return False\n\n        try:\n            internetSettings = winreg.OpenKey(\n                winreg.HKEY_CURRENT_USER,\n                r\"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\",\n            )\n            # ProxyEnable could be REG_SZ or REG_DWORD, normalizing it\n            proxyEnable = int(winreg.QueryValueEx(internetSettings, \"ProxyEnable\")[0])\n            # ProxyOverride is almost always a string\n            proxyOverride = winreg.QueryValueEx(internetSettings, \"ProxyOverride\")[0]\n        except (OSError, ValueError):\n            return False\n        if not proxyEnable or not proxyOverride:\n            return False\n\n        # make a check value list from the registry entry: replace the\n        # '<local>' string by the localhost entry and the corresponding\n        # canonical entry.\n        proxyOverride = proxyOverride.split(\";\")\n        # filter out empty strings to avoid re.match return true in the following code.\n        proxyOverride = filter(None, proxyOverride)\n        # now check if we match one of the registry values.\n        for test in proxyOverride:\n            if test == \"<local>\":\n                if \".\" not in host:\n                    return True\n            test = test.replace(\".\", r\"\\.\")  # mask dots\n            test = test.replace(\"*\", r\".*\")  # change glob sequence\n            test = test.replace(\"?\", r\".\")  # change glob char\n            if re.match(test, host, re.I):\n                return True\n        return False"
+ },
+ "ch:35c9fd1569dc96f0a2adf737": {
+  "path": "src/requests/utils.py",
+  "start_line": 126,
+  "end_line": 132,
+  "text": "src/requests/utils.py :: dict_to_sequence\ndef dict_to_sequence(d):\n    \"\"\"Returns an internal sequence dictionary update.\"\"\"\n\n    if hasattr(d, \"items\"):\n        d = d.items()\n\n    return d"
+ },
+ "ch:4d0306939193423ecd9f4b77": {
+  "path": "tests/test_requests.py",
+  "start_line": 80,
+  "end_line": 82,
+  "text": "tests/test_requests.py :: TestRequests\nclass TestRequests:\n    digest_auth_algo = (\"MD5\", \"SHA-256\", \"SHA-512\")\n\n# members: (self), (self, exception, url), (self), (self, httpbin, method), (self, httpbin, method), (self, httpbin, method), (self, httpbin), (self), (self, url, expected), (self), (self), (self), (self), (self, httpbin, scheme), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin, key), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin, username, password), (self), (self, url, exception), (self), (self, httpbin, httpbin_secure), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin), (self, httpbin) (+121 more)"
+ }
+}

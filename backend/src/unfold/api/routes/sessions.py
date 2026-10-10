@@ -56,7 +56,11 @@ async def current_session(rt: RuntimeDep, session: SessionDep) -> SessionCurrent
             await s.execute(
                 select(ProjectRow, AnalysisJobRow)
                 .join(AnalysisJobRow, AnalysisJobRow.project_id == ProjectRow.id)
-                .where(ProjectRow.session_id == session.id)
+                .where(
+                    ProjectRow.session_id == session.id,
+                    ProjectRow.deleting_at.is_(None),
+                    AnalysisJobRow.kind == "analysis",
+                )
                 .order_by(ProjectRow.created_at.desc(), AnalysisJobRow.created_at.desc())
             )
         ).all()

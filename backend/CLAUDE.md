@@ -49,4 +49,6 @@ Never hard-code ports; always go through `unfold.core.config.Settings`.
 - Integration: `tests/integration/`, `pytestmark = pytest.mark.integration`, fixtures in `tests/integration/conftest.py`
   (`runtime`, `settings`, `project_id`). Clean up what you create (use a random `project_id`).
 - Fixture repositories for analysis tests: `../evals/fixtures/repos/<name>/` (never executed, only parsed).
+- `unfold.evaluation` is test tooling (scripted model, in-memory stores, offline evals: `uv run python -m unfold.evaluation.offline --gate`).
+  Production code must not import it (architecture test). Gold data: `../evals/gold`, thresholds: `../evals/baseline.json`.
 - Test files are collected with `--import-mode=importlib`: test file basenames must be unique across folders.

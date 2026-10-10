@@ -7,7 +7,7 @@ import json
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     model_cache_dir: str = ".model-cache"
+    # ONNX intra-op threads per local model; 0 = onnxruntime default (all physical cores, which oversubscribes a
+    # shared or hybrid-core machine: measured, default threads burn 3-5x the CPU of 6 for the same rerank)
+    model_threads: int = 6
 
     # limits
     session_ttl_seconds: int = 86_400
@@ -117,6 +120,16 @@ class Settings(BaseSettings):
     max_job_attempts: int = 3
     max_concurrent_jobs: int = 2
     section_concurrency: int = 2
+    # per-chapter investigation caps (docs/design/investigation-engine.md §5); inside the per-job LLM budget
+    research_max_rounds: int = Field(2, ge=0, le=2)  # the first pass and at most one targeted extra round
+    research_max_retrievals: int = 12
+    research_max_llm_calls: int = 4
+    research_brief_tokens: int = 6000
+    revision_max_rounds: int = 2  # rewrite rounds per chapter (investigation engine, section 5 Reviser)
+    max_regenerations_per_hour: int = (
+        6  # per project; each one re-researches, rewrites and re-verifies a chapter
+    )
+    max_regenerations_per_session_hour: int = 12  # per session, over all of its projects
     max_sessions_per_ip_per_hour: int = 20
     max_sessions_per_hour: int = 500
     max_projects_per_ip_per_hour: int = 30
@@ -183,6 +196,23 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    # --- phase 3: chat, exports, cleanup ---------------------------------------------------------------------
+    chat_llm_call_budget: int = (
+        40  # model calls one chat may use in total (hard stop at 1.3x, see the gateway)
+    )
+    chat_llm_token_budget: int = 400_000  # input + output tokens per chat
+    chat_context_tokens: int = 6_000
+    chat_history_messages: int = 6
+    max_chats_per_project: int = 20
+    export_ttl_seconds: int = 86_400
+    max_exports_per_hour: int = 10  # per project
+    export_download: Literal["proxy", "presigned"] = "proxy"
+    export_presigned_ttl_seconds: int = 300
+    sweep_interval_seconds: int = (
+        300  # in-process sweeper period of the API; 0 = an external scheduler runs it
+    )
+    # --- end phase 3 -----------------------------------------------------------------------------------------
 
 
 @lru_cache(maxsize=1)

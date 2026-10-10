@@ -9,13 +9,29 @@ from dataclasses import dataclass, field
 
 REDACTED = "<REDACTED_SECRET>"
 
-# (name, pattern, group-to-redact). Group 0 = whole match.
+_PK_BEGIN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+_PK_END = re.compile(r"-----END [A-Z ]*PRIVATE KEY-----")
+_PK_WINDOW = 8192
+
+
+def _private_key_spans(text: str) -> list[tuple[int, int]]:
+    """BEGIN..END blocks of at most 8 KiB. Linear in practice: a lone BEGIN header costs one bounded literal search,
+    where a single regex with a lazy 8 KiB gap re-scans the window from every header (quadratic on hostile input)."""
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    while (begin := _PK_BEGIN.search(text, pos)) is not None:
+        end = _PK_END.search(text, begin.end(), begin.end() + _PK_WINDOW + 64)
+        if end is None:
+            pos = begin.end()
+        else:
+            spans.append((begin.start(), end.end()))
+            pos = end.end()
+    return spans
+
+
+# (name, pattern, group-to-redact). Group 0 = whole match. `private_key` is matched by `_private_key_spans`.
 _PATTERNS: list[tuple[str, re.Pattern[str], int]] = [
-    (
-        "private_key",
-        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]{0,8192}?-----END [A-Z ]*PRIVATE KEY-----"),
-        0,
-    ),
+    ("private_key", _PK_BEGIN, 0),
     ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), 0),
     ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), 0),
     ("github_token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}\b"), 0),
@@ -104,6 +120,9 @@ def redact(text: str) -> Redaction:
     spans: list[tuple[int, int, int, str]] = []
 
     for rank, (kind, pattern, group) in enumerate(_PATTERNS):
+        if kind == "private_key":
+            spans.extend((start, end, rank, kind) for start, end in _private_key_spans(text))
+            continue
         for m in pattern.finditer(text):
             start, end = m.span(group)
             spans.append((start, end, rank, kind))

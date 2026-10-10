@@ -32,9 +32,10 @@ All settings come from environment (`.env` locally, never committed).
 | App | `APP_ENV` (development), `LOG_LEVEL` (INFO), `LOG_FORMAT` (json\|console), `PUBLIC_WEB_ORIGIN` (http://localhost:3000), `COOKIE_SECURE` (false in dev) |
 | Stores | `DATABASE_URL`, `REDIS_URL`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `QDRANT_URL`, `QDRANT_COLLECTION_PREFIX` (unfold_chunks), `OBJECT_STORE_ENDPOINT`, `OBJECT_STORE_ACCESS_KEY`, `OBJECT_STORE_SECRET_KEY`, `OBJECT_STORE_BUCKET` (unfold), `OBJECT_STORE_SECURE` (false) |
 | LLM | `GEMINI_API_KEY_1..4`, `GROQ_API_KEY_1..4` (optional), `GEMINI_MODEL_FAST`, `GEMINI_MODEL_BALANCED`, `GEMINI_MODEL_REASONING`, `LLM_MODEL_LIMITS` (JSON per-model rpm/tpm/rpd/concurrency), `LLM_QUOTA_SCOPE` (shared\|per_key, default shared), `ANALYSIS_LLM_CALL_BUDGET` (150) |
-| Local models | `EMBEDDING_MODEL` (BAAI/bge-small-en-v1.5), `RERANKER_MODEL` (Xenova/ms-marco-MiniLM-L-6-v2), `MODEL_CACHE_DIR` |
+| Local models | `EMBEDDING_MODEL` (BAAI/bge-small-en-v1.5), `RERANKER_MODEL` (Xenova/ms-marco-MiniLM-L-6-v2), `MODEL_CACHE_DIR`, `MODEL_THREADS` (ONNX threads per model, default 6) |
 | Limits | `SESSION_TTL_SECONDS` (86400), `SESSION_MAX_LIFETIME_SECONDS` (259200), `MAX_ZIP_BYTES` (50 MiB), `MAX_EXTRACTED_BYTES` (300 MiB), `MAX_FILE_COUNT` (20000), `MAX_SINGLE_FILE_BYTES` (1 MiB), `MAX_PATH_DEPTH` (32), `MAX_COMPRESSION_RATIO` (100), `MAX_REPO_ARCHIVE_BYTES` (100 MiB) |
 | GitHub | `GITHUB_TOKEN` (optional; only raises API rate limit, never used for private repos) |
+| Guide | `SECTION_CONCURRENCY` (2), `RESEARCH_MAX_ROUNDS` (2), `RESEARCH_MAX_RETRIEVALS` (12), `RESEARCH_MAX_LLM_CALLS` (4), `RESEARCH_BRIEF_TOKENS` (6000), `REVISION_MAX_ROUNDS` (2), `MAX_REGENERATIONS_PER_HOUR` (6, per project), `MAX_REGENERATIONS_PER_SESSION_HOUR` (12, per session) |
 | Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` (unset → spans not exported, ids still logged), `OTEL_SERVICE_NAME` |
 
 `get_settings()` is lru-cached per process. Secrets are `SecretStr` and never logged.
@@ -56,13 +57,13 @@ Child rows `ON DELETE CASCADE` from `projects`; projects cascade from `sessions`
 |---|---|
 | `sessions` | `id` PK, `token_hash` UNIQUE, `created_at`, `last_active_at`, `expires_at`, `status` (active\|deleting) |
 | `projects` | `id` PK, `session_id` FK, `input_type` (github\|zip), `source_locator`, `source_fingerprint`, `detected_name`, `default_branch`, `commit_sha`, `technical_level`, `user_instruction`, `project_type` JSONB, `stats` JSONB, `analysis_version`, `ir_object_key`, `lexical_object_key`, `created_at`, `expires_at` |
-| `analysis_jobs` | `id` PK, `project_id` FK, `status` (queued\|running\|succeeded\|failed), `current_stage`, `stage_progress` JSONB, `attempt`, `error_code`, `error_detail` JSONB, `retryable`, `created_at`, `started_at`, `completed_at`, `heartbeat_at` |
+| `analysis_jobs` | `id` PK, `project_id` FK, `status` (queued\|running\|succeeded\|failed), `kind` (analysis\|regenerate, default analysis), `section_key` (regenerate: the chapter to redo), `current_stage`, `stage_progress` JSONB, `attempt`, `error_code`, `error_detail` JSONB, `retryable`, `created_at`, `started_at`, `completed_at`, `heartbeat_at` |
 | `source_files` | PK(`project_id`,`path`), `language`, `size_bytes`, `sha256`, `tier` (0–4), `role`, `is_text`, `content` (NULL when binary/oversized/tier 4) |
 | `chunks` | `id` PK, `project_id`, `path`, `start_line`, `end_line`, `kind`, `symbol_id`, `symbol_name`, `language`, `content_type` (source\|docs\|config\|test\|infra), `importance`, `subsystem_id`, `graph_node_ids` JSONB, `trust` JSONB, `text`, `content_hash`; idx(`project_id`) |
 | `summaries` | PK(`project_id`,`level`,`key`), `title`, `facts` JSONB (deterministic), `semantic` TEXT (LLM), `members` JSONB, `content_hash`, `prompt_version`, `model` |
 | `findings` | `id` PK, `project_id`, `agent`, `objective`, `status` (completed\|partial\|failed), `content` JSONB, `trajectory` JSONB, `llm_calls`, `tool_calls`, `created_at` |
 | `guide_plans` | `project_id` PK, `plan` JSONB (GuidePlan), `planner_version`, `created_at` |
-| `guide_sections` | `id` PK, `project_id`, `section_key` (UNIQUE with project), `title`, `position`, `status` (pending\|generating\|ready\|degraded\|failed), `content` JSONB, `claims` JSONB, `evidence_summary` JSONB, `quality_scores` JSONB, `version`, `updated_at` |
+| `guide_sections` | `id` PK, `project_id`, `section_key` (UNIQUE with project), `title`, `position`, `status` (pending\|generating\|ready\|degraded\|failed), `content` JSONB, `claims` JSONB, `evidence_summary` JSONB, `quality_scores` JSONB, `research` JSONB (ResearchBrief, nullable), `verification` JSONB (`StoredVerification`, nullable; set once a chapter is verified and revised, it is the per-chapter checkpoint), `input_hash` text (reserved, nullable, never written), `version`, `updated_at` |
 | `diagrams` | `id` PK, `project_id`, `kind`, `title`, `description`, `spec` JSONB, `mermaid`, `origin` (deterministic\|refined), `section_key` NULL |
 | `chat_sessions` | `id` PK, `project_id`, `title`, `summary`, `summarized_through` (int seq), `learning_state` JSONB, `created_at`, `updated_at` |
 | `chat_messages` | `id` PK, `chat_session_id`, `seq`, `role` (user\|assistant), `mode`, `content` JSONB `{text}`, `evidence` JSONB, `model_metadata` JSONB, `created_at`; UNIQUE(`chat_session_id`,`seq`) |
@@ -78,8 +79,8 @@ Project creation (`api.routes.projects`): session touch + project + job commit �
 ```text
 RECEIVED → VALIDATING_INPUT → INGESTING → SECURITY_SCANNING → INVENTORY → STRUCTURAL_ANALYSIS
 → BUILDING_IR → BUILDING_GRAPH → INDEXING_LEXICAL → INDEXING_DENSE → SUMMARIZING_HIERARCHY
-→ DISCOVERING_SUBSYSTEMS → INVESTIGATING_PROJECT → PLANNING_GUIDE → GENERATING_GUIDE
-→ VERIFYING_GUIDE → GENERATING_VISUALS → FINALIZING → READY
+→ DISCOVERING_SUBSYSTEMS → INVESTIGATING_PROJECT → PLANNING_GUIDE → RESEARCHING_GUIDE → GENERATING_GUIDE
+→ VERIFYING_GUIDE → REVISING_GUIDE → GENERATING_VISUALS → FINALIZING → READY
 failures: FAILED_INPUT | FAILED_SECURITY | FAILED_INGESTION | FAILED_ANALYSIS
           | FAILED_PROVIDER_CAPACITY | FAILED_GENERATION | FAILED_EXPORT
 ```
@@ -113,7 +114,7 @@ No analyzer executes code, imports repository modules, or shells out.
 
 ## 8. Project IR (`unfold.project_ir`)
 
-`ProjectIR` (pydantic, `IR_SCHEMA_VERSION`) fields per ESD §9. Every entity has `id` (§3), `provenance: Provenance{source: deterministic|inferred, analyzer, confidence, evidence_ids}` and file/line refs. `RelationshipIR{source_id, target_id, type, provenance}`. Builder is a pure function `build_ir(meta, inventory, analyses) -> ProjectIR`. Snapshot: gzip JSON at `projects/{id}/ir/{version}.json.gz`.
+`ProjectIR` (pydantic, `IR_SCHEMA_VERSION`) fields per ESD §9. Every entity has `id` (§3), `provenance: Provenance{source: deterministic|inferred, analyzer, confidence, evidence_ids}` and file/line refs. `RelationshipIR{source_id, target_id, type, provenance, proof}` (`proof` static|heuristic|inferred, default static; inferred is never drawn). `ProjectIR.unresolved_calls` lists calls to project-named or dynamic callees the analyzers could not resolve (never edges, capped at 5000). `unfold.understand` (`RepoMap`, `trace_flow`, `build_architecture`) derives symbol lookup, flows and the architecture model from the IR. Builder is a pure function `build_ir(meta, inventory, analyses) -> ProjectIR`. Snapshot: gzip JSON at `projects/{id}/ir/{version}.json.gz`.
 
 `project_ir.complexity.score(ir) -> ComplexityProfile{level: small|medium|large, score, investigators, target_read_minutes, retrieval_breadth, agent_budget}` from deterministic signals (files, LOC, languages, services, data stores, infra, AI presence, relationship count).
 
@@ -194,13 +195,18 @@ class AnalysisState(TypedDict, total=False):
 | `summarize` | SUMMARIZING_HIERARCHY | `summaries` (deterministic file/module; semantic for top files, ≤12 files per FAST call) |
 | `discover_subsystems` | DISCOVERING_SUBSYSTEMS | subsystem summaries (1 REASONING call labels communities) + inferred PART_OF edges |
 | `investigate` (`direct` \| `deep` by complexity) | INVESTIGATING_PROJECT | `findings`, project synthesis (summary level=project) |
-| `plan_guide` | PLANNING_GUIDE | `guide_plans`, pending sections |
-| `generate_sections` | GENERATING_GUIDE | sections (concurrency 3; per-section isolation) |
-| `verify_guide` | VERIFYING_GUIDE | claim statuses, repairs, consistency report |
+| `plan` | INVESTIGATING_PROJECT, PLANNING_GUIDE | `ArchitectureModel` (rebuilt, not stored), `guide_plans` (`ChapterPlan`s, `guide.plan`), pending sections |
+| `research` | RESEARCHING_GUIDE | `guide_sections.research` (`ResearchBrief` per chapter, `guide.research`) |
+| `sections` | GENERATING_GUIDE | sections written from the brief in `depends_on` waves (`guide.write`; per-section isolation) |
+| `verify` | VERIFYING_GUIDE, REVISING_GUIDE (entered when the first chapter needs a rewrite) | per chapter: `claims` statuses, `quality_scores`, `verification`, final `content`, `status` ready\|degraded (`guide.critique`, `guide.revise`) |
 | `visuals` | GENERATING_VISUALS | `diagrams`, diagram blocks attached to sections |
 | `finalize` | FINALIZING → READY | stats; job succeeded |
 
 Heartbeat task updates `heartbeat_at` every 20 s. Every node overwrites its own outputs (safe re-run).
+
+A job of kind `regenerate` (`analysis_jobs.kind`, `section_key`) runs one step instead of the list above: `regenerate` (RESEARCHING_GUIDE → GENERATING_GUIDE → VERIFYING_GUIDE → REVISING_GUIDE for that chapter, persisted in one transaction with `version + 1`) followed by `visuals`. It is started by `POST /projects/{id}/sections/{key}/regenerate`, travels over `JobQueue.enqueue_analysis`, and is invisible to `GET /projects/{id}` (`latest_job` reads analysis jobs only); `GET /projects/{id}/progress` reports it as `regeneration`.
+
+Per-chapter resume: `_plan` replaces every row of the project (what a crashed earlier attempt of the stage left is stale; there is no cross-job reuse); `_research` skips a chapter that has a brief or content; `_sections` skips one with content; `_verify` skips one with `verification`. A crash mid-revision therefore redoes that chapter's critique and rewrites only (their result is written atomically when the loop ends).
 
 ## 15. Deep Agents (`unfold.agents`)
 
@@ -210,11 +216,17 @@ Heartbeat task updates `heartbeat_at` every 20 s. Every node overwrites its own 
 
 ## 16. Guide (`unfold.guide`)
 
-`GuidePlan{estimated_read_minutes, sections: [GuideSectionPlan{key, title, kind: backbone|core, purpose, target_minutes, required_concepts, evidence_objectives, visual_needs, depth, related_subsystems}]}` — one REASONING structured call, then validated (applicable PRD §8.1 backbone present, unique keys, minutes within target ±30 %).
+`GuidePlan{estimated_read_minutes, sections: [ChapterPlan]}`; `ChapterPlan` extends the v1 `GuideSectionPlan{key, title, kind: backbone|core, purpose, target_minutes, required_concepts, evidence_objectives, visual_needs, depth, related_subsystems}` with `objective` (mirrors `purpose`), `questions` (2-6), `targets` (RepoMap entity or component ids), `depends_on` (acyclic chapter keys), `expected_evidence`; v1 rows load with the new fields empty. `guide.plan.plan_chapters`: deterministic skeleton by `ArchitectureModel.project_kind`, chapter count from the complexity score (4-14), one structured call (`PlanRefinement`) that may refine titles/objectives/questions/targets/dependencies inside the skeleton; unknown targets, cycles, wrong key set or bad question counts fall back to the skeleton and set job `degraded` = `guide_plan`.
+
+`guide.research.Investigator.research(plan) -> ResearchBrief{questions, findings: [Finding{question_id, statement, evidence: chunk ids, proof}], flows, tests, open_questions, coverage, spent{rounds, retrievals, llm_calls, tokens}, stopped_by}`: per question target lookup (free; a question that names its target and is answered by it skips retrieval), `HybridRetriever.search`, `trace_flow` for entry-point targets, test lookup; one targeted extra round when coverage < 0.7, only for questions with a missing facet (retrieval sufficiency gaps or expected evidence kinds); caps `RESEARCH_MAX_ROUNDS` (0-2, validated), `RESEARCH_MAX_RETRIEVALS`, `RESEARCH_MAX_LLM_CALLS`, `RESEARCH_BRIEF_TOKENS`. The only model call is decomposing a plan with fewer than 2 questions.
 
 `SectionContent{summary, blocks: Block[]}`; `Block = heading | paragraph{text} | bullets{items} | callout{tone: note|tip|warning|insight, text} | code{language, code, path, start_line, caption} | diagram{diagram_id} | table{headers, rows} | qa{question, answer, kind: repository|design|failure|security|extension} | glossary{items}`. Inline: `**bold**`, `*em*`, `` `code` ``, citations `[E3]`.
 
-Writer: retrieval (guide mode) → compile (≈9k tokens) → BALANCED structured `SectionDraft{content, claims: [{text, kind: project_fact|inference|improvement, evidence: ["E3"]}]}`. Verifier (`guide.verify`): `E#` → chunk ids; deterministic support (cited evidence exists AND ≥60 % of salient claim tokens appear in cited text) → VERIFIED; `inference` → INFERRED; `improvement` → "proposed", not fact-checked; remaining facts → one batched EVALUATOR call per section → STRONGLY_INFERRED | INFERRED | UNSUPPORTED. UNSUPPORTED → one BALANCED repair rewriting affected blocks; still unsupported → section `degraded` (claims displayed with status). Consistency: one REASONING call over section summaries + key claims → issues in `quality_scores.consistency`; contradictions trigger ≤2 targeted repairs. Simplify/Deepen endpoints regenerate at shifted depth from the same compiled context (P0), cached as variants.
+Writer (`guide.write.write_chapter`, prompt version 5): chunks fetched by the brief's evidence ids → compile (≈9k tokens including the rendered brief, which is fenced and carries the `[E#]` labels) + one fenced line (title, summary) per `depends_on` chapter + one fenced line (title, objective) per other chapter under "Covered in other chapters", so it does not repeat what another chapter owns → BALANCED structured `SectionDraft{content, claims: [{text, kind: project_fact|inference|improvement, evidence: ["E3"]}]}`. Verify (`guide.verify.verify_section`, pure): per block `b<i>` it checks `path_exists` and `line_in_bounds` for `[E#]` labels, `path:L12-L40` mentions and code-block paths, `symbol_exists` for the symbol of cited evidence, `excerpt_matches` (every quoted line is a line of the cited file, whitespace-normalised; the file text is rebuilt from the stored chunks by `text_from_chunks`), `edge_exists` for a claim with two `graph_node_ids` (proof ≠ inferred) and `claim_supported` (`grade_claims` left a project fact UNSUPPORTED or INFERRED; placed at the sentence, list item or table cell with the best Dice overlap (≥ 0.45) over the claim's stemmed content words, and so in that block). `grade_claims` itself is unchanged (`VERIFIED` only when the cited text contains ≥ 60 % of the claim's identifiers; the model never grades itself). One `guide.critique` call (`guide.critique.critique_section`, FAST, P2) scores coverage, depth, coherence, specificity and redundancy and names weak block ids; its schema has no field for text. Verdict: `accept`, `revise` (failing blocks listed; at most `REVISION_MAX_ROUNDS` rewrites) or `accept_with_gaps`.
+
+Revise (`guide.revise.run_revision_loop`, injected `verify` and `rewrite`): `plan_revision` builds one item per failing block (why it failed, the brief chunks that bear on it, a query); `guide.rewrite.Rewriter` fetches those chunks plus one targeted retrieval, compiles them like any evidence, asks BALANCED/P2 (`guide.revise`) for replacement blocks and their claims, maps the model's `[E#]` onto the chapter's own labels (new excerpts extend `evidence_summary`) and accepts a code block only if its lines are found in the excerpts shown. The loop stops on `accept`, at the cap, or when a round does not reduce the failures (the earlier content is kept). What still fails is resolved by `resolve_gaps`: a block that fails only because of unsupported claims is fixed at the sentence (or bullet) that made them (a sentence that cites something real is kept as its own paragraph behind "Not confirmed in the code:", which the frontend marks; one that cites nothing is removed); any other failure qualifies the whole block when it cites something real and removes it otherwise. The claim records follow the prose: the claim of a removed statement is dropped, a qualified one becomes an `inference` with status INFERRED. Calls the gateway refuses (`LLM_BUDGET_EXHAUSTED`; P2 is refused first, so revision never starves writing) or whose output is invalid cost the critique or the rewrite, not the chapter: the job gets `degraded` = `guide_critique` / `guide_revision` and the gaps are resolved deterministically. Section status is `degraded` when any gap was resolved, else `ready`; `verification` stores the final `VerificationResult`, `rounds`, `stopped_by` and the statements qualified or removed. A failing claim the verifier cannot place stays as recorded and is counted by the rubric, with one exception: when every identifier of the claim that its cited evidence does not contain occurs nowhere in the chapter's text (`generate.unstated_claims`), the chapter never makes the statement; the claim is listed in `verification.unstated`, counted as `quality_scores.claims_not_stated`, and left out of `claims`. Nothing else is dropped to improve a score.
+
+Input hash: not built. Chapter-level reuse by input hash is not built: a project has exactly one analysis job (created with the project, resumed by checkpoint on retry or sweep) and a regeneration always redoes its chapter, so no second job ever finds finished chapters to compare. `guide_sections.input_hash` stays as an unwritten nullable column (additive, already migrated); a re-analysis feature would need to write and read it. Simplify/Deepen variants are not built either.
 
 ## 17. Diagrams (`unfold.diagrams`)
 
@@ -222,11 +234,11 @@ Writer: retrieval (guide mode) → compile (≈9k tokens) → BALANCED structure
 
 ## 18. Chat (`unfold.chat`)
 
-`ChatService.answer(chat_id, text, mode) -> AsyncIterator[ChatEvent]` (api process): load session (recent 8 messages + summary + learning state) → deterministic intent/plan → chat-mode retrieval + relevant guide section summaries → sufficiency → if insufficient and intent ∈ {workflow, architecture, failure_analysis, implementation_location} → chat investigator Deep Agent (P0, ≤6 LLM calls) → compile → BALANCED stream (modes `default|simpler|deeper|quiz|interview`) → citation grounding (unknown `E#` stripped; evidence attached) → persist → learning state update → compaction (FAST) when > 16 unsummarized messages. Events: `chat.started, retrieval.started, retrieval.completed, agent.started, agent.tool, agent.completed, response.delta, response.evidence, response.completed, error`.
+`chat.answer.generate_answer(llm, retriever, AnswerRequest, context_tokens, transport) -> AsyncIterator[ChatEvent]` is the single implementation (ADR 0004). Steps: scan the question (logged, never refused) -> `HybridRetriever.search(query, CHAT)` (a short follow-up is searched with the previous question) -> `compile_context` (facts, evidence labelled `E#`, mode instructions `default|simpler|deeper|quiz|interview`) -> user message = context + fenced guide-section summary + fenced history (last `CHAT_HISTORY_MESSAGES`) + fenced question, all redacted -> `llm.stream` (BALANCED, P0, accounted under `chat:<id>` with `CHAT_LLM_CALL_BUDGET`/`CHAT_LLM_TOKEN_BUDGET`) -> redact output, drop unknown `[E#]`, grade each cited sentence with `guide.generate.grade_claims`, renumber citations to `[E1]..[Ek]` and return exactly the cited `EvidenceRef`s. No evidence -> no model call and a fixed "could not find" reply. Events: `chat.started, retrieval.completed, response.delta*, response.evidence, response.completed{message_id, seq, text, evidence, grounding, timings}, error`. `chat.service.run_turn` loads history/facts/section, then persists user and answer messages (`chat_messages`, one transaction, seq under the chat row lock) only after generation succeeded. `stream=false` collects the events into `ChatReplyOut`; `stream=true` writes them as NDJSON.
 
 ## 19. Exports (`unfold.exports`)
 
-Jinja2 templates render the **same structured content** (blocks, claim badges, diagrams as Mermaid via a vendored `mermaid.min.js`) → Playwright Chromium `page.pdf(A4, print_background)` in the worker `export` queue → object store `projects/{id}/exports/{artifact_id}.pdf` → artifact `ready`. All page network requests are blocked except the inlined content.
+`exports.service.run_export(rt, export_id, renderer)` is the body of the worker task `export <id>` (ADR 0005). Guide: `GuideSectionRow`/`GuidePlanRow`/`DiagramRow` -> `render_guide_html` (Jinja2, same structured blocks, claim badges, Mermaid via the vendored bundle) -> Playwright Chromium `page.pdf(A4)`, or `render_guide_markdown`. Chat: `ChatMessageRow` -> `render_chat_html` / `render_chat_markdown`. Output goes to `projects/{id}/exports/{artifact_id}.{pdf|md}` through `BlobStore.put_bytes`, then the artifact row is `ready` with size. Chromium runs offline with every request except `data:` aborted and a CSP allowing only the hashed Mermaid script. Kinds: `guide_pdf, guide_md, chat_pdf, chat_md`.
 
 ## 20. HTTP API (`unfold.api`, prefix `/api/v1`)
 
@@ -240,26 +252,27 @@ Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no he
 | `POST /projects/github` `{url, technical_level, instruction?}` | 202 `{project_id, job_id}` |
 | `POST /projects/zip` multipart `file, technical_level, instruction?` | 202 |
 | `GET /projects/{id}` | project + job status |
-| `DELETE /projects/{id}` | 202, cleanup queued |
-| `GET /projects/{id}/events` | SSE `stage`/`ready`/`failed` (replay via `Last-Event-ID`) |
+| `DELETE /projects/{id}` | 202; `deleting_at` marker written, cleanup enqueued, project invisible at once |
+| `GET /projects/{id}/progress?after=<seq>` | events after the cursor + durable analysis job + `regeneration` (latest single-chapter job, if any) (short poll) |
 | `GET /projects/{id}/guide` | plan + sections |
 | `GET /projects/{id}/guide/sections/{key}` | section + claims |
-| `POST /projects/{id}/guide/sections/{key}/simplify` · `/deepen` | variant |
 | `GET /projects/{id}/evidence/{chunk_id}` | redacted evidence text, path, lines |
 | `GET /projects/{id}/architecture` | graph overview |
-| `GET /projects/{id}/diagrams` · `/diagrams/{diagram_id}` | DiagramSpec + mermaid |
+| `GET /projects/{id}/diagrams/{diagram_id}` | DiagramSpec + mermaid |
+| `POST /projects/{id}/sections/{key}/regenerate` | 202 `{job_id, section_key}`; unknown key 404, project not ready 409; the same job again while one runs, another chapter meanwhile 409; 429 past `MAX_REGENERATIONS_PER_HOUR` per project or `MAX_REGENERATIONS_PER_SESSION_HOUR` per session |
 | `POST /projects/{id}/chats` · `GET /projects/{id}/chats` | chat sessions |
 | `GET /chats/{chat_id}` | messages |
-| `POST /chats/{chat_id}/messages` `{text, mode}` | SSE stream of ChatEvents |
-| `POST /projects/{id}/exports/guide` · `POST /chats/{chat_id}/exports` | 202 `{artifact_id}` |
-| `GET /exports/{artifact_id}` · `/exports/{artifact_id}/download` | status · PDF |
+| `POST /chats/{chat_id}/messages?stream=false\|true` `{text, mode, section_key?}` | `ChatReplyOut` JSON, or NDJSON `ChatEvent` lines |
+| `POST /projects/{id}/exports/guide?format=pdf\|md` · `POST /chats/{chat_id}/exports?format=pdf\|md` | 202 `{artifact_id}` |
+| `GET /exports/{artifact_id}` · `/exports/{artifact_id}/download` | status · file (proxied, or 302 to a presigned URL) |
+| `GET /projects/{id}/artifacts` | the project's exports |
 | `GET /health` · `GET /ready` | liveness · readiness |
 
-Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (Redis token bucket per session): project creation 10/h, chat 30/min.
+Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (fixed windows behind `RateLimiter`): project creation 10/h per session, chat 30/min per session, exports 10/h per project, chapter regenerations 6/h per project and 12/h per session; per-IP and global ceilings on session and project creation.
 
 ## 21. Cleanup & recovery (`unfold.cleanup`)
 
-arq cron every 10 min: expired sessions → `deleting` → object prefix delete → Qdrant filter delete → Neo4j `delete_project` → Redis keys → Postgres delete (cascade). Idempotent; failures leave `deleting` for the next run. Stale jobs (running, heartbeat > 5 min; or queued > 2 min without start) → re-enqueue if `attempt < 3` else `FAILED_ANALYSIS`. `DELETE /projects/{id}` enqueues the same per-project routine.
+`cleanup.sweeper.sweep(rt, queue=None)` (ADR 0006) is the one idempotent entry point: expired sessions and projects are marked (`projects.deleting_at`), every marked project goes through `cleanup_project` (blobs, IR cache, Qdrant points, Neo4j nodes, progress, project rate-limit and usage keys, then the project row and its cascade), emptied sessions are removed with their session rate-limit keys, stale analysis jobs (running with an old heartbeat, or queued) and exports pending > 5 min are re-enqueued, expired artifacts are deleted. A project whose analysis worker has a fresh heartbeat is deferred to the next pass. Callers: API start-up, the API's `SWEEP_INTERVAL_SECONDS` loop, `python -m unfold.worker.run sweep`. `DELETE /projects/{id}` sets the marker first, so a lost enqueue loses nothing.
 
 ## 22. Observability (`unfold.observability`)
 

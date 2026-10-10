@@ -3,9 +3,8 @@
  * Route Handler rather than a rewrite).
  *
  * - Request bodies are streamed (`duplex: "half"`) so 50 MiB ZIP uploads are never buffered in memory.
- * - Response bodies are passed through as a stream; SSE responses get `Cache-Control: no-transform` so no
- *   compression layer buffers them, plus `X-Accel-Buffering: no` for any reverse proxy in front of us.
- * - Client disconnects abort the upstream request, so the API sees the SSE consumer go away.
+ * - Response bodies are passed through as a stream (the API's NDJSON chat variant, PDF downloads) unbuffered.
+ * - Client disconnects abort the upstream request.
  * - Hop-by-hop headers are dropped; `Set-Cookie` headers are forwarded individually (first-party cookie).
  */
 import type { NextRequest } from "next/server";
@@ -84,12 +83,6 @@ async function proxy(request: NextRequest): Promise<Response> {
     if (!HOP_BY_HOP.has(key.toLowerCase())) out.set(key, value);
   });
   for (const cookie of upstream.headers.getSetCookie()) out.append("set-cookie", cookie);
-
-  const contentType = upstream.headers.get("content-type") ?? "";
-  if (contentType.startsWith("text/event-stream")) {
-    out.set("cache-control", "no-cache, no-transform");
-    out.set("x-accel-buffering", "no");
-  }
 
   return new Response(request.method === "HEAD" ? null : upstream.body, {
     status: upstream.status,

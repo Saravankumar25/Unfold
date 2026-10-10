@@ -17,6 +17,7 @@ import asyncio
 import base64
 import hashlib
 import html as html_lib
+import os
 import re
 from dataclasses import dataclass
 from functools import cache
@@ -35,6 +36,7 @@ log = get_logger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 MERMAID_JS = STATIC_DIR / "mermaid.min.js"
+PDF_UNAVAILABLE = "PDF export is not available on this server."  # shown to users; detail stays in logs
 
 FONT_STACK = (
     '"Space Grotesk", "Segoe UI", "Helvetica Neue", Arial, "Liberation Sans", "DejaVu Sans", sans-serif'
@@ -116,7 +118,7 @@ def _mermaid_source() -> str:
     try:
         return MERMAID_JS.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ExportError(f"vendored mermaid bundle missing: {MERMAID_JS}", retryable=False) from exc
+        raise ExportError(PDF_UNAVAILABLE, retryable=False, detail={"missing": str(MERMAID_JS)}) from exc
 
 
 def _csp(script: str) -> str:
@@ -146,6 +148,33 @@ async def _block_network(route: Route) -> None:
     else:
         log.warning("export.network_blocked", url=url[:200])
         await route.abort("blockedbyclient")
+
+
+_ENV_ALLOW = (
+    "PATH",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "LANG",
+    "LC_ALL",
+    "DISPLAY",
+    "FONTCONFIG_PATH",
+    "XDG_RUNTIME_DIR",
+    "PLAYWRIGHT_BROWSERS_PATH",
+)
+
+
+def _browser_env() -> dict[str, str | float | bool]:
+    """Only what a headless browser needs to start: never the worker's secrets."""
+    return {k: v for k in _ENV_ALLOW if (v := os.environ.get(k)) is not None}
 
 
 @dataclass(frozen=True)
@@ -184,15 +213,13 @@ class PdfRenderer:
                     self._pw = await async_playwright().start()
                 self._browser = await self._pw.chromium.launch(
                     headless=True,
+                    env=_browser_env(),  # the worker's database, store and model credentials stay out of Chromium
                     chromium_sandbox=self._chromium_sandbox,
                     args=["--disable-dev-shm-usage", "--disable-gpu", "--no-first-run"],
                 )
             except PlaywrightError as exc:
-                raise ExportError(
-                    "could not launch Chromium for PDF export (is `playwright install chromium` done?)",
-                    retryable=False,
-                    detail={"error": str(exc)[:500]},
-                ) from exc
+                log.error("export.chromium_launch_failed", error=str(exc)[:500])
+                raise ExportError(PDF_UNAVAILABLE, retryable=False, detail={"error": str(exc)[:500]}) from exc
             return self._browser
 
     async def close(self) -> None:

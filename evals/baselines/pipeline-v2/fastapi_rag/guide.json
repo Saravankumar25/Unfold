@@ -1,0 +1,1495 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Overview of FastAPI RAG Architecture",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "This chapter provides an overview of the FastAPI RAG architecture, explaining its purpose, users, and how its main components fit together.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Overview of FastAPI RAG Architecture",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "DocQA is a retrieval-augmented question answering system over uploaded documents backed by PostgreSQL, Qdrant, and Redis [E2][E15][E16][E17]."
+     },
+     {
+      "type": "heading",
+      "text": "Main API Endpoints and Flows",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The application provides endpoints for document management. For instance, uploading a document triggers an ingestion service and enqueues a background job [E3]."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "upload_document receives the file and database/queue dependencies [E3].",
+       "get_db yields a database session per request [E1].",
+       "get_queue returns an arq Redis pool used to enqueue background jobs [E2].",
+       "get_settings retrieves the cached runtime configuration [E5].",
+       "Settings defines the configuration options for the API and worker [E4].",
+       "IngestionService owns the document lifecycle in PostgreSQL and Qdrant [E6]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "paragraph",
+      "text": "The application relies on FastAPI, SQLAlchemy, Alembic, Qdrant client, OpenAI, sentence-transformers, rank-bm25, arq, Redis, and pypdf [E16]."
+     },
+     {
+      "type": "heading",
+      "text": "Configuration and Services",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Runtime configuration for the API and the worker is loaded via Pydantic BaseSettings, which configures database_url, redis_url, qdrant_url, and embedding options [E4]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Settings(BaseSettings):\n    \"\"\"Runtime configuration for the API and the worker.\"\"\"\n\n    model_config = SettingsConfigDict(env_file=\".env\", extra=\"ignore\")\n\n    database_url: str = \"postgresql+asyncpg://docqa:<REDACTED_SECRET>@localhost:5432/docqa\"\n    redis_url: str = \"redis://localhost:6379/0\"\n    qdrant_url: str = \"http://localhost:6333\"\n    collection_name: str = \"docqa_chunks\"\n    openai_api_key: str = DEV_OPENAI_API_KEY\n    chat_model: str = \"gpt-4o-mini\"\n    embedding_model: str = \"sentence-transformers/all-MiniLM-L6-v2\"\n    embedding_dim: int = 384\n    chunk_size: int = 800\n    chunk_overlap: int = 120\n    top_k: int = 8\n    log_level: str = \"INFO\"\n    cors_origins: list[str] = [\"http://localhost:3000\"]",
+      "path": "app/core/config.py",
+      "start_line": 11,
+      "caption": "Settings"
+     },
+     {
+      "type": "paragraph",
+      "text": "Other chapters of the guide cover the topics listed under 'Covered in other chapters': API Request Lifecycle and Routing, Data Models and Persistence, Background Processing and Tasks, Configuration and Deployment Setup, and Database Migrations and Versions."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:1458c41f0855828c",
+      "caption": "fastapi_rag architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "It allows users to upload documents, list them, inspect their ingestion status, and query them.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:051836284a58fa6e9dc0aaae",
+      "ch:f30739f0bb98c316408cda51",
+      "ch:32d7523e940b5cea600ea6e3"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "DocQA is a retrieval-augmented question answering system over uploaded documents backed by PostgreSQL, Qdrant, and Redis",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:c9734fbd5d4654067154412c",
+      "ch:8455635e1fa742d2233457d3",
+      "ch:ec6ee2f2a7100494ad8d262a",
+      "ch:f5b66b1594e1472e3aa3fa03"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The application relies on FastAPI, SQLAlchemy, Alembic, Qdrant client, OpenAI, sentence-transformers, rank-bm25, arq, Redis, and pypdf",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:ec6ee2f2a7100494ad8d262a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Runtime configuration for the API and the worker is loaded via Pydantic BaseSettings, which configures database_url, redis_url, qdrant_url, and embedding options",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:6f5cadadb69d26bd9564f302"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/api/deps.py",
+     "symbol": "get_db",
+     "chunk_id": "ch:f64334a4eb8c2730b66f82c3",
+     "end_line": 16,
+     "start_line": 13
+    },
+    "E2": {
+     "path": "app/api/deps.py",
+     "symbol": "get_queue",
+     "chunk_id": "ch:c9734fbd5d4654067154412c",
+     "end_line": 22,
+     "start_line": 19
+    },
+    "E3": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "upload_document",
+     "chunk_id": "ch:051836284a58fa6e9dc0aaae",
+     "end_line": 26,
+     "start_line": 14
+    },
+    "E4": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:6f5cadadb69d26bd9564f302",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E5": {
+     "path": "app/core/config.py",
+     "symbol": "get_settings",
+     "chunk_id": "ch:4c68b86c8ad01105ca15c6d4",
+     "end_line": 34,
+     "start_line": 31
+    },
+    "E6": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:b19c73c67f256457eb2a1527",
+     "end_line": 27,
+     "start_line": 25
+    },
+    "E7": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "list_documents",
+     "chunk_id": "ch:f30739f0bb98c316408cda51",
+     "end_line": 33,
+     "start_line": 29
+    },
+    "E8": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.list_documents",
+     "chunk_id": "ch:86947122bd86a57ee01f12df",
+     "end_line": 49,
+     "start_line": 47
+    },
+    "E9": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "get_document",
+     "chunk_id": "ch:32d7523e940b5cea600ea6e3",
+     "end_line": 43,
+     "start_line": 36
+    },
+    "E10": {
+     "path": "app/schemas.py",
+     "symbol": "DocumentStatus",
+     "chunk_id": "ch:98fe5ce1527cff2b05fbf549",
+     "end_line": 22,
+     "start_line": 19
+    },
+    "E11": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:24f5310bc8ad57fa2e72973e",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E12": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "delete_document",
+     "chunk_id": "ch:894c21b0b74c20edd2bf2088",
+     "end_line": 50,
+     "start_line": 46
+    },
+    "E13": {
+     "path": "app/services/ingestion.py",
+     "symbol": "extract_text",
+     "chunk_id": "ch:193b5e0074c147562f6b3b78",
+     "end_line": 22,
+     "start_line": 17
+    },
+    "E14": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.__init__",
+     "chunk_id": "ch:7d7f10dca3acc7fa4d7fde37",
+     "end_line": 32,
+     "start_line": 28
+    },
+    "E15": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:8455635e1fa742d2233457d3",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E16": {
+     "path": "pyproject.toml",
+     "symbol": "project",
+     "chunk_id": "ch:ec6ee2f2a7100494ad8d262a",
+     "end_line": 23,
+     "start_line": 1
+    },
+    "E17": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents",
+     "chunk_id": "ch:f5b66b1594e1472e3aa3fa03",
+     "end_line": 6,
+     "start_line": 1
+    },
+    "E18": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Configuration",
+     "chunk_id": "ch:44177863fa191aa6a2056f78",
+     "end_line": 30,
+     "start_line": 28
+    },
+    "E19": {
+     "path": "docker-compose.yml",
+     "symbol": "services.qdrant",
+     "chunk_id": "ch:18a227e5164b2a9e02460594",
+     "end_line": 54,
+     "start_line": 51
+    },
+    "E20": {
+     "path": "app/core/config.py",
+     "symbol": null,
+     "chunk_id": "ch:3349a6db3a547788b131cf3d",
+     "end_line": 10,
+     "start_line": 1
+    },
+    "E21": {
+     "path": "app/schemas.py",
+     "symbol": null,
+     "chunk_id": "ch:61f2d5c8573358fd5c13642f",
+     "end_line": 7,
+     "start_line": 1
+    },
+    "E22": {
+     "path": "app/workers/tasks.py",
+     "symbol": "WorkerSettings",
+     "chunk_id": "ch:89d81e6daa38f699f020653a",
+     "end_line": 33,
+     "start_line": 27
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 4,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 3,
+    "unsupported": 0,
+    "grounded_ratio": 0.75,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "request-lifecycle",
+   "title": "API Request Lifecycle and Routing",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter details the API request lifecycle and routing, tracing incoming requests from endpoints through dependencies and services to responses.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "API Request Lifecycle and Routing",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building on the concepts introduced in Overview of FastAPI RAG Architecture, this chapter explores how requests are routed and handled within the fastapi_rag application. Other topics such as data models and persistence, background processing and tasks, configuration and deployment setup, and database migrations and versions are covered in other chapters."
+     },
+     {
+      "type": "heading",
+      "text": "Exposed Routes and Handlers",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The service exposes multiple endpoints for health checks, document management, and querying. For instance, the health check endpoint reports that the API process is alive [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "@router.get(\"/health\")\nasync def health() -> dict[str, str]:\n    \"\"\"Report that the API process is alive.\"\"\"\n    return {\"status\": \"ok\"}",
+      "path": "app/api/routes/health.py",
+      "start_line": 8,
+      "caption": "Health check route"
+     },
+     {
+      "type": "heading",
+      "text": "Request Flows",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "When a request hits an endpoint, it passes through FastAPI dependencies and service layers before returning a response."
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "The client sends a request to DELETE /documents/{document_id} [E3].",
+       "The delete_document route handler is invoked [E3].",
+       "The get_db dependency yields a database session [E2].",
+       "SessionLocal creates the asynchronous session instance [E2].",
+       "IngestionService is instantiated with the database session [E3].",
+       "IngestionService.delete_document is called to remove the document [E3].",
+       "IngestionService.get_document fetches the target document [E6].",
+       "VectorStore.delete_document removes associated vectors from Qdrant [E12].",
+       "The database session commits the deletion [E6]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show what happens when validation, a dependency or a store fails."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:124e5c285cab0dd0",
+      "caption": "Request flow"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The health check endpoint reports that the API process is alive.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:b65558982cc0d1dbadcc94a2"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The get_db dependency yields a database session per request.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:f64334a4eb8c2730b66f82c3"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The delete_document route handler deletes a document, its chunks and its vectors.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:894c21b0b74c20edd2bf2088"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/api/routes/health.py",
+     "symbol": "health",
+     "chunk_id": "ch:b65558982cc0d1dbadcc94a2",
+     "end_line": 11,
+     "start_line": 8
+    },
+    "E2": {
+     "path": "app/api/deps.py",
+     "symbol": "get_db",
+     "chunk_id": "ch:f64334a4eb8c2730b66f82c3",
+     "end_line": 16,
+     "start_line": 13
+    },
+    "E3": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "delete_document",
+     "chunk_id": "ch:894c21b0b74c20edd2bf2088",
+     "end_line": 50,
+     "start_line": 46
+    },
+    "E4": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:b19c73c67f256457eb2a1527",
+     "end_line": 27,
+     "start_line": 25
+    },
+    "E5": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:24f5310bc8ad57fa2e72973e",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E6": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.delete_document",
+     "chunk_id": "ch:4f3fed1bd9b58b73cd85939a",
+     "end_line": 82,
+     "start_line": 76
+    },
+    "E7": {
+     "path": "app/api/routes/query.py",
+     "symbol": "answer_query",
+     "chunk_id": "ch:bcc6a50cf804d5fe5256ff9e",
+     "end_line": 21,
+     "start_line": 14
+    },
+    "E8": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever",
+     "chunk_id": "ch:7ca3fc05287d682ae347fcbd",
+     "end_line": 36,
+     "start_line": 34
+    },
+    "E9": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever._load_chunks",
+     "chunk_id": "ch:30a5aaf4dd08583809270b8e",
+     "end_line": 44,
+     "start_line": 42
+    },
+    "E10": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.search",
+     "chunk_id": "ch:fc3fd68ae88645b3d19dbbb2",
+     "end_line": 71,
+     "start_line": 59
+    },
+    "E11": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "upload_document",
+     "chunk_id": "ch:051836284a58fa6e9dc0aaae",
+     "end_line": 26,
+     "start_line": 14
+    },
+    "E12": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.delete_document",
+     "chunk_id": "ch:74f0fed22fb89b3586d96ae9",
+     "end_line": 35,
+     "start_line": 31
+    },
+    "E13": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.ensure_collection",
+     "chunk_id": "ch:f6999e5c5699bf8aeb4bbbc1",
+     "end_line": 19,
+     "start_line": 14
+    },
+    "E14": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.__init__",
+     "chunk_id": "ch:4cf5ce566aba56e09df4f079",
+     "end_line": 40,
+     "start_line": 37
+    },
+    "E15": {
+     "path": "tests/test_api.py",
+     "symbol": "test_query_validation",
+     "chunk_id": "ch:7a47f92db941126f570bf1e3",
+     "end_line": 16,
+     "start_line": 14
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 3,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": {
+     "depth": 0.6,
+     "coverage": 0.8,
+     "coherence": 0.7,
+     "redundancy": 0.9,
+     "specificity": 0.8
+    },
+    "verified": 2,
+    "unsupported": 0,
+    "grounded_ratio": 0.67,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "data-persistence",
+   "title": "Data Models and Persistence",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter details the data models and persistence stores used in fastapi_rag.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Data Models and Persistence",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon Overview of FastAPI RAG Architecture, this chapter explores where fastapi_rag stores its data and how the code interacts with those stores."
+     },
+     {
+      "type": "heading",
+      "text": "Data Stores and Models",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses SQLAlchemy models for documents and chunks stored in PostgreSQL [E2]. The base class for models is defined using DeclarativeBase [E3]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Base(DeclarativeBase):\n    pass",
+      "path": "app/db/models.py",
+      "start_line": 9,
+      "caption": "SQLAlchemy declarative base"
+     },
+     {
+      "type": "paragraph",
+      "text": "The Chunk model is a retrievable slice of a document defined with SQLAlchemy, having an id, document_id, position, text, and token_count [E12]."
+     },
+     {
+      "type": "heading",
+      "text": "Reading and Writing Stores",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Services such as IngestionService and HybridRetriever interact with the database sessions and vector stores."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "    def __init__(self, db: AsyncSession) -> None:\n        self.db = db\n        settings = get_settings()\n        self.settings = settings\n        self.store = VectorStore(settings.qdrant_url, settings.collection_name)",
+      "path": "app/services/ingestion.py",
+      "start_line": 28,
+      "caption": "IngestionService initialization"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence shows that database sessions are obtained via dependency injection using AsyncSession [E14]."
+     },
+     {
+      "type": "heading",
+      "text": "Vector Store and Embeddings",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence shows that VectorStore stores and searches chunk embeddings in a Qdrant collection, with methods to ensure the collection exists [E13, E15]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:9759056dbc57086b",
+      "caption": "Data model"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "IngestionService initializes with an AsyncSession and a VectorStore.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:7d7f10dca3acc7fa4d7fde37"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The project uses SQLAlchemy models for documents and chunks stored in PostgreSQL.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:8455635e1fa742d2233457d3"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The base class for models is defined using DeclarativeBase.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:1b1618e61b236003a82c349d"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The Chunk model is a retrievable slice of a document defined with SQLAlchemy, having an id, document_id, position, text, and token_count.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:5c9f84cc637412cd46043f22"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.87,
+     "note": null
+    },
+    {
+     "text": "Database sessions are obtained via dependency injection using AsyncSession.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:051836284a58fa6e9dc0aaae"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "VectorStore stores and searches chunk embeddings in a Qdrant collection, with methods to ensure the collection exists.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:f6999e5c5699bf8aeb4bbbc1",
+      "ch:bfa9505bfe297b28c56ceac9"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/schemas.py",
+     "symbol": "QueryRequest",
+     "chunk_id": "ch:2039b05a5b20ad62cc655cb4",
+     "end_line": 29,
+     "start_line": 25
+    },
+    "E2": {
+     "path": "README.md",
+     "symbol": "DocQA \u2014 retrieval-augmented question answering over your documents > Architecture",
+     "chunk_id": "ch:8455635e1fa742d2233457d3",
+     "end_line": 14,
+     "start_line": 7
+    },
+    "E3": {
+     "path": "app/db/models.py",
+     "symbol": "Base",
+     "chunk_id": "ch:1b1618e61b236003a82c349d",
+     "end_line": 10,
+     "start_line": 9
+    },
+    "E4": {
+     "path": "app/services/retriever.py",
+     "symbol": null,
+     "chunk_id": "ch:0b2a7eb0a8139df1161acbb3",
+     "end_line": 16,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "app/api/deps.py",
+     "symbol": null,
+     "chunk_id": "ch:abef5731deda7b10be7edf8a",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E6": {
+     "path": "app/main.py",
+     "symbol": null,
+     "chunk_id": "ch:d502b3ad4058b13d41722aff",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E7": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.__init__",
+     "chunk_id": "ch:7d7f10dca3acc7fa4d7fde37",
+     "end_line": 32,
+     "start_line": 28
+    },
+    "E8": {
+     "path": "app/services/retriever.py",
+     "symbol": "HybridRetriever.__init__",
+     "chunk_id": "ch:4cf5ce566aba56e09df4f079",
+     "end_line": 40,
+     "start_line": 37
+    },
+    "E9": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient.__init__",
+     "chunk_id": "ch:1d7bc7325f3e94113cd522e8",
+     "end_line": 28,
+     "start_line": 25
+    },
+    "E10": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:6f5cadadb69d26bd9564f302",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E11": {
+     "path": "app/db/models.py",
+     "symbol": null,
+     "chunk_id": "ch:357233aa1e1a740550cda996",
+     "end_line": 8,
+     "start_line": 1
+    },
+    "E12": {
+     "path": "app/db/models.py",
+     "symbol": "Chunk",
+     "chunk_id": "ch:5c9f84cc637412cd46043f22",
+     "end_line": 39,
+     "start_line": 28
+    },
+    "E13": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore.ensure_collection",
+     "chunk_id": "ch:f6999e5c5699bf8aeb4bbbc1",
+     "end_line": 19,
+     "start_line": 14
+    },
+    "E14": {
+     "path": "app/api/routes/documents.py",
+     "symbol": "upload_document",
+     "chunk_id": "ch:051836284a58fa6e9dc0aaae",
+     "end_line": 26,
+     "start_line": 14
+    },
+    "E15": {
+     "path": "app/services/vector_store.py",
+     "symbol": "VectorStore",
+     "chunk_id": "ch:bfa9505bfe297b28c56ceac9",
+     "end_line": 9,
+     "start_line": 7
+    },
+    "E16": {
+     "path": "pyproject.toml",
+     "symbol": "project.optional-dependencies",
+     "chunk_id": "ch:87ae41d626da98b03b404dae",
+     "end_line": 26,
+     "start_line": 24
+    },
+    "E17": {
+     "path": "app/services/llm.py",
+     "symbol": "LLMClient.answer",
+     "chunk_id": "ch:5325f6c1b2559c3735b699c2",
+     "end_line": 47,
+     "start_line": 35
+    },
+    "E18": {
+     "path": "app/services/embeddings.py",
+     "symbol": "_model",
+     "chunk_id": "ch:c40b3f68beef9bef196d6634",
+     "end_line": 12,
+     "start_line": 10
+    },
+    "E19": {
+     "path": "app/services/llm.py",
+     "symbol": "Answer",
+     "chunk_id": "ch:90a3d7d60669aa0e9b4c53f3",
+     "end_line": 19,
+     "start_line": 16
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 6,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 6,
+    "unsupported": 0,
+    "grounded_ratio": 1.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 0
+   }
+  },
+  {
+   "key": "background-jobs",
+   "title": "Background Processing and Tasks",
+   "position": 3,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "Background processing in fastapi_rag is handled by arq workers that consume tasks to chunk, embed, and index uploaded documents.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Background Processing and Tasks",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Building upon Overview of FastAPI RAG Architecture, this chapter explores how background jobs, workers, and queues manage asynchronous processing in the fastapi_rag repository. Topics such as API request routing, database persistence, configuration, and migrations are covered in other chapters."
+     },
+     {
+      "type": "heading",
+      "text": "Worker Configuration and Startup",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses arq for background job queuing and processing. The worker configuration is defined in app/workers/tasks.py through the WorkerSettings class [E2]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class WorkerSettings:\n    \"\"\"arq worker configuration.\"\"\"\n\n    functions = [ingest_document]\n    on_startup = startup\n    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)\n    max_jobs = 4",
+      "path": "app/workers/tasks.py",
+      "start_line": 27,
+      "caption": "WorkerSettings definition"
+     },
+     {
+      "type": "paragraph",
+      "text": "When the worker starts up, it logs a startup message via the startup function [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "async def startup(ctx: dict) -> None:\n    logger.info(\"worker starting\")",
+      "path": "app/workers/tasks.py",
+      "start_line": 23,
+      "caption": "Worker startup function"
+     },
+     {
+      "type": "heading",
+      "text": "Ingestion Task Execution Flow",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The primary background task is ingest_document, which handles chunking, embedding, and indexing for uploaded documents [E3]. Here is the step-by-step execution flow for processing a document:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "The queue consumer invokes ingest_document with context and a document_id [E3].",
+       "A new database session is created using SessionLocal [E3].",
+       "An IngestionService instance is initialized with the session [E3].",
+       "IngestionService.ingest is called with the document_id [E3].",
+       "IngestionService.get_document fetches the document and its chunks from the database [E7].",
+       "The raw text is split into pieces using split_text [E8]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses arq for background tasks, with worker settings configured in WorkerSettings specifying functions such as ingest_document, startup hooks, Redis settings, and a maximum of 4 jobs [E2]. Background jobs are enqueued using an arq Redis pool created via get_queue [E10]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:0c0a7f7fae8ba476",
+      "caption": "AI pipeline"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The project uses arq for background job queuing and processing.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:89d81e6daa38f699f020653a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The worker configuration is defined in app/workers/tasks.py through the WorkerSettings class.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:89d81e6daa38f699f020653a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "When the worker starts up, it logs a startup message via the startup function.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:8867c2ba3359c04406304b84"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The primary background task is ingest_document, which handles chunking, embedding, and indexing for uploaded documents.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:b1ce9773526648318f6c073f"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The project uses arq for background tasks, with worker settings configured in WorkerSettings specifying functions such as ingest_document, startup hooks, Redis settings, and a maximum of 4 jobs.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:89d81e6daa38f699f020653a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Background jobs are enqueued using an arq Redis pool created via get_queue.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:c9734fbd5d4654067154412c"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/workers/tasks.py",
+     "symbol": "startup",
+     "chunk_id": "ch:8867c2ba3359c04406304b84",
+     "end_line": 24,
+     "start_line": 23
+    },
+    "E2": {
+     "path": "app/workers/tasks.py",
+     "symbol": "WorkerSettings",
+     "chunk_id": "ch:89d81e6daa38f699f020653a",
+     "end_line": 33,
+     "start_line": 27
+    },
+    "E3": {
+     "path": "app/workers/tasks.py",
+     "symbol": "ingest_document",
+     "chunk_id": "ch:b1ce9773526648318f6c073f",
+     "end_line": 20,
+     "start_line": 14
+    },
+    "E4": {
+     "path": "app/services/chunking.py",
+     "symbol": "split_text",
+     "chunk_id": "ch:3e2a57608972ea1db27c499d",
+     "end_line": 25,
+     "start_line": 13
+    },
+    "E5": {
+     "path": "app/services/chunking.py",
+     "symbol": "_make_chunk",
+     "chunk_id": "ch:27ae002b509b29d1b1469cba",
+     "end_line": 29,
+     "start_line": 28
+    },
+    "E6": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService",
+     "chunk_id": "ch:b19c73c67f256457eb2a1527",
+     "end_line": 27,
+     "start_line": 25
+    },
+    "E7": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:24f5310bc8ad57fa2e72973e",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E8": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.ingest",
+     "chunk_id": "ch:877994c3891890b5d76e7bda",
+     "end_line": 74,
+     "start_line": 57
+    },
+    "E9": {
+     "path": "app/workers/tasks.py",
+     "symbol": null,
+     "chunk_id": "ch:8fd17c65d46d80167b2ec0fc",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E10": {
+     "path": "app/api/deps.py",
+     "symbol": "get_queue",
+     "chunk_id": "ch:c9734fbd5d4654067154412c",
+     "end_line": 22,
+     "start_line": 19
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 6,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 4,
+    "unsupported": 0,
+    "grounded_ratio": 0.67,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 2
+   }
+  },
+  {
+   "key": "config-deploy",
+   "title": "Configuration and Deployment Setup",
+   "position": 4,
+   "status": "degraded",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter details the configuration, build manifests, and deployment workflows of fastapi_rag.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Configuration and Deployment Setup",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "This chapter builds upon the Overview of FastAPI RAG Architecture. Topics such as API routing, database models, background processing, and database migrations are covered in other chapters."
+     },
+     {
+      "type": "heading",
+      "text": "Runtime Configuration",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Not confirmed in the code: Configuration values for fastapi_rag are managed through a Pydantic-based Settings class defined in app/core/config.py [E1]."
+     },
+     {
+      "type": "paragraph",
+      "text": "The application uses an environment file and includes defaults for database URLs, Redis, Qdrant, OpenAI settings, chunking parameters, and CORS origins [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Settings(BaseSettings):\n    \"\"\"Runtime configuration for the API and the worker.\"\"\"\n\n    model_config = SettingsConfigDict(env_file=\".env\", extra=\"ignore\")\n\n    database_url: str = \"postgresql+asyncpg://docqa:<REDACTED_SECRET>@localhost:5432/docqa\"\n    redis_url: str = \"redis://localhost:6379/0\"\n    qdrant_url: str = \"http://localhost:6333\"\n    collection_name: str = \"docqa_chunks\"\n    openai_api_key: str = DEV_OPENAI_API_KEY\n    chat_model: str = \"gpt-4o-mini\"\n    embedding_model: str = \"sentence-transformers/all-MiniLM-L6-v2\"\n    embedding_dim: int = 384\n    chunk_size: int = 800\n    chunk_overlap: int = 120\n    top_k: int = 8\n    log_level: str = \"INFO\"\n    cors_origins: list[str] = [\"http://localhost:3000\"]",
+      "path": "app/core/config.py",
+      "start_line": 11,
+      "caption": "Settings class definitions"
+     },
+     {
+      "type": "paragraph",
+      "text": "Settings are cached using an lru_cache wrapper to prevent reloading them on every call [E2]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "@lru_cache\ndef get_settings() -> Settings:\n    \"\"\"Return the cached settings instance.\"\"\"\n    return Settings()",
+      "path": "app/core/config.py",
+      "start_line": 31,
+      "caption": "get_settings function"
+     },
+     {
+      "type": "heading",
+      "text": "Application Initialization and Flow",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "When the API service starts, the application builds via create_app, which retrieves configuration settings and configures middleware and routers [E3]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def create_app() -> FastAPI:\n    \"\"\"Build the FastAPI application.\"\"\"\n    settings = get_settings()\n    application = FastAPI(title=\"DocQA\", version=\"0.3.1\", lifespan=lifespan)\n    application.add_middleware(\n        CORSMiddleware,\n        allow_origins=settings.cors_origins,\n        allow_methods=[\"*\"],\n        allow_headers=[\"*\"],\n    )\n    application.include_router(api_router, prefix=\"/api/v1\")\n    return application",
+      "path": "app/main.py",
+      "start_line": 26,
+      "caption": "create_app function"
+     },
+     {
+      "type": "paragraph",
+      "text": "The initialization follows a strict execution path starting from app/main.py:"
+     },
+     {
+      "type": "bullets",
+      "items": [
+       "app/main.py starts the initialization [E3].",
+       "create_app builds the FastAPI application instance [E3].",
+       "get_settings fetches runtime configurations [E2].",
+       "Settings returns the loaded parameters [E1]."
+      ],
+      "ordered": true
+     },
+     {
+      "type": "paragraph",
+      "text": "Additionally, a lifespan asynchronous context manager handles startup and shutdown tasks such as setting up the Qdrant collection and disposing of the database engine [E7]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "@asynccontextmanager\nasync def lifespan(app: FastAPI):\n    \"\"\"Create the Qdrant collection on startup and dispose the DB engine on shutdown.\"\"\"\n    settings = get_settings()\n    configure_logging(settings.log_level)\n    store = VectorStore(settings.qdrant_url, settings.collection_name)\n    await store.ensure_collection(settings.embedding_dim)\n    yield\n    await engine.dispose()",
+      "path": "app/main.py",
+      "start_line": 15,
+      "caption": "lifespan function"
+     },
+     {
+      "type": "heading",
+      "text": "Continuous Integration and Deployment Workflows",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The repository utilizes GitHub Actions for CI and image building defined in .github/workflows/ci.yml [E4, E5, E6]. The test job installs dependencies, runs linters like ruff, and executes pytest [E6]. The image job builds the Docker image when pushes occur on the main branch [E6]."
+     },
+     {
+      "type": "code",
+      "language": "yaml",
+      "code": "name: ci\non:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    services:\n      postgres:\n        image: postgres:16\n        env:\n          POSTGRES_PASSWORD: docqa\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: \"3.12\"\n      - run: pip install -e \".[dev]\"\n      - run: ruff check app tests\n      - run: pytest -q\n\n  image:\n    runs-on: ubuntu-latest\n    needs: test\n    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v4\n      - uses: docker/setup-buildx-action@v3\n      - uses: docker/build-push-action@v5\n        with:\n          push: false\n          tags: docqa/api:latest",
+      "path": ".github/workflows/ci.yml",
+      "start_line": 1,
+      "caption": "CI workflow configuration"
+     },
+     {
+      "type": "paragraph",
+      "text": "The evidence does not show how the project built, started or deployed using workflows and application entry points beyond the CI workflow and FastAPI entrypoint. The evidence does not show which settings a developer should change first."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:499ba9eb54847992",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "Configuration values for fastapi_rag are managed through a Pydantic-based Settings class defined in app/core/config.py.",
+     "kind": "inference",
+     "status": "INFERRED",
+     "evidence_ids": [
+      "ch:6f5cadadb69d26bd9564f302"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.2,
+     "note": "Stated in the guide as not confirmed in the code."
+    },
+    {
+     "text": "Settings are cached using an lru_cache wrapper to prevent reloading them on every call.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:4c68b86c8ad01105ca15c6d4"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "When the API service starts, the application builds via create_app, which retrieves configuration settings and configures middleware and routers.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:8795448fe8a75b4d92f5be21"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "A lifespan asynchronous context manager handles startup and shutdown tasks such as setting up the Qdrant collection and disposing of the database engine.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:60a94c45b565b643b7b7b4f4"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The repository utilizes GitHub Actions for CI and image building defined in .github/workflows/ci.yml.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:8b7ec04f77e9aa2144159988",
+      "ch:a29f2210a3d6e8d318241ab4",
+      "ch:73f4009e07c96a4afbfcd330"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "app/core/config.py",
+     "symbol": "Settings",
+     "chunk_id": "ch:6f5cadadb69d26bd9564f302",
+     "end_line": 28,
+     "start_line": 11
+    },
+    "E2": {
+     "path": "app/core/config.py",
+     "symbol": "get_settings",
+     "chunk_id": "ch:4c68b86c8ad01105ca15c6d4",
+     "end_line": 34,
+     "start_line": 31
+    },
+    "E3": {
+     "path": "app/main.py",
+     "symbol": "create_app",
+     "chunk_id": "ch:8795448fe8a75b4d92f5be21",
+     "end_line": 37,
+     "start_line": 26
+    },
+    "E4": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "name",
+     "chunk_id": "ch:8b7ec04f77e9aa2144159988",
+     "end_line": 1,
+     "start_line": 1
+    },
+    "E5": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "on",
+     "chunk_id": "ch:a29f2210a3d6e8d318241ab4",
+     "end_line": 6,
+     "start_line": 3
+    },
+    "E6": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "jobs",
+     "chunk_id": "ch:73f4009e07c96a4afbfcd330",
+     "end_line": 35,
+     "start_line": 8
+    },
+    "E7": {
+     "path": "app/main.py",
+     "symbol": "lifespan",
+     "chunk_id": "ch:60a94c45b565b643b7b7b4f4",
+     "end_line": 23,
+     "start_line": 15
+    },
+    "E8": {
+     "path": "app/core/config.py",
+     "symbol": null,
+     "chunk_id": "ch:3349a6db3a547788b131cf3d",
+     "end_line": 10,
+     "start_line": 1
+    },
+    "E9": {
+     "path": "pyproject.toml",
+     "symbol": "project",
+     "chunk_id": "ch:ec6ee2f2a7100494ad8d262a",
+     "end_line": 23,
+     "start_line": 1
+    }
+   },
+   "quality": {
+    "gaps": 1,
+    "claims": 5,
+    "verdict": "accept_with_gaps",
+    "inferred": 1,
+    "proposed": 0,
+    "semantic": {
+     "depth": 0.8,
+     "coverage": 0.8,
+     "coherence": 0.85,
+     "redundancy": 0.9,
+     "specificity": 0.9
+    },
+    "verified": 3,
+    "unsupported": 0,
+    "grounded_ratio": 0.6,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "versions",
+   "title": "Database Migrations and Versions",
+   "position": 5,
+   "status": "ready",
+   "kind": "core",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This chapter examines database migrations and versions, focusing on the initial schema definition and its components.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Database Migrations and Versions",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "This chapter builds upon the Overview of FastAPI RAG Architecture. The details of data persistence and data models are covered in Data Models and Persistence."
+     },
+     {
+      "type": "heading",
+      "text": "Initial Schema Definition",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The project uses Alembic for database migrations. The versions subsystem contains the migration scripts, such as the initial migration file [E3]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "revision = \"0001\"\ndown_revision = None\n",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 9,
+      "caption": "Revision header"
+     },
+     {
+      "type": "paragraph",
+      "text": "The upgrade function creates the initial tables for documents and chunks [E1]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def upgrade() -> None:\n    op.create_table(\n        \"documents\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"filename\", sa.String(512), nullable=False),\n        sa.Column(\"content_type\", sa.String(128), nullable=False),\n        sa.Column(\"status\", sa.String(32), nullable=False),\n        sa.Column(\"raw_text\", sa.Text, nullable=True),\n        sa.Column(\"created_at\", sa.DateTime(timezone=True), server_default=sa.func.now()),\n    )\n    op.create_table(\n        \"chunks\",\n        sa.Column(\"id\", sa.Integer, primary_key=True),\n        sa.Column(\"document_id\", sa.Integer, sa.ForeignKey(\"documents.id\", ondelete=\"CASCADE\")),\n        sa.Column(\"position\", sa.Integer),\n        sa.Column(\"text\", sa.Text),\n        sa.Column(\"token_count\", sa.Integer),\n    )",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 13,
+      "caption": "Initial migration upgrade function defining documents and chunks tables"
+     },
+     {
+      "type": "paragraph",
+      "text": "The downgrade function drops the created tables [E2]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def downgrade() -> None:\n    op.drop_table(\"chunks\")\n    op.drop_table(\"documents\")",
+      "path": "migrations/versions/0001_initial.py",
+      "start_line": 33,
+      "caption": "Downgrade function"
+     },
+     {
+      "type": "paragraph",
+      "text": "The initial migration script defines the database schema for the project by creating the documents and chunks tables [E1]."
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The project uses Alembic for database migrations.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:7876872e7e0314ff521e6dde"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The upgrade function creates the documents and chunks tables.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:fc2b42a1372fc2585bd3442f"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The downgrade function drops the chunks and documents tables.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:9e3208698369738ef55ae5a6"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The initial migration script defines the database schema for the project by creating the documents and chunks tables.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:fc2b42a1372fc2585bd3442f"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "upgrade",
+     "chunk_id": "ch:fc2b42a1372fc2585bd3442f",
+     "end_line": 30,
+     "start_line": 13
+    },
+    "E2": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": "downgrade",
+     "chunk_id": "ch:9e3208698369738ef55ae5a6",
+     "end_line": 35,
+     "start_line": 33
+    },
+    "E3": {
+     "path": "migrations/versions/0001_initial.py",
+     "symbol": null,
+     "chunk_id": "ch:7876872e7e0314ff521e6dde",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "app/services/ingestion.py",
+     "symbol": "IngestionService.get_document",
+     "chunk_id": "ch:24f5310bc8ad57fa2e72973e",
+     "end_line": 55,
+     "start_line": 51
+    },
+    "E5": {
+     "path": ".github/workflows/ci.yml",
+     "symbol": "on",
+     "chunk_id": "ch:a29f2210a3d6e8d318241ab4",
+     "end_line": 6,
+     "start_line": 3
+    }
+   },
+   "quality": {
+    "gaps": 0,
+    "claims": 4,
+    "verdict": "accept",
+    "inferred": 0,
+    "proposed": 0,
+    "semantic": null,
+    "verified": 0,
+    "unsupported": 0,
+    "grounded_ratio": 0.0,
+    "revision_rounds": 1,
+    "claims_not_stated": 0,
+    "strongly_inferred": 4
+   }
+  }
+ ]
+}

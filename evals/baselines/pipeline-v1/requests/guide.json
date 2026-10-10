@@ -1,0 +1,913 @@
+{
+ "sections": [
+  {
+   "key": "overview",
+   "title": "Quick Overview",
+   "position": 0,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 3.0,
+   "content": {
+    "summary": "Requests is an elegant and human-centric HTTP client library for Python built on top of urllib3 with a modular internal design.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Quick Overview",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "Requests is an HTTP library written in Python designed specifically for human beings [E2]. The project aims to make interacting with web services simple and intuitive, removing the boilerplates normally associated with low-level network operations [E19]. As an HTTP client, it abstracts away complex tasks like connection pooling, payload encoding, and cookie persistence."
+     },
+     {
+      "type": "heading",
+      "text": "Library Design and Structure",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "From version 1.0.0 onwards, Requests adopted a modular internal design [E10]. This architecture introduces features such as Transport Adapters, which allow developers to define custom interaction methods and apply per-service configuration [E10]. By default, Requests uses urllib3 to handle the heavy lifting of network transport, connection pooling, and secure socket management [E6, E10]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "import requests\n\nr = requests.get('https://www.python.org')\nprint(r.status_code)",
+      "path": "src/requests/__init__.py",
+      "start_line": 10,
+      "caption": "Basic GET usage in Requests"
+     },
+     {
+      "type": "qa",
+      "question": "What underlying library does Requests use for HTTP operations?",
+      "answer": "Requests relies on urllib3 for its core HTTP and HTTPS interactions, providing underlying connection pooling and performance optimizations.",
+      "kind": "repository"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:1cea2a4bdb009245",
+      "caption": "requests architecture"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "Requests is an HTTP library written in Python for human beings.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:8c7986e5f9798b83a2142753",
+      "ch:aad7a13c397edfd2dd97292a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "Requests uses a modular internal design supporting Transport Adapters for per-service configuration.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:ab25df81ab5765e9fc48eeb4"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Requests relies on urllib3 to handle transport details and connection pooling.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:d8782aa1d7129c482acdea3a",
+      "ch:ab25df81ab5765e9fc48eeb4"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/help.py",
+     "symbol": "main",
+     "chunk_id": "ch:b8836fc4eedeae13be02af72",
+     "end_line": 130,
+     "start_line": 128
+    },
+    "E2": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:8c7986e5f9798b83a2142753",
+     "end_line": 57,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "src/requests/__version__.py",
+     "symbol": null,
+     "chunk_id": "ch:aad7a13c397edfd2dd97292a",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:5c8efe4157489683c0be629a",
+     "end_line": 184,
+     "start_line": 155
+    },
+    "E5": {
+     "path": "pyproject.toml",
+     "symbol": "tool.isort",
+     "chunk_id": "ch:ebe9cc7c5cb3d8340b535b71",
+     "end_line": 5,
+     "start_line": 1
+    },
+    "E6": {
+     "path": "docs/user/advanced.rst",
+     "symbol": "Advanced Usage > Session Objects",
+     "chunk_id": "ch:d8782aa1d7129c482acdea3a",
+     "end_line": 86,
+     "start_line": 10
+    },
+    "E7": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session.__init__",
+     "chunk_id": "ch:8a775f9aadf797978f9ae1d7",
+     "end_line": 449,
+     "start_line": 390
+    },
+    "E8": {
+     "path": "src/requests/__init__.py",
+     "symbol": "_check_cryptography",
+     "chunk_id": "ch:2a50872a8c40dc9e67418135",
+     "end_line": 104,
+     "start_line": 93
+    },
+    "E9": {
+     "path": "setup.cfg",
+     "symbol": null,
+     "chunk_id": "ch:2bfcac5b65d69c9141dc61dc",
+     "end_line": 17,
+     "start_line": 1
+    },
+    "E10": {
+     "path": "docs/user/advanced.rst",
+     "symbol": "Advanced Usage > Transport Adapters",
+     "chunk_id": "ch:ab25df81ab5765e9fc48eeb4",
+     "end_line": 1007,
+     "start_line": 969
+    },
+    "E11": {
+     "path": "docs/api.rst",
+     "symbol": "Developer Interface > Lower-Lower-Level Classes",
+     "chunk_id": "ch:944db4398e73194a4c2fec7d",
+     "end_line": 72,
+     "start_line": 61
+    },
+    "E12": {
+     "path": "src/requests/adapters.py",
+     "symbol": "_urllib3_request_context",
+     "chunk_id": "ch:0d458241b187e0c2f8e1a844",
+     "end_line": 134,
+     "start_line": 90
+    },
+    "E13": {
+     "path": "docs/api.rst",
+     "symbol": "Developer Interface > Migrating to 1.x",
+     "chunk_id": "ch:7de06e06a38bde733038416b",
+     "end_line": 204,
+     "start_line": 116
+    },
+    "E14": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:2b63e99c416959fc2b808704",
+     "end_line": 164,
+     "start_line": 105
+    },
+    "E15": {
+     "path": "src/requests/help.py",
+     "symbol": "info",
+     "chunk_id": "ch:cd794f029740685aead45e0b",
+     "end_line": 125,
+     "start_line": 69
+    },
+    "E16": {
+     "path": "src/requests/__init__.py",
+     "symbol": "check_compatibility",
+     "chunk_id": "ch:202503f5ad982ff87fa94b61",
+     "end_line": 90,
+     "start_line": 58
+    },
+    "E17": {
+     "path": "docs/api.rst",
+     "symbol": "Developer Interface > Lower-Level Classes",
+     "chunk_id": "ch:51e4ece4ecc3e50f8a804a03",
+     "end_line": 60,
+     "start_line": 51
+    },
+    "E18": {
+     "path": "docs/user/advanced.rst",
+     "symbol": "Advanced Usage > Example: Specific SSL Version",
+     "chunk_id": "ch:8b93dad674422e47a15b5dca",
+     "end_line": 1034,
+     "start_line": 1008
+    },
+    "E19": {
+     "path": "docs/community/faq.rst",
+     "symbol": "Frequently Asked Questions > Why not Httplib2?",
+     "chunk_id": "ch:0c7295f2b47ab15c0c7307ec",
+     "end_line": 54,
+     "start_line": 29
+    }
+   },
+   "quality": {
+    "claims": 3,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 1,
+    "unsupported": 0,
+    "grounded_ratio": 0.33,
+    "strongly_inferred": 2
+   }
+  },
+  {
+   "key": "architecture",
+   "title": "Architecture Walkthrough",
+   "position": 1,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 5.0,
+   "content": {
+    "summary": "This section walks through the internal module structure and internal utilities of the Requests repository.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Architecture Walkthrough",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The Requests library is structured into several core modules located under the src/requests directory [E1]. This section explores the module structure and internal utilities that power the repository."
+     },
+     {
+      "type": "heading",
+      "text": "Module Structure",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The codebase is divided into multiple Python files handling specific responsibilities, such as authentication handlers in auth.py, connection utilities in utils.py, and models representing primary objects [E2, E3, E8]."
+     },
+     {
+      "type": "heading",
+      "text": "Internal Utilities",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Internal helper functions that depend on extremely few external helpers are located in _internal_utils.py [E1]. These include string conversion helpers and header validation regex definitions [E1, E6]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "def to_native_string(string, encoding=\"ascii\"):\n    if isinstance(string, builtin_str):\n        out = string\n    else:\n        out = string.decode(encoding)\n\n    return out",
+      "path": "src/requests/_internal_utils.py",
+      "start_line": 25,
+      "caption": "to_native_string helper function"
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:657bac3b64933f0a",
+      "caption": "Module dependencies"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The Requests library contains multiple source files under src/requests including internal utilities and models.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:8feb63feb3d20ff9ea0ec160",
+      "ch:b054d14faeaca6eb8792b6c6"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "The file _internal_utils.py provides utility functions consumed internally by Requests.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:8feb63feb3d20ff9ea0ec160"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    },
+    {
+     "text": "The function to_native_string converts string objects to the native string type.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:5d41ad4746297522bff2b0e4"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": null,
+     "chunk_id": "ch:8feb63feb3d20ff9ea0ec160",
+     "end_line": 24,
+     "start_line": 1
+    },
+    "E2": {
+     "path": "src/requests/auth.py",
+     "symbol": null,
+     "chunk_id": "ch:154dec6a8823be0f0dd4f887",
+     "end_line": 24,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "src/requests/utils.py",
+     "symbol": null,
+     "chunk_id": "ch:9c498b1fe5fad3793dd78dad",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "src/requests/packages.py",
+     "symbol": null,
+     "chunk_id": "ch:0b7092a224b2b9cddc7ddd7f",
+     "end_line": 23,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "src/requests/api.py",
+     "symbol": null,
+     "chunk_id": "ch:8d775a156e147bca17fb59b8",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E6": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": "to_native_string",
+     "chunk_id": "ch:5d41ad4746297522bff2b0e4",
+     "end_line": 35,
+     "start_line": 25
+    },
+    "E7": {
+     "path": "src/requests/structures.py",
+     "symbol": null,
+     "chunk_id": "ch:6bdf0cab65ad0317ee716944",
+     "end_line": 12,
+     "start_line": 1
+    },
+    "E8": {
+     "path": "src/requests/models.py",
+     "symbol": null,
+     "chunk_id": "ch:b054d14faeaca6eb8792b6c6",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E9": {
+     "path": "src/requests/hooks.py",
+     "symbol": null,
+     "chunk_id": "ch:32933ce452aaef364932e8f0",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E10": {
+     "path": "src/requests/help.py",
+     "symbol": null,
+     "chunk_id": "ch:b4107dc504b40108ebc7eebe",
+     "end_line": 33,
+     "start_line": 1
+    },
+    "E11": {
+     "path": "src/requests/_internal_utils.py",
+     "symbol": "unicode_is_ascii",
+     "chunk_id": "ch:f88cc30408350aae971a8ba2",
+     "end_line": 50,
+     "start_line": 38
+    },
+    "E12": {
+     "path": "src/requests/__version__.py",
+     "symbol": null,
+     "chunk_id": "ch:aad7a13c397edfd2dd97292a",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E13": {
+     "path": "src/requests/status_codes.py",
+     "symbol": null,
+     "chunk_id": "ch:6d9f2089a76e36a8485ba564",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E14": {
+     "path": "src/requests/compat.py",
+     "symbol": null,
+     "chunk_id": "ch:bf3ef1c901dabd04f9916de4",
+     "end_line": 17,
+     "start_line": 1
+    },
+    "E15": {
+     "path": "src/requests/status_codes.py",
+     "symbol": "_init",
+     "chunk_id": "ch:22ba004e1b47a55fbd91d504",
+     "end_line": 125,
+     "start_line": 109
+    },
+    "E16": {
+     "path": "src/requests/certs.py",
+     "symbol": null,
+     "chunk_id": "ch:0ab924fd222d6923d0518fa2",
+     "end_line": 17,
+     "start_line": 1
+    },
+    "E17": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:8c7986e5f9798b83a2142753",
+     "end_line": 57,
+     "start_line": 1
+    },
+    "E18": {
+     "path": "docs/_templates/sidebarintro.html",
+     "symbol": null,
+     "chunk_id": "ch:0af9afc8312e2622db5891fe",
+     "end_line": 37,
+     "start_line": 1
+    },
+    "E19": {
+     "path": "docs/user/install.rst",
+     "symbol": "Installation of Requests > Get the Source Code",
+     "chunk_id": "ch:7b3bcf3dd639294564f4f02c",
+     "end_line": 36,
+     "start_line": 17
+    },
+    "E20": {
+     "path": "src/requests/help.py",
+     "symbol": "info",
+     "chunk_id": "ch:cd794f029740685aead45e0b",
+     "end_line": 125,
+     "start_line": 69
+    }
+   },
+   "quality": {
+    "claims": 3,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 2,
+    "unsupported": 0,
+    "grounded_ratio": 0.67,
+    "strongly_inferred": 1
+   }
+  },
+  {
+   "key": "deployment",
+   "title": "How to Run or Deploy",
+   "position": 2,
+   "status": "ready",
+   "kind": "backbone",
+   "target_minutes": 4.0,
+   "content": {
+    "summary": "This guide section details how the Requests library is tested locally and via GitHub Actions CI configuration.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "How to Run or Deploy",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The Requests library uses pytest for running its test suites [E8]. Contributors are expected to run the tests locally to confirm they pass before submitting any code [E1]."
+     },
+     {
+      "type": "heading",
+      "text": "Running Tests Locally",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "You can run tests using the pytest framework or via setup.py integration [E8]. The project includes various certificates for testing specific behaviors such as mTLS and expired certificates [E3, E4]."
+     },
+     {
+      "type": "code",
+      "language": "bash",
+      "code": "make clean\nmake all",
+      "path": "tests/certs/expired/README.md",
+      "start_line": 6,
+      "caption": "Regenerating test certificates if needed"
+     },
+     {
+      "type": "heading",
+      "text": "Continuous Integration with GitHub Actions",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "Automated testing is configured using GitHub Actions workflows, specifically under the Tests workflow [E6], which triggers on pushes and pull requests [E11]."
+     },
+     {
+      "type": "diagram",
+      "diagram_id": "dg:77d2d8d1dd27fedf",
+      "caption": "Deployment topology"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "Requests uses pytest for running tests.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:963c0edf9ce9aebf1dcc4db4"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Contributors should run tests locally before submitting a pull request.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:6358a343ef8452910f8dda85"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "GitHub Actions workflows handle automated testing on push and pull requests.",
+     "kind": "project_fact",
+     "status": "VERIFIED",
+     "evidence_ids": [
+      "ch:248aba24c54db449fe9a6bf3",
+      "ch:2f860d0aa06bbf8bc0910eea"
+     ],
+     "graph_node_ids": [],
+     "confidence": 1.0,
+     "note": null
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "docs/dev/contributing.rst",
+     "symbol": "Contributor's Guide > Code Contributions",
+     "chunk_id": "ch:6358a343ef8452910f8dda85",
+     "end_line": 121,
+     "start_line": 64
+    },
+    "E2": {
+     "path": "tests/certs/expired/README.md",
+     "symbol": "Expired Certificates and Configuration for Testing",
+     "chunk_id": "ch:7ea3c3496c789b178c55bb1b",
+     "end_line": 11,
+     "start_line": 1
+    },
+    "E3": {
+     "path": "tests/certs/README.md",
+     "symbol": "Testing Certificates",
+     "chunk_id": "ch:0bd2b32b0eb92ca4e48ffccc",
+     "end_line": 10,
+     "start_line": 1
+    },
+    "E4": {
+     "path": "tests/certs/mtls/README.md",
+     "symbol": "Certificate Examples for mTLS",
+     "chunk_id": "ch:75dd62da8015d739c47f904c",
+     "end_line": 4,
+     "start_line": 1
+    },
+    "E5": {
+     "path": "tests/testserver/server.py",
+     "symbol": "TLSServer",
+     "chunk_id": "ch:62e0cdb2ccc7807ff036b0a9",
+     "end_line": 138,
+     "start_line": 138
+    },
+    "E6": {
+     "path": ".github/workflows/run-tests.yml",
+     "symbol": "name",
+     "chunk_id": "ch:248aba24c54db449fe9a6bf3",
+     "end_line": 1,
+     "start_line": 1
+    },
+    "E7": {
+     "path": "tests/certs/valid/server/server.pem",
+     "symbol": null,
+     "chunk_id": "ch:b3494cb5e2cdbb13fc61210b",
+     "end_line": 47,
+     "start_line": 1
+    },
+    "E8": {
+     "path": "setup.py",
+     "symbol": "PyTest.run_tests",
+     "chunk_id": "ch:963c0edf9ce9aebf1dcc4db4",
+     "end_line": 52,
+     "start_line": 48
+    },
+    "E9": {
+     "path": ".github/workflows/run-tests.yml",
+     "symbol": "permissions",
+     "chunk_id": "ch:ea4eef3b28d0382129234be0",
+     "end_line": 6,
+     "start_line": 5
+    },
+    "E10": {
+     "path": "MANIFEST.in",
+     "symbol": null,
+     "chunk_id": "ch:b0eb392c3dc00f350de9b9d1",
+     "end_line": 3,
+     "start_line": 1
+    },
+    "E11": {
+     "path": ".github/workflows/run-tests.yml",
+     "symbol": "on",
+     "chunk_id": "ch:2f860d0aa06bbf8bc0910eea",
+     "end_line": 3,
+     "start_line": 3
+    },
+    "E12": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestRequests.test_transport_adapter_ordering",
+     "chunk_id": "ch:3ade9d60851e0929ea00647b",
+     "end_line": 1617,
+     "start_line": 1581
+    },
+    "E13": {
+     "path": "tests/testserver/server.py",
+     "symbol": "Server",
+     "chunk_id": "ch:bbfe384c61b634d4fdbbc304",
+     "end_line": 29,
+     "start_line": 25
+    },
+    "E14": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_mtls_settings",
+     "chunk_id": "ch:738c9a02c41b6dac5cae047e",
+     "end_line": 2966,
+     "start_line": 2929
+    },
+    "E15": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_True",
+     "chunk_id": "ch:8e3ca5dba566f401a8787c8c",
+     "end_line": 2862,
+     "start_line": 2833
+    },
+    "E16": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_expired_cert",
+     "chunk_id": "ch:5f7cea8f5951600d05e36e91",
+     "end_line": 2895,
+     "start_line": 2864
+    },
+    "E17": {
+     "path": "tests/test_requests.py",
+     "symbol": "TestPreparingURLs.test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert",
+     "chunk_id": "ch:1158a6cd5f1f56d05e33b2b4",
+     "end_line": 2927,
+     "start_line": 2897
+    }
+   },
+   "quality": {
+    "claims": 3,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 1,
+    "unsupported": 0,
+    "grounded_ratio": 0.33,
+    "strongly_inferred": 2
+   }
+  },
+  {
+   "key": "core-requests",
+   "title": "Requests Core Subsystem",
+   "position": 3,
+   "status": "ready",
+   "kind": "core",
+   "target_minutes": 6.0,
+   "content": {
+    "summary": "This guide section explores the core subsystem of Requests, detailing how HTTP sessions and requests are implemented and managed.",
+    "blocks": [
+     {
+      "type": "heading",
+      "text": "Requests Core Subsystem",
+      "level": 2
+     },
+     {
+      "type": "paragraph",
+      "text": "The core subsystem of Requests centers around managing state, configuration, and connections via session objects, and dispatching HTTP methods through a unified interface [E1, E8]."
+     },
+     {
+      "type": "heading",
+      "text": "HTTP Sessions and Configuration",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The Session class provides cookie persistence, connection-pooling via urllib3, and configuration defaults across multiple requests [E1, E8]. When initialized, a Session sets up default headers, hooks, proxies, and connection adapters for HTTP and HTTPS protocols [E3]."
+     },
+     {
+      "type": "code",
+      "language": "python",
+      "code": "class Session(SessionRedirectMixin):\n    __attrs__ = [\n        \"headers\",\n        \"cookies\",\n        \"auth\",\n        \"proxies\",\n        \"hooks\",\n        \"params\",\n        \"verify\",\n        \"cert\",\n        \"adapters\",\n        \"stream\",\n        \"trust_env\",\n        \"max_redirects\",\n    ]",
+      "path": "src/requests/sessions.py",
+      "start_line": 356,
+      "caption": "Session attributes for persistence and configuration"
+     },
+     {
+      "type": "heading",
+      "text": "Executing HTTP Methods",
+      "level": 3
+     },
+     {
+      "type": "paragraph",
+      "text": "The request method on a Session constructs a Request object, prepares it, merges environment settings, and sends it to return a Response object [E2]."
+     },
+     {
+      "type": "qa",
+      "question": "How do session-level parameters interact with method-level parameters?",
+      "answer": "Any dictionaries passed to a request method are merged with session-level values, where method-level parameters override session parameters but are not persistently stored across requests [E8].",
+      "kind": "repository"
+     }
+    ]
+   },
+   "claims": [
+    {
+     "text": "The Session class provides cookie persistence, connection-pooling, and configuration.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:fdc0edfe8da5d86db928003a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "A Session initializes default headers, hooks, and adapters for http and https.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:8a775f9aadf797978f9ae1d7"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    },
+    {
+     "text": "Method-level parameters override session parameters for a single request without being persisted.",
+     "kind": "project_fact",
+     "status": "STRONGLY_INFERRED",
+     "evidence_ids": [
+      "ch:d8782aa1d7129c482acdea3a"
+     ],
+     "graph_node_ids": [],
+     "confidence": 0.5,
+     "note": "The claim names nothing that can be checked against the evidence."
+    }
+   ],
+   "evidence": {
+    "E1": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session",
+     "chunk_id": "ch:fdc0edfe8da5d86db928003a",
+     "end_line": 389,
+     "start_line": 356
+    },
+    "E2": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session.request",
+     "chunk_id": "ch:d38d7aeb6bc0b58a0fdc0052",
+     "end_line": 591,
+     "start_line": 500
+    },
+    "E3": {
+     "path": "src/requests/sessions.py",
+     "symbol": "Session.__init__",
+     "chunk_id": "ch:8a775f9aadf797978f9ae1d7",
+     "end_line": 449,
+     "start_line": 390
+    },
+    "E4": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:5c8efe4157489683c0be629a",
+     "end_line": 184,
+     "start_line": 155
+    },
+    "E5": {
+     "path": "src/requests/api.py",
+     "symbol": null,
+     "chunk_id": "ch:8d775a156e147bca17fb59b8",
+     "end_line": 13,
+     "start_line": 1
+    },
+    "E6": {
+     "path": "src/requests/api.py",
+     "symbol": "request",
+     "chunk_id": "ch:910e42a2da9b734e70367902",
+     "end_line": 59,
+     "start_line": 14
+    },
+    "E7": {
+     "path": "src/requests/models.py",
+     "symbol": "Response.__init__",
+     "chunk_id": "ch:4e5b391ebba41c5dd08e975c",
+     "end_line": 703,
+     "start_line": 658
+    },
+    "E8": {
+     "path": "docs/user/advanced.rst",
+     "symbol": "Advanced Usage > Session Objects",
+     "chunk_id": "ch:d8782aa1d7129c482acdea3a",
+     "end_line": 86,
+     "start_line": 10
+    },
+    "E9": {
+     "path": "src/requests/help.py",
+     "symbol": "main",
+     "chunk_id": "ch:b8836fc4eedeae13be02af72",
+     "end_line": 130,
+     "start_line": 128
+    },
+    "E10": {
+     "path": "src/requests/__init__.py",
+     "symbol": null,
+     "chunk_id": "ch:8c7986e5f9798b83a2142753",
+     "end_line": 57,
+     "start_line": 1
+    },
+    "E11": {
+     "path": "src/requests/cookies.py",
+     "symbol": "MockRequest.__init__",
+     "chunk_id": "ch:d1986d1548d9f5d303f2a713",
+     "end_line": 38,
+     "start_line": 35
+    },
+    "E12": {
+     "path": "src/requests/auth.py",
+     "symbol": null,
+     "chunk_id": "ch:154dec6a8823be0f0dd4f887",
+     "end_line": 24,
+     "start_line": 1
+    },
+    "E13": {
+     "path": "src/requests/utils.py",
+     "symbol": null,
+     "chunk_id": "ch:9c498b1fe5fad3793dd78dad",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E14": {
+     "path": "src/requests/models.py",
+     "symbol": null,
+     "chunk_id": "ch:b054d14faeaca6eb8792b6c6",
+     "end_line": 60,
+     "start_line": 1
+    },
+    "E15": {
+     "path": "src/requests/__version__.py",
+     "symbol": null,
+     "chunk_id": "ch:aad7a13c397edfd2dd97292a",
+     "end_line": 14,
+     "start_line": 1
+    },
+    "E16": {
+     "path": "src/requests/models.py",
+     "symbol": "PreparedRequest.__init__",
+     "chunk_id": "ch:eca30fa8e55fc72a71782ff8",
+     "end_line": 349,
+     "start_line": 334
+    },
+    "E17": {
+     "path": "README.md",
+     "symbol": "Requests",
+     "chunk_id": "ch:4d28ee886441199b5d10290c",
+     "end_line": 27,
+     "start_line": 1
+    }
+   },
+   "quality": {
+    "claims": 3,
+    "inferred": 0,
+    "proposed": 0,
+    "verified": 0,
+    "unsupported": 0,
+    "grounded_ratio": 0.0,
+    "strongly_inferred": 3
+   }
+  }
+ ]
+}

@@ -16,6 +16,20 @@ def project_prefix(project_id: str) -> str:
     return f"projects/{project_id}/"
 
 
+# Rate-limit keys. Per-session and per-project keys are removed with their owner (cleanup); per-IP and global
+# counters are fixed windows that carry no owner and expire by TTL alone.
+SESSION_RATE_BUCKETS = ("projects", "chat")
+PROJECT_RATE_BUCKETS = ("export", "regenerate")
+
+
+def session_rate_key(bucket: str, session_id: object) -> str:
+    return f"{bucket}:{session_id}"
+
+
+def project_rate_key(bucket: str, project_id: object) -> str:
+    return f"{bucket}:project:{project_id}"
+
+
 class BlobStore(Protocol):
     bucket: str  # namespace; also keys the in-process snapshot cache
 
@@ -25,6 +39,10 @@ class BlobStore(Protocol):
     async def get_bytes(self, key: str) -> bytes: ...
     async def get_file(self, key: str, path: Path) -> Path: ...
     async def delete_prefix(self, prefix: str) -> int: ...
+    async def presigned_get_url(self, key: str, expires_s: int, *, filename: str) -> str:
+        """A time-limited URL a browser can GET directly (S3: presigned GetObject)."""
+        ...
+
     async def ping(self) -> None: ...
 
 
@@ -33,6 +51,7 @@ class JobQueue(Protocol):
 
     async def enqueue_analysis(self, job_id: str, attempt: int, *, defer_s: float | None = None) -> None: ...
     async def enqueue_project_cleanup(self, project_id: str) -> None: ...
+    async def enqueue_export(self, export_id: str) -> None: ...
     async def aclose(self) -> None: ...
 
 
