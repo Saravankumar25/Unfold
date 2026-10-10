@@ -149,5 +149,5 @@ async def test_latency_percentiles_of_the_api_layer(aws: Any, app: FastAPI) -> N
         }
         assert q[98] < 2000  # a regression guard, not a performance claim
     if path := os.environ.get("UNFOLD_BENCH_OUT"):
-        Path(path).write_text(json.dumps(out, indent=2), encoding="utf-8")
+        Path(path).write_text(json.dumps(out, indent=2), encoding="utf-8")  # noqa: ASYNC240
     print(json.dumps(out, indent=2))
