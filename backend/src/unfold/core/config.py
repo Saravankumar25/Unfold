@@ -129,6 +129,7 @@ class Settings(BaseSettings):
     max_regenerations_per_hour: int = (
         6  # per project; each one re-researches, rewrites and re-verifies a chapter
     )
+    max_regenerations_per_session_hour: int = 12  # per session, over all of its projects
     max_sessions_per_ip_per_hour: int = 20
     max_sessions_per_hour: int = 500
     max_projects_per_ip_per_hour: int = 30

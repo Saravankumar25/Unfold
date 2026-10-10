@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from sqlalchemy import Select, select
 
-from unfold.api.deps import RuntimeDep, SessionDep, owned_project
+from unfold.api.deps import RuntimeDep, SessionDep, enforce_rate_limit, owned_project
 from unfold.api.routes.projects import latest_job
 from unfold.api.schemas import (
     ArchitectureOut,
@@ -257,8 +257,8 @@ async def regenerate_section(
 ) -> RegenerateCreated:
     """Redo research, writing and verification of one chapter in a worker; the others are left as they are.
 
-    Idempotent while one is running (the same job is returned). Rate-limited per project: each call spends model
-    calls from a job budget of its own."""
+    Idempotent while one is running (the same job is returned). Rate-limited per project and per session: each
+    call spends model calls from a job budget of its own."""
     project = await owned_project(rt, session, project_id)
     plan = await _plan(rt, project)
     if section_key not in {s.key for s in plan.sections}:
@@ -277,6 +277,7 @@ async def regenerate_section(
         raise RateLimited(
             f"At most {cfg.max_regenerations_per_hour} chapter regenerations per project per hour."
         )
+    await enforce_rate_limit(rt, session, "regenerate", cfg.max_regenerations_per_session_hour, 3600)
     async with rt.db.transaction() as s:
         # the project row lock serialises concurrent requests and refuses a project deleted since the lookup
         alive = (

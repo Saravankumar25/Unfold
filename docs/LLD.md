@@ -35,7 +35,7 @@ All settings come from environment (`.env` locally, never committed).
 | Local models | `EMBEDDING_MODEL` (BAAI/bge-small-en-v1.5), `RERANKER_MODEL` (Xenova/ms-marco-MiniLM-L-6-v2), `MODEL_CACHE_DIR`, `MODEL_THREADS` (ONNX threads per model, default 6) |
 | Limits | `SESSION_TTL_SECONDS` (86400), `SESSION_MAX_LIFETIME_SECONDS` (259200), `MAX_ZIP_BYTES` (50 MiB), `MAX_EXTRACTED_BYTES` (300 MiB), `MAX_FILE_COUNT` (20000), `MAX_SINGLE_FILE_BYTES` (1 MiB), `MAX_PATH_DEPTH` (32), `MAX_COMPRESSION_RATIO` (100), `MAX_REPO_ARCHIVE_BYTES` (100 MiB) |
 | GitHub | `GITHUB_TOKEN` (optional; only raises API rate limit, never used for private repos) |
-| Guide | `SECTION_CONCURRENCY` (2), `RESEARCH_MAX_ROUNDS` (2), `RESEARCH_MAX_RETRIEVALS` (12), `RESEARCH_MAX_LLM_CALLS` (4), `RESEARCH_BRIEF_TOKENS` (6000), `REVISION_MAX_ROUNDS` (2), `MAX_REGENERATIONS_PER_HOUR` (6, per project) |
+| Guide | `SECTION_CONCURRENCY` (2), `RESEARCH_MAX_ROUNDS` (2), `RESEARCH_MAX_RETRIEVALS` (12), `RESEARCH_MAX_LLM_CALLS` (4), `RESEARCH_BRIEF_TOKENS` (6000), `REVISION_MAX_ROUNDS` (2), `MAX_REGENERATIONS_PER_HOUR` (6, per project), `MAX_REGENERATIONS_PER_SESSION_HOUR` (12, per session) |
 | Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` (unset → spans not exported, ids still logged), `OTEL_SERVICE_NAME` |
 
 `get_settings()` is lru-cached per process. Secrets are `SecretStr` and never logged.
@@ -259,7 +259,7 @@ Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no he
 | `GET /projects/{id}/evidence/{chunk_id}` | redacted evidence text, path, lines |
 | `GET /projects/{id}/architecture` | graph overview |
 | `GET /projects/{id}/diagrams/{diagram_id}` | DiagramSpec + mermaid |
-| `POST /projects/{id}/sections/{key}/regenerate` | 202 `{job_id, section_key}`; unknown key 404, project not ready 409; the same job again while one runs, another chapter meanwhile 409; 429 past `MAX_REGENERATIONS_PER_HOUR` per project |
+| `POST /projects/{id}/sections/{key}/regenerate` | 202 `{job_id, section_key}`; unknown key 404, project not ready 409; the same job again while one runs, another chapter meanwhile 409; 429 past `MAX_REGENERATIONS_PER_HOUR` per project or `MAX_REGENERATIONS_PER_SESSION_HOUR` per session |
 | `POST /projects/{id}/chats` · `GET /projects/{id}/chats` | chat sessions |
 | `GET /chats/{chat_id}` | messages |
 | `POST /chats/{chat_id}/messages?stream=false\|true` `{text, mode, section_key?}` | `ChatReplyOut` JSON, or NDJSON `ChatEvent` lines |
@@ -268,7 +268,7 @@ Session: cookie `unfold_session` (HttpOnly, SameSite=Lax, Secure in prod); no he
 | `GET /projects/{id}/artifacts` | the project's exports |
 | `GET /health` · `GET /ready` | liveness · readiness |
 
-Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (fixed windows behind `RateLimiter`): project creation 10/h per session, chat 30/min per session, exports 10/h per project, chapter regenerations 6/h per project; per-IP and global ceilings on session and project creation.
+Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into the streaming `POST /messages`; session routes use `current` (cookie-bound) rather than a path id. Error envelope: `{"error": {"code", "message", "retryable", "request_id"}}` (codes in `core.errors.ErrorCode`). Rate limits (fixed windows behind `RateLimiter`): project creation 10/h per session, chat 30/min per session, exports 10/h per project, chapter regenerations 6/h per project and 12/h per session; per-IP and global ceilings on session and project creation.
 
 ## 21. Cleanup & recovery (`unfold.cleanup`)
 

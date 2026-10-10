@@ -284,6 +284,32 @@ async def test_regenerate_route_is_owner_scoped_idempotent_and_rate_limited(
         assert limited.status_code == 429 and limited.json()["error"]["code"] == "RATE_LIMITED"
 
 
+async def test_regenerations_are_also_limited_per_session(
+    runtime: Runtime,
+    analyzed_project: Callable[..., Awaitable[Any]],
+    open_api: Callable[..., Any],
+    recording_queue: Any,
+) -> None:
+    seeded = await analyzed_project()  # a session of its own: the quota counter starts at zero
+    try:
+        keys = list(await _rows(runtime, seeded.project_id))
+        base = f"{API}/projects/{seeded.project_id}"
+        async with open_api(
+            queue=recording_queue, max_regenerations_per_hour=100, max_regenerations_per_session_hour=1
+        ) as client:
+            client.cookies.set("unfold_session", seeded.token)
+            first = await client.post(f"{base}/sections/{keys[0]}/regenerate")
+            assert first.status_code == 202, first.text
+            async with runtime.db.transaction() as s:  # the first one is over, so only the quota can refuse
+                job = await s.get(AnalysisJobRow, uuid.UUID(first.json()["job_id"]))
+                assert job is not None
+                job.status = "failed"
+            limited = await client.post(f"{base}/sections/{keys[1]}/regenerate")
+            assert limited.status_code == 429 and limited.json()["error"]["code"] == "RATE_LIMITED"
+    finally:
+        await cleanup_project(runtime, seeded.project_id)
+
+
 async def test_a_failed_regeneration_leaves_the_chapter_and_the_project_intact(
     runtime: Runtime, gappy: tuple[Any, GappyLLM], open_api: Callable[..., Any], recording_queue: Any
 ) -> None:
