@@ -186,7 +186,12 @@ def test_gaps_stated_offset_unverified_facts() -> None:
     sections = good()
     sections[0].claims.append(claim("`RRF_K` is 60", ClaimStatus.UNSUPPORTED, cited=False))
     r = rubric.uncertainty_honesty(sections)
-    assert r.raw == {"unverified_facts_left": 1, "gaps_stated": 1, "statements_qualified_or_removed": 0}
+    assert r.raw == {
+        "unverified_facts_left": 1,
+        "gaps_stated": 1,
+        "statements_qualified_or_removed": 0,
+        "claims_not_stated": 0,
+    }
     assert r.score == 2.0
 
 
