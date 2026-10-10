@@ -197,6 +197,7 @@ module "control" {
   cluster_arn = module.worker.cluster_arn
   environment = merge(local.app_env, {
     TASK_DEFINITION_ANALYSIS = module.worker.task_definition_arns["analysis"]
+    TASK_DEFINITION_EXPORT   = lookup(module.worker.task_definition_arns, "export", "")
     SUBNET_IDS               = join(",", module.network.public_subnet_ids)
     SECURITY_GROUP_IDS       = module.network.worker_security_group_id
   })
