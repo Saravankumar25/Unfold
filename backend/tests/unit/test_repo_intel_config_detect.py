@@ -153,7 +153,7 @@ def test_secret_and_injection_scanners_are_not_quadratic() -> None:
     from unfold.security.injection import scan
     from unfold.security.secrets import redact
 
-    def best(fn: object, repeat: int = 3) -> float:  # min of N: load only ever adds time
+    def best(fn: object, repeat: int = 5) -> float:  # min of N: load only ever adds time
         out = []
         for _ in range(repeat):
             start = time.perf_counter()
@@ -166,8 +166,9 @@ def test_secret_and_injection_scanners_are_not_quadratic() -> None:
     small = best(lambda: redact("-----BEGIN PRIVATE KEY-----\n" * 1000))
     large = best(lambda: redact("-----BEGIN PRIVATE KEY-----\n" * 4000))
     assert large < 9 * small, (small, large)
-    small = best(lambda: scan("\n" * 25_000 + "system: hi"))
-    large = best(lambda: scan("\n" * 100_000 + "system: hi"))
+    # Sizes keep the small run well above timer noise (a few ms made the ratio flap under load).
+    small = best(lambda: scan("\n" * 100_000 + "system: hi"))
+    large = best(lambda: scan("\n" * 400_000 + "system: hi"))
     assert large < 9 * max(small, 0.002), (small, large)
 
 
