@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 # Conservative free-tier defaults. Override with LLM_MODEL_LIMITS (JSON) when providers change quotas.
 # Gemini 2.5 models are closed to new API users since 2026 (404 "no longer available"); Pro tiers have no
@@ -23,6 +25,18 @@ DEFAULT_MODEL_LIMITS: dict[str, dict[str, int]] = {
 
 _DEV_NEO4J_PASSWORD = "unfold-neo4j-pass"  # noqa: S105 - documented local-dev default, rejected in production
 _DEV_OBJECT_STORE_SECRET = "unfold-minio-secret"  # noqa: S105
+
+_DEV_OBJECT_STORE_ACCESS_KEY = "unfold"
+
+
+def _trusts_everyone(entry: str) -> bool:
+    if "*" in entry:
+        return True
+    try:
+        return ipaddress.ip_network(entry, strict=False).prefixlen == 0
+    except ValueError:
+        return False  # a hostname-like entry; uvicorn matches it literally
+
 
 _SECRET_FIELDS = (
     "gemini_api_key_1",
@@ -103,6 +117,7 @@ class Settings(BaseSettings):
     max_projects_per_ip_per_hour: int = 30
     max_projects_per_hour_global: int = 200
     max_streams_per_session: int = 3
+    max_streams_total: int = 200
 
     # network trust: only these peers may set X-Forwarded-For (comma separated IPs/CIDRs; never "*")
     trusted_proxy_ips: str = "127.0.0.1"
@@ -132,10 +147,12 @@ class Settings(BaseSettings):
             problems.append("NEO4J_PASSWORD is the development default")
         if self.object_store_secret_key.get_secret_value() == _DEV_OBJECT_STORE_SECRET:
             problems.append("OBJECT_STORE_SECRET_KEY is the development default")
-        if "unfold:unfold@" in self.database_url:
-            problems.append("DATABASE_URL uses the development credentials")
-        if "*" in self.trusted_proxy_ips:
-            problems.append("TRUSTED_PROXY_IPS must not contain '*'")
+        if make_url(self.database_url).password in (None, "", "unfold"):
+            problems.append("DATABASE_URL has an empty or development password")
+        if self.object_store_access_key == _DEV_OBJECT_STORE_ACCESS_KEY:
+            problems.append("OBJECT_STORE_ACCESS_KEY is the development default")
+        if not self.trusted_proxies or any(_trusts_everyone(p) for p in self.trusted_proxies):
+            problems.append("TRUSTED_PROXY_IPS must list specific proxies, not '*' or a /0 network")
         if problems:
             raise ValueError("Unsafe production configuration: " + "; ".join(problems))
         return self

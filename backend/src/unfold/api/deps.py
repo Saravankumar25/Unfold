@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -37,8 +38,19 @@ def session_token_from(request: Request, cookie_name: str) -> str | None:
 
 
 def client_ip(request: Request) -> str:
-    """Peer address as rewritten by the trusted-proxy middleware; a forged X-Forwarded-For is never honoured."""
-    return request.client.host if request.client else "unknown"
+    """Peer address as rewritten by the trusted-proxy middleware; a forged X-Forwarded-For is never honoured.
+
+    Normalised to a rate-limit key: unparseable values collapse to "unknown" and IPv6 clients share their /64,
+    so rotating addresses inside one allocation does not mint new buckets.
+    """
+    host = request.client.host if request.client else ""
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return "unknown"
+    if isinstance(addr, ipaddress.IPv6Address):
+        return str(ipaddress.ip_network(f"{addr}/64", strict=False).network_address) + "/64"
+    return str(addr)
 
 
 async def require_session(request: Request, rt: RuntimeDep) -> CurrentSession:

@@ -169,7 +169,6 @@ Per call: redact all parts → cache (if `cacheable`) → `ModelRouter.candidate
 
 Circuit breaker (`llm.circuit`): per `provider:model` in Redis; CLOSED → OPEN after 5 consecutive failures; OPEN 60 s → HALF_OPEN one probe. Accounting: `usage:{job_id}` Redis hash; `ANALYSIS_LLM_CALL_BUDGET` per job (P2 skipped beyond budget; hard stop at 1.3×). Span `llm.generate` with purpose, provider, model, key index, latency, tokens, retries, outcome.
 
-`GatewayChatModel(BaseChatModel)` (`llm.langchain_adapter`): LangChain messages + `bind_tools` → `LLMRequest(tools=…)` → `AIMessage(tool_calls=…)`. Used by Deep Agents only.
 
 Providers (`llm.providers`): `GeminiProvider` (google-genai async client per key; function calling; JSON-schema output; streaming; usage metadata) and `GroqProvider` (OpenAI-compatible HTTP; disabled without keys). Only this package imports provider SDKs.
 

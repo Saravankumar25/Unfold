@@ -18,6 +18,7 @@ SAFE_PROD = {
     "cookie_secure": True,
     "neo4j_password": "n3o-prod-secret",
     "object_store_secret_key": "obj-prod-secret",
+    "object_store_access_key": "app-access",
     "database_url": "postgresql+asyncpg://app:s3cret@db.internal:5432/unfold",
 }
 
@@ -38,6 +39,10 @@ def test_production_accepts_safe_config() -> None:
         ({"object_store_secret_key": "unfold-minio-secret"}, "OBJECT_STORE_SECRET_KEY"),
         ({"database_url": "postgresql+asyncpg://unfold:unfold@localhost/unfold"}, "DATABASE_URL"),
         ({"trusted_proxy_ips": "*"}, "TRUSTED_PROXY_IPS"),
+        ({"trusted_proxy_ips": "0.0.0.0/0"}, "TRUSTED_PROXY_IPS"),
+        ({"trusted_proxy_ips": "::/0"}, "TRUSTED_PROXY_IPS"),
+        ({"database_url": "postgresql+asyncpg://app@db.internal/unfold"}, "DATABASE_URL"),
+        ({"object_store_access_key": "unfold"}, "OBJECT_STORE_ACCESS_KEY"),
     ],
 )
 def test_production_refuses_unsafe_defaults(override: dict[str, object], needle: str) -> None:
@@ -86,8 +91,28 @@ def test_session_token_comes_from_cookie_only() -> None:
 
 def test_stream_cap_blocks_n_plus_one_and_frees_on_release() -> None:
     cap = StreamCap(2)
-    assert cap.acquire("s") and cap.acquire("s")
-    assert not cap.acquire("s")
+    first, second = cap.acquire("s"), cap.acquire("s")
+    assert first and second
+    assert cap.acquire("s") is None
     assert cap.acquire("other")
-    cap.release("s")
+    first.release()
+    first.release()  # idempotent: must not free a second slot
     assert cap.acquire("s")
+    assert cap.acquire("s") is None
+
+
+def test_stream_cap_has_a_global_ceiling() -> None:
+    cap = StreamCap(per_key=5, total=2)
+    assert cap.acquire("a") and cap.acquire("b")
+    assert cap.acquire("c") is None
+
+
+def test_client_ip_is_normalised() -> None:
+    def ip(host: str | None) -> str:
+        scope = {"type": "http", "headers": [], "client": (host, 1) if host else None}
+        return client_ip(StarletteRequest(scope))
+
+    assert ip("203.0.113.9") == "203.0.113.9"
+    assert ip("2001:db8:1:2:aaaa::1") == ip("2001:db8:1:2:bbbb::9") == "2001:db8:1:2::/64"
+    assert ip("not-an-ip") == "unknown"
+    assert ip(None) == "unknown"

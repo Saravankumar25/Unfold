@@ -30,6 +30,7 @@ WAIT_BUDGET_S: dict[Priority, float] = {
     Priority.P3: 30.0,
 }
 WINDOW_MS = 60_000
+CONCURRENCY_WAIT_S = 8.0  # how long a full concurrency limit is polled before giving up on a model
 
 # KEYS: rpm, tpm, rpd_prefix, conc, cooldown
 # ARGV: rid, est_tokens, rpm_limit, tpm_limit, rpd_limit, conc_limit, lease_ms
@@ -213,6 +214,7 @@ class ProviderBudget:
         """
         budget = WAIT_BUDGET_S[priority] if max_wait_s is None else max(0.0, max_wait_s)
         deadline = time.monotonic() + budget
+        concurrency_deadline = time.monotonic() + CONCURRENCY_WAIT_S
         while True:
             res, hint, _reason = await self.try_reserve(model, est_tokens, key_index=key_index)
             if res is not None:
@@ -221,7 +223,10 @@ class ProviderBudget:
             if remaining <= 0:
                 return None
             if _reason == "concurrency":
-                # The hint is the lease expiry (a ceiling). In-flight calls normally finish far sooner, so poll.
+                # The hint is the lease expiry (a ceiling). In-flight calls normally finish far sooner, so poll
+                # briefly; past that the caller should try another candidate rather than queue behind this one.
+                if time.monotonic() >= concurrency_deadline:
+                    return None
                 await asyncio.sleep(max(0.01, min(self._step, remaining)))
                 continue
             if hint > remaining:

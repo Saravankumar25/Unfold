@@ -30,8 +30,9 @@ def test_redacts_quoted_low_entropy_password_literal() -> None:
     r = redact("config: password = 'hunter2hunter2' and more")
     assert "hunter2hunter2" not in r.text
     assert r.text.startswith("config: password")
-    # Unquoted low-entropy values stay (they are usually identifiers, not literals).
-    assert redact("password = aaaabbbbcccc").text == "password = aaaabbbbcccc"
+    # .env / YAML style, unquoted
+    assert "letmein12345" not in redact("DB_PASSWORD=letmein12345").text
+    assert "letmein12345" not in redact("password: letmein12345").text
 
 
 def test_does_not_redact_placeholders_or_env_lookups() -> None:

@@ -184,13 +184,16 @@ async def test_stream_cap_rejects_extra_streams(app: FastAPI, client: httpx.Asyn
         await client.post("/api/v1/projects/github", json={"url": "https://github.com/octocat/Hello-World"})
     ).json()["project_id"]
     caps = app.state.streams
-    taken = 0
-    while caps.acquire(sid):
-        taken += 1
+    leases = []
+    while (lease := caps.acquire(sid)) is not None:
+        leases.append(lease)
     resp = await client.get(f"/api/v1/projects/{pid}/events")
     assert resp.status_code == 429
-    for _ in range(taken):
-        caps.release(sid)
+    # A malformed cursor must be rejected by the cap (429), not crash before it (500).
+    bad_cursor = await client.get(f"/api/v1/projects/{pid}/events?last_event_id=%C2%B2")
+    assert bad_cursor.status_code == 429
+    for lease in leases:
+        lease.release()
 
 
 async def test_events_replay_from_last_event_id(app: FastAPI, client: httpx.AsyncClient) -> None:

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# One Python image, two runtime targets (HLD §2): `api` (FastAPI + chat) and `worker` (arq + LangGraph + Chromium).
+# One Python image, two runtime targets (HLD §2): `api` (FastAPI + chat) and `worker` (one-shot analysis task + Chromium).
 # Build context is the repository root:  docker build -f docker/backend.Dockerfile --target api .
 
 ARG PYTHON_VERSION=3.12

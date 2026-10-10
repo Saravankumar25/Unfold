@@ -19,6 +19,7 @@ import orjson
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
+from starlette.background import BackgroundTask
 
 from unfold import ANALYSIS_VERSION
 from unfold.api.deps import (
@@ -130,13 +131,15 @@ async def _create(
             attempt=0,
         )
         s.add(job)
+    # Publish before enqueueing so there is one writer at a time: concurrent publishers could commit
+    # sequence ids out of order and a polling cursor would skip the earlier one.
+    await rt.progress.publish(str(project_id), stage_event("stage", JobStage.RECEIVED))
     queue: JobQueue = request.app.state.queue
     try:
         await queue.enqueue_analysis(str(job.id), 1)
     except UnfoldError as exc:
         # Committed but not enqueued: keep it `queued`; the sweeper re-enqueues within minutes.
         log.warning("project.enqueue_failed", project_id=str(project_id), code=exc.code.value)
-    await rt.progress.publish(str(project_id), stage_event("stage", JobStage.RECEIVED))
     log.info("project.created", project_id=str(project_id), input_type=input_type.value)
     return ProjectCreated(project_id=str(project_id), job_id=str(job.id))
 
@@ -248,12 +251,12 @@ async def project_events(
     """
     project = await owned_project(rt, session, project_id)
     pid = str(project.id)
-    caps: StreamCap = request.app.state.streams
-    cap_key = str(session.id)
-    if not caps.acquire(cap_key):
-        raise RateLimited("Too many open progress streams for this session.")
     raw_cursor = request.headers.get("Last-Event-ID") or request.query_params.get("last_event_id") or "0"
-    start = int(raw_cursor) if raw_cursor.isdigit() else 0
+    start = min(int(raw_cursor), 2**63 - 1) if raw_cursor.isascii() and raw_cursor.isdigit() else 0
+    caps: StreamCap = request.app.state.streams
+    lease = caps.acquire(str(session.id))
+    if lease is None:
+        raise RateLimited("Too many open progress streams; try again shortly.")
 
     async def gen() -> AsyncIterator[dict[str, Any]]:
         try:
@@ -300,10 +303,14 @@ async def project_events(
                     if event["type"] in ("ready", "failed"):
                         return
         finally:
-            caps.release(cap_key)
+            lease.release()
 
+    # `background` also runs when the client vanishes before the generator is first iterated.
     return EventSourceResponse(
-        gen(), ping=15, headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+        gen(),
+        ping=15,
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        background=BackgroundTask(lease.release),
     )
 
 

@@ -263,7 +263,10 @@ class JobEventRow(Base):
     """Durable progress log (replaces the Redis stream). `id` is the replay cursor handed to clients."""
 
     __tablename__ = "job_events"
+    __table_args__ = (Index("ix_job_events_project_id_id", "project_id", "id"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    project_id: Mapped[uuid.UUID] = _project_fk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
     event: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = _now()

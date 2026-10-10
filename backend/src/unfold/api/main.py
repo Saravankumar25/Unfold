@@ -35,7 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rt = Runtime.create(settings)
         app.state.runtime = rt
         app.state.queue = await ArqJobQueue.connect(settings)
-        app.state.streams = StreamCap(settings.max_streams_per_session)
+        app.state.streams = StreamCap(settings.max_streams_per_session, settings.max_streams_total)
         await rt.objects.ensure_bucket()
         log.info("api.started", version=__version__, env=settings.app_env)
         try:

@@ -30,10 +30,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_job_events_project_id"), "job_events", ["project_id"], unique=False)
+    op.create_index("ix_job_events_project_id_id", "job_events", ["project_id", "id"], unique=False)
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(op.f("ix_job_events_project_id"), table_name="job_events")
+    op.drop_index("ix_job_events_project_id_id", table_name="job_events")
     op.drop_table("job_events")
