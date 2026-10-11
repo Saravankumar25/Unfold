@@ -92,8 +92,18 @@ def _by_label(v: _View, ok: Callable[[str], bool]) -> list[str]:
     return [e.id for e in v.entries if ok(v.label[e.id])][:MAX_TARGETS]
 
 
+def _is_package(component_id: str) -> bool:
+    return component_id.startswith("package:")  # the monorepo packages (understand.architecture)
+
+
 def _overview(v: _View) -> list[str]:
-    return ([e.id for e in v.entries[:3]] + v.sized_components()[:2]) or v.code_files(3)
+    comps = [c for c in v.sized_components() if not _is_package(c)][:2]  # the packages chapter explains those
+    return ([e.id for e in v.entries[:3]] + comps) or v.code_files(3)
+
+
+def _packages(v: _View) -> list[str]:
+    sized = v.sized_components()
+    return ([c for c in sized if _is_package(c)] or sized)[:MAX_TARGETS]
 
 
 def _persistence(v: _View) -> list[str]:
@@ -128,6 +138,7 @@ _SELECT: dict[str, Callable[[_View], list[str]]] = {
     ),
     "entries": lambda v: [e.id for e in v.entries][:MAX_TARGETS] or v.sized_components()[:4],
     "components": lambda v: v.sized_components()[:MAX_TARGETS],
+    "packages": _packages,
     "persistence": _persistence,
     "models": _models,
     "config": _config,
@@ -297,7 +308,7 @@ _T = {
                 "How do the packages depend on each other?",
                 "Which package would a developer change for a given task?",
             ),
-            "components",
+            "packages",
             ("definition", "config"),
             "standard",
             ("module_dependencies",),

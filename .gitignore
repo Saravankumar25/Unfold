@@ -24,7 +24,7 @@ next-env.d.ts
 # local data / caches
 .data/
 .model-cache/
-evals/reports/*.json
+evals/reports/**
 !evals/reports/.gitkeep
 *.log
 

@@ -314,6 +314,7 @@ class _Run:
             await rep.stage(JobStage.INVENTORY)
             limit = rt.settings.max_single_file_bytes
             inventory, texts = await asyncio.to_thread(scan_repository, src.root, max_single_file_bytes=limit)
+            inventory.skipped.update(dict.fromkeys(src.report.oversized, "oversized"))  # never written
             if not inventory.files:
                 raise InputError("The project contains no readable files.", code=ErrorCode.EMPTY_REPOSITORY)
             await rep.stage(JobStage.STRUCTURAL_ANALYSIS)

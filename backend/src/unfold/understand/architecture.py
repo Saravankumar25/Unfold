@@ -7,6 +7,7 @@ from __future__ import annotations
 import posixpath
 from collections import defaultdict
 
+from unfold.core.ids import entity_id
 from unfold.graph import communities
 from unfold.project_ir.builder import DYNAMIC_CALLEES
 from unfold.project_ir.schema import ProjectIR
@@ -36,16 +37,39 @@ _NOT_PACKAGES = frozenset({"docs", "doc", "test", "tests", "example", "examples"
 _WORKSPACE_MARKERS = frozenset({"pnpm-workspace.yaml", "lerna.json", "nx.json", "turbo.json", "go.work"})
 
 
-def _monorepo(ir: ProjectIR) -> bool:
-    """Three packages below the root, or two with a workspace marker at the root: a backend/ plus a frontend/
-    (plus a docs/requirements.txt) is one service, not a monorepo."""
-    packages = {
+def _package_roots(ir: ProjectIR) -> set[str]:
+    return {
         d
         for dep in ir.dependencies
         if (d := posixpath.dirname(dep.manifest_path)) and not _NOT_PACKAGES & set(d.split("/"))
     }
+
+
+def _monorepo(ir: ProjectIR) -> bool:
+    """Three packages below the root, or two with a workspace marker at the root: a backend/ plus a frontend/
+    (plus a docs/requirements.txt) is one service, not a monorepo."""
     marked = any(f.path in _WORKSPACE_MARKERS for f in ir.files)
-    return len(packages) >= (2 if marked else 3)
+    return len(_package_roots(ir)) >= (2 if marked else 3)
+
+
+def _packages(ir: ProjectIR) -> list[Component]:
+    """One component per package root (a file belongs to the deepest root above it), for a monorepo, where import
+    edges join the packages into a single community."""
+    roots = sorted(_package_roots(ir), key=lambda r: (-r.count("/"), r))
+    members: dict[str, list[str]] = defaultdict(list)
+    for p in sorted(f.path for f in ir.files):
+        if root := next((r for r in roots if p.startswith(r + "/")), None):
+            members[root].append(p)
+    pid = ir.project.project_id
+    return [
+        Component(
+            id=entity_id(pid, "package", root),
+            title=root,
+            member_paths=paths,
+            responsibility=f"package at {root}; {len(paths)} files",
+        )
+        for root, paths in sorted(members.items())
+    ]
 
 
 def _kind(ir: ProjectIR) -> ProjectKind:
@@ -67,9 +91,12 @@ def _kind(ir: ProjectIR) -> ProjectKind:
 
 def _components(ir: ProjectIR) -> list[Component]:
     path_of = {f.id: f.path for f in ir.files}
-    out: list[Component] = []
+    out: list[Component] = _packages(ir) if _monorepo(ir) else []
+    packaged = {p for c in out for p in c.member_paths}
     for c in communities.detect(ir):
         paths = sorted(path_of[f] for f in c.member_file_ids if f in path_of)
+        if paths and packaged.issuperset(paths):
+            continue  # the packages above already say it
         pset = set(paths)
         keys = ", ".join(path_of[k].rsplit("/", 1)[-1] for k in c.key_files if k in path_of)
         facts = [f"{len(paths)} files", f"key files: {keys}"]
@@ -146,6 +173,10 @@ def _uncertainty(ir: ProjectIR, flows: list[FlowTrace], notes: list[str], untrac
     ]
     if failed := int(ir.stats.get("parse_error_files", 0) or 0):
         out.append(f"{failed} files failed to parse")
+    big = list(ir.stats.get("oversized_code_files") or [])
+    out += [f"{p} was skipped by the file size cap and is not analysed" for p in big[:MAX_UNCERTAINTY_FILES]]
+    if len(big) > MAX_UNCERTAINTY_FILES:
+        out.append(f"{len(big) - MAX_UNCERTAINTY_FILES} more code files were skipped by the file size cap")
     out += [f"flow from {f.entry.name} was cut by the depth or fan-out cap" for f in flows if f.truncated]
     if untraced:
         out.append(f"{untraced} entry points were not traced (cap {MAX_FLOWS})")

@@ -61,6 +61,7 @@ from unfold.project_ir.schema import (
     SymbolIR,
     UnresolvedCallIR,
 )
+from unfold.repo_intel.inventory import language_for
 from unfold.repo_intel.models import (
     Binding,
     ComposeServiceDef,
@@ -86,6 +87,7 @@ _FALLBACK_CONFIDENCE = 0.6
 _NAME_MATCH_CONFIDENCE = 0.7
 _ROOT_MATCH_CONFIDENCE = 0.8
 MAX_UNRESOLVED_CALLS = 5000
+MAX_OVERSIZED = 50  # names kept in `stats["oversized_code_files"]`
 # Callees that dispatch dynamically: recorded as unresolved even when no project symbol shares the name.
 DYNAMIC_CALLEES = frozenset({"getattr", "import_module", "__import__", "eval", "exec"})
 
@@ -1222,6 +1224,13 @@ class _Builder:
         )
         return ir
 
+    def _oversized_code_files(self) -> list[str]:
+        """Code files the size cap kept out of analysis: still inventoried (over the cap) or never written by the
+        extractor (`skipped` reason "oversized"). Named so the architecture can say what it did not read."""
+        paths = {f.path for f in self.inventory.files if f.oversized}
+        paths |= {p for p, why in self.inventory.skipped.items() if why == "oversized"}
+        return sorted(p for p in paths if (language_for(p) or "").lower() in CODE_LANGUAGES)[:MAX_OVERSIZED]
+
     def stats(self, ir: ProjectIR, dangling: int) -> dict[str, Any]:
         tiers = self.inventory.tier_counts()
         code_files = [f for f in ir.files if _is_code(self.inv_by_path[f.path], self.fa.get(f.path))]
@@ -1260,6 +1269,7 @@ class _Builder:
             "parse_error_files": len(self.analysis.errors),
             "flagged_files": len(self.analysis.flagged),
             "skipped_files": len(self.inventory.skipped),
+            "oversized_code_files": self._oversized_code_files(),
             "ignored_analyses": len(self.ignored_analyses),
             "rules_version": self.analysis.detection.rules_version,
         }

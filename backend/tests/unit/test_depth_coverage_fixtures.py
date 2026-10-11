@@ -16,8 +16,9 @@ from unfold.evaluation.corpus import FixtureProject, load_fixture
 from unfold.evaluation.scripted import ScriptedLLM
 from unfold.guide.models import ChapterPlan
 from unfold.guide.plan import build_skeleton, plan_chapters
-from unfold.project_ir.schema import ProjectIR
-from unfold.repo_intel.service import scan_repository
+from unfold.project_ir.builder import build_ir
+from unfold.project_ir.schema import ProjectIdentity, ProjectIR
+from unfold.repo_intel.service import analyze_texts, scan_repository
 from unfold.understand.architecture import build_architecture
 from unfold.understand.flows import trace_flow
 from unfold.understand.models import ArchitectureModel
@@ -124,6 +125,11 @@ def test_chapters_target_what_the_shape_is_made_of(
     manifests = {web_rm.ref(t).path for t in by_key["web"]["config-deploy"].targets}  # type: ignore[union-attr]
     assert {"Dockerfile", "docker-compose.yml", "pyproject.toml"} <= manifests
     assert [cli_rm.ref(t).path for t in by_key["cli"]["config-deploy"].targets] == ["requirements.txt"]  # type: ignore[union-attr]
+    # a monorepo's packages chapter has one target per package, not one community that swallows them all
+    titles = {c.id: c.title for c in shapes["multi"][1].components}
+    assert sorted(titles[t] for t in by_key["multi"]["packages"].targets) == [
+        f"packages/{p}" for p in ("index", "ingest", "report")
+    ]
     assert {multi_rm.ref(t).path for t in by_key["multi"]["config-deploy"].targets} == {  # type: ignore[union-attr]
         f"packages/{p}/requirements.txt" for p in ("index", "ingest", "report")
     }
@@ -221,11 +227,24 @@ def test_an_oversized_file_is_not_read_and_nothing_is_drawn_from_it(tmp_path: Pa
     assert all(rm.ref(t) is None or rm.ref(t).path != "big.py" for c in chapters for t in c.targets)  # type: ignore[union-attr]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="gap: ArchitectureModel.uncertainty does not say that a code file was skipped by the size cap "
-    "(understand/architecture.py `_uncertainty` only looks at tier <= 2 files; FileIR has no oversized flag)",
-)
 def test_an_oversized_file_is_named_in_the_uncertainty(tmp_path: Path) -> None:
     ir = _generated(tmp_path, {"big.py": b"value = 1\n" * 120_000, "README.md": "# big\n"})
-    assert any("big.py" in u for u in build_architecture(ir).uncertainty)
+    uncertainty = build_architecture(ir).uncertainty
+    assert any("big.py" in u and "size cap" in u for u in uncertainty)
+    assert "no entry points detected" in uncertainty
+
+
+def test_a_code_file_dropped_at_extraction_is_named_too(tmp_path: Path) -> None:
+    """The archive extractor never writes an over-cap member, so the inventory only learns of it from the report."""
+    root = tmp_path / "repo" / "p"
+    root.mkdir(parents=True)
+    (root / "app.py").write_text("def main():\n    return 1\n")
+    inventory, texts = scan_repository(root, max_single_file_bytes=1024 * 1024)
+    inventory.skipped.update({"huge.py": "oversized", "data.bin": "oversized", "link": "symlink"})
+    stats = build_ir(
+        ProjectIdentity(project_id="p", name="p", input_type="zip"),
+        inventory,
+        analyze_texts("p", inventory, texts),
+        analysis_version="t",
+    ).stats
+    assert stats["oversized_code_files"] == ["huge.py"]  # a binary and a symlink are not code
