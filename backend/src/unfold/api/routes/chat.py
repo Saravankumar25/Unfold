@@ -14,11 +14,11 @@ from __future__ import annotations
 import contextlib
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
 
 from unfold.api.deps import RuntimeDep, SessionDep, enforce_rate_limit, owned_chat, owned_project
 from unfold.api.schemas import (
@@ -31,11 +31,11 @@ from unfold.api.schemas import (
 )
 from unfold.chat.models import ChatEvent
 from unfold.chat.service import require_ready, run_turn
-from unfold.core.errors import Conflict, ErrorCode, UnfoldError
+from unfold.core.errors import ErrorCode, RateLimited, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ChatMode
 from unfold.domain.models import EvidenceRef
-from unfold.persistence.postgres.models import ChatMessageRow, ChatSessionRow, ProjectRow
+from unfold.domain.records import ChatMessageRec, ChatRec
 from unfold.runtime import Runtime
 
 router = APIRouter(
@@ -45,20 +45,20 @@ router = APIRouter(
 log = get_logger(__name__)
 
 
-def _session_out(chat: ChatSessionRow, count: int) -> ChatSessionOut:
+def _session_out(chat: ChatRec) -> ChatSessionOut:
     return ChatSessionOut(
-        id=str(chat.id),
-        project_id=str(chat.project_id),
+        id=chat.id,
+        project_id=chat.project_id,
         title=chat.title,
-        message_count=count,
+        message_count=chat.message_count,
         created_at=chat.created_at,
         updated_at=chat.updated_at,
     )
 
 
-def _message_out(row: ChatMessageRow) -> ChatMessageOut:
+def _message_out(row: ChatMessageRec) -> ChatMessageOut:
     return ChatMessageOut(
-        id=str(row.id),
+        id=row.id,
         seq=row.seq,
         role="assistant" if row.role == "assistant" else "user",
         mode=ChatMode(row.mode),
@@ -72,61 +72,24 @@ def _message_out(row: ChatMessageRow) -> ChatMessageOut:
 async def create_chat(project_id: str, rt: RuntimeDep, session: SessionDep) -> ChatSessionOut:
     project = await owned_project(rt, session, project_id)
     require_ready(project)
-    async with rt.db.transaction() as s:
-        await s.execute(  # serialise concurrent creates so the per-project cap holds
-            select(ProjectRow.id).where(ProjectRow.id == project.id).with_for_update()
-        )
-        count = (
-            await s.execute(
-                select(func.count())
-                .select_from(ChatSessionRow)
-                .where(ChatSessionRow.project_id == project.id)
-            )
-        ).scalar_one()
-        if count >= rt.settings.max_chats_per_project:
-            raise Conflict(
-                f"A project can have at most {rt.settings.max_chats_per_project} chats.",
-                detail={"limit": rt.settings.max_chats_per_project},
-            )
-        chat = ChatSessionRow(project_id=project.id)
-        s.add(chat)
-        await s.flush()
-        await s.refresh(chat)
-    return _session_out(chat, 0)
+    now = datetime.now(UTC)
+    chat = ChatRec(id=str(uuid.uuid4()), project_id=project.id, created_at=now, updated_at=now)
+    await rt.control.create_chat(chat, max_per_project=rt.settings.max_chats_per_project)
+    return _session_out(chat)
 
 
 @router.get("/projects/{project_id}/chats", response_model=list[ChatSessionOut])
 async def list_chats(project_id: str, rt: RuntimeDep, session: SessionDep) -> list[ChatSessionOut]:
     project = await owned_project(rt, session, project_id)
-    async with rt.db.session() as s:
-        rows = (
-            await s.execute(
-                select(ChatSessionRow, func.count(ChatMessageRow.id))
-                .outerjoin(ChatMessageRow, ChatMessageRow.chat_session_id == ChatSessionRow.id)
-                .where(ChatSessionRow.project_id == project.id)
-                .group_by(ChatSessionRow.id)
-                .order_by(ChatSessionRow.updated_at.desc())
-            )
-        ).all()
-    return [_session_out(chat, int(n)) for chat, n in rows]
+    return [_session_out(c) for c in await rt.control.chats_of_project(project.id)]
 
 
 @router.get("/chats/{chat_id}", response_model=ChatDetailOut)
 async def get_chat(chat_id: str, rt: RuntimeDep, session: SessionDep) -> ChatDetailOut:
     chat, _ = await owned_chat(rt, session, chat_id)
-    async with rt.db.session() as s:
-        rows = (
-            (
-                await s.execute(
-                    select(ChatMessageRow)
-                    .where(ChatMessageRow.chat_session_id == chat.id)
-                    .order_by(ChatMessageRow.seq)
-                )
-            )
-            .scalars()
-            .all()
-        )
-    return ChatDetailOut(chat=_session_out(chat, len(rows)), messages=[_message_out(r) for r in rows])
+    rows = await rt.control.chat_messages(chat.id)
+    chat.message_count = len(rows)
+    return ChatDetailOut(chat=_session_out(chat), messages=[_message_out(r) for r in rows])
 
 
 # --- transports -----------------------------------------------------------------------------------------------
@@ -156,7 +119,7 @@ async def _ndjson(events: AsyncIterator[ChatEvent]) -> AsyncIterator[bytes]:
     yield err.model_dump_json(exclude_none=True).encode() + b"\n"
 
 
-async def _json_reply(rt: Runtime, events: AsyncIterator[ChatEvent]) -> ChatReplyOut:
+async def _json_reply(rt: Runtime, chat_id: str, events: AsyncIterator[ChatEvent]) -> ChatReplyOut:
     user_id: str | None = None
     done: ChatEvent | None = None
     async for event in events:
@@ -164,21 +127,10 @@ async def _json_reply(rt: Runtime, events: AsyncIterator[ChatEvent]) -> ChatRepl
             user_id = event.message_id
         elif event.type == "response.completed":
             done = event
-    if done is None or done.message_id is None or user_id is None:
+    if done is None or done.message_id is None or user_id is None or done.seq is None:
         raise UnfoldError("The answer did not complete.", code=ErrorCode.GENERATION_FAILED, retryable=True)
-    async with rt.db.session() as s:
-        rows = (
-            (
-                await s.execute(
-                    select(ChatMessageRow).where(
-                        ChatMessageRow.id.in_([uuid.UUID(user_id), uuid.UUID(done.message_id)])
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-    by_id = {str(r.id): r for r in rows}
+    rows = await rt.control.chat_messages(chat_id, after_seq=done.seq - 2)
+    by_id = {r.id: r for r in rows}
     return ChatReplyOut(
         user_message=_message_out(by_id[user_id]),
         message=_message_out(by_id[done.message_id]),
@@ -207,7 +159,13 @@ async def post_message(
 ) -> ChatReplyOut | StreamingResponse:
     chat, project = await owned_chat(rt, session, chat_id)
     require_ready(project)
-    await enforce_rate_limit(rt, session, "chat", rt.settings.max_chat_messages_per_minute, 60)
+    cfg = rt.settings
+    await enforce_rate_limit(rt, session, "chat", cfg.max_chat_messages_per_minute, 60)
+    await enforce_rate_limit(rt, session, "chat_hour", cfg.max_chat_messages_per_session_per_hour, 3600)
+    if not await rt.limiter.hit("chat:global", cfg.max_chat_messages_global_per_day, 86_400):
+        raise RateLimited(
+            "The service is busy; try again later."
+        )  # the daily ceiling protects the model quota
     events = run_turn(
         rt,
         chat,
@@ -225,4 +183,4 @@ async def post_message(
             media_type="application/x-ndjson",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
-    return await _json_reply(rt, pipeline)
+    return await _json_reply(rt, chat.id, pipeline)

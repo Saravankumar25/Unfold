@@ -23,7 +23,7 @@ from unfold.llm.schemas import LLMClient
 from unfold.observability.tracing import configure_tracing
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
-from unfold.worker.queue import SubprocessJobQueue
+from unfold.worker.factory import build_job_queue
 
 log = get_logger(__name__)
 STARTUP_SWEEP_SECONDS = 60.0
@@ -45,6 +45,15 @@ def create_app(
     """Build the API. `queue` and `llm` let a caller supply the job queue and model client (tests, another
     launcher); the defaults are the subprocess queue and the real gateway."""
     settings = settings or get_settings()
+    if (
+        settings.is_production
+        and settings.persistence_backend == "dynamodb"
+        and settings.proxy_hmac_secret is None
+    ):
+        # no address-based proxy trust behind a Function URL: the signed header is the client identity (ADR 0016)
+        raise ValueError(
+            "Unsafe production configuration: PROXY_HMAC_SECRET is required with PERSISTENCE_BACKEND=dynamodb"
+        )
     configure_logging(settings)
     configure_tracing(settings, "api")
 
@@ -53,22 +62,33 @@ def create_app(
         rt = Runtime.create(settings)
         ticker: asyncio.Task[None] | None = None
         try:
-            rt.llm = llm if llm is not None else build_gateway(settings, rt.redis)
-            app.state.runtime = rt
-            app.state.queue = queue if queue is not None else await SubprocessJobQueue.connect(settings)
-            await rt.objects.ensure_bucket()
-            # Finishes deletes a previous process never completed and restarts jobs whose worker is gone.
-            # Bounded and guarded: a store hiccup or a slow cleanup must not keep the API from starting
-            # (the next tick, or the next start, finishes what is left; the sweep is idempotent).
-            try:
-                async with asyncio.timeout(STARTUP_SWEEP_SECONDS):
-                    await sweep(rt, app.state.queue)
-            except Exception as exc:
-                log.error("sweep.startup_failed", error_type=type(exc).__name__)
-            if settings.sweep_interval_seconds > 0:
-                ticker = asyncio.create_task(
-                    _sweep_forever(rt, app.state.queue, settings.sweep_interval_seconds)
+            rt.llm = (
+                llm
+                if llm is not None
+                else build_gateway(
+                    settings,
+                    rt.redis if settings.persistence_backend == "postgres" else None,
+                    counters=rt.counters,
                 )
+            )
+            app.state.runtime = rt
+            app.state.queue = queue if queue is not None else await build_job_queue(settings)
+            if settings.persistence_backend == "postgres":
+                # Local stack only: nothing else schedules the sweeper. On AWS the scheduled sweeper does, and
+                # a cold-starting Lambda must not scan the table (ADR 0011).
+                await rt.objects.ensure_bucket()
+                # Finishes deletes a previous process never completed and restarts jobs whose worker is gone.
+                # Bounded and guarded: a store hiccup or a slow cleanup must not keep the API from starting
+                # (the next tick, or the next start, finishes what is left; the sweep is idempotent).
+                try:
+                    async with asyncio.timeout(STARTUP_SWEEP_SECONDS):
+                        await sweep(rt, app.state.queue)
+                except Exception as exc:
+                    log.error("sweep.startup_failed", error_type=type(exc).__name__)
+                if settings.sweep_interval_seconds > 0:
+                    ticker = asyncio.create_task(
+                        _sweep_forever(rt, app.state.queue, settings.sweep_interval_seconds)
+                    )
             log.info("api.started", version=__version__, env=settings.app_env)
             yield
         finally:
@@ -98,12 +118,14 @@ def create_app(
     async def ready() -> JSONResponse:
         rt: Runtime = app.state.runtime
         checks: dict[str, Any] = {
-            "postgres": rt.db.ping(),
-            "redis": rt.limiter.ping(),
-            "neo4j": rt.neo4j.ping(),
-            "qdrant": rt.qdrant.ping(),
+            "control": rt.control.ping(),
+            "limiter": rt.limiter.ping(),
             "object_store": rt.objects.ping(),
         }
+        if settings.graph_backend == "neo4j":
+            checks["neo4j"] = rt.neo4j.ping()
+        if settings.dense_backend == "qdrant":
+            checks["qdrant"] = rt.qdrant.ping()
         results = await asyncio.gather(
             *(asyncio.wait_for(c, 5) for c in checks.values()), return_exceptions=True
         )

@@ -3,7 +3,7 @@
 
     python scripts/check.py                 # static checks + unit/security tests + offline evals + frontend
     python scripts/check.py --integration   # also integration tests (needs `docker compose up -d`)
-    python scripts/check.py --only backend  # or: frontend
+    python scripts/check.py --only backend  # or: frontend, infra
 
 Exit code is non-zero if any step fails; a summary table is printed at the end.
 """
@@ -43,6 +43,12 @@ def steps(args: argparse.Namespace) -> list[tuple[str, list[str], Path]]:
         )
         if args.integration:
             out.append(("integration tests", [*uv, "pytest", "-m", "integration"], BACKEND))
+    if args.only in (None, "infra") and shutil.which("terraform"):
+        out += [
+            ("terraform fmt", ["terraform", "fmt", "-check", "-recursive", "infra/terraform"], ROOT),
+            # offline plans of every root plus the violating fixtures (first run downloads the AWS provider)
+            ("infra policy tests", [*uv, "pytest", "../infra/policy"], BACKEND),
+        ]
     if args.only in (None, "frontend") and (FRONTEND / "package.json").exists():
         npm = _npm()
         out += [
@@ -57,7 +63,7 @@ def steps(args: argparse.Namespace) -> list[tuple[str, list[str], Path]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--integration", action="store_true")
-    parser.add_argument("--only", choices=["backend", "frontend"])
+    parser.add_argument("--only", choices=["backend", "frontend", "infra"])
     parser.add_argument("--keep-going", action="store_true", help="run all steps even after a failure")
     args = parser.parse_args()
 

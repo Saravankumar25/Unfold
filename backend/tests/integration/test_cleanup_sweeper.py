@@ -14,25 +14,19 @@ from typing import Any
 
 import pytest
 from qdrant_client import models as qm
-from sqlalchemy import func, select, text, update
+from sqlalchemy import text, update
 
 from unfold.cleanup.service import cleanup_project, mark_deleting
 from unfold.cleanup.sweeper import sweep
 from unfold.core.config import Settings
 from unfold.core.errors import NotFound
+from unfold.core.ids import token_hash
+from unfold.domain.records import ArtifactRec, ChatMessageRec, ChatRec, JobRec
 from unfold.evaluation.scripted import ScriptedLLM
-from unfold.indexing.dense import DenseIndex
+from unfold.indexing.dense_qdrant import DenseIndex
 from unfold.indexing.embeddings import embedder_for
 from unfold.orchestration.pipeline import run_analysis
-from unfold.persistence.postgres.models import (
-    AnalysisJobRow,
-    ArtifactRow,
-    Base,
-    ChatMessageRow,
-    ChatSessionRow,
-    ProjectRow,
-    SessionRow,
-)
+from unfold.persistence.postgres.models import AnalysisJobRow, Base
 from unfold.ports import project_prefix, project_rate_key, session_rate_key
 from unfold.runtime import Runtime
 
@@ -99,30 +93,49 @@ def _total(inv: dict[str, int]) -> int:
     return sum(inv.values())
 
 
-async def _decorate(rt: Runtime, seeded: Seeded) -> uuid.UUID:
+async def _artifact(
+    rt: Runtime,
+    project_id: str,
+    status: str,
+    key: str | None,
+    expires_at: datetime,
+    created_at: datetime,
+    kind: str = "guide_md",
+) -> str:
+    rec = ArtifactRec(
+        id=str(uuid.uuid4()),
+        project_id=project_id,
+        kind=kind,
+        created_at=created_at,
+        expires_at=expires_at,
+        status=status,
+        object_key=key,
+        content_type="text/markdown",
+    )
+    stored = await rt.control.add_artifact(rec, reuse_since=created_at - timedelta(days=1))
+    assert stored.id == rec.id  # a same-kind pending export would have been reused instead
+    return rec.id
+
+
+async def _decorate(rt: Runtime, seeded: Seeded) -> str:
     """A chat, an export artifact with a blob, and the rate-limit / usage keys a live project accumulates."""
-    chat_id = uuid.uuid4()
-    artifact_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    chat_id = str(uuid.uuid4())
+    await rt.control.create_chat(
+        ChatRec(id=chat_id, project_id=seeded.project_id, created_at=now, updated_at=now, title="t"),
+        max_per_project=20,
+    )
+    msg = {"chat_id": chat_id, "created_at": now, "mode": "default"}
+    await rt.control.append_turn(
+        chat_id,
+        ChatMessageRec(id=str(uuid.uuid4()), role="user", content={"text": "q"}, **msg),
+        ChatMessageRec(id=str(uuid.uuid4()), role="assistant", content={"text": "a"}, **msg),
+        title_chars=60,
+    )
+    artifact_id = str(uuid.uuid4())
     key = f"{project_prefix(seeded.project_id)}exports/{artifact_id}.md"
     await rt.objects.put_bytes(key, b"# exported", "text/markdown")
-    async with rt.db.transaction() as s:
-        s.add(ChatSessionRow(id=chat_id, project_id=uuid.UUID(seeded.project_id), title="t"))
-        await s.flush()
-        s.add(
-            ChatMessageRow(chat_session_id=chat_id, seq=1, role="user", mode="default", content={"text": "q"})
-        )
-        s.add(
-            ArtifactRow(
-                id=artifact_id,
-                project_id=uuid.UUID(seeded.project_id),
-                kind="guide_md",
-                status="ready",
-                object_key=key,
-                content_type="text/markdown",
-                size_bytes=10,
-                expires_at=datetime.now(UTC) + timedelta(hours=1),
-            )
-        )
+    await _artifact(rt, seeded.project_id, "ready", key, now + timedelta(hours=1), now)
     await rt.limiter.hit(project_rate_key("export", seeded.project_id), 10, 3600)
     await rt.limiter.hit(session_rate_key("chat", seeded.session_id), 10, 3600)
     await rt.limiter.hit(session_rate_key("projects", seeded.session_id), 10, 3600)
@@ -162,8 +175,7 @@ async def test_delete_is_durable_across_an_api_restart(
     # The queue double never ran the cleanup job: this is the "API restarted before cleanup" case.
     marked = await inventory(runtime, seeded)
     assert marked["vectors"] == before["vectors"] and marked["pg.projects"] == 1
-    async with runtime.db.session() as s:
-        row = await s.get(ProjectRow, uuid.UUID(seeded.project_id))
+    row = await runtime.control.get_project(seeded.project_id)
     assert row is not None and row.deleting_at is not None
 
     async with open_api():  # a new API process: its start-up sweep finishes the job
@@ -183,8 +195,7 @@ async def test_expired_session_removes_everything_and_the_sweep_is_idempotent(
     report = await sweep(runtime, None)
     assert report.marked_deleting >= 1 and report.projects_cleaned >= 1 and report.sessions_removed >= 1
     assert _total(await inventory(runtime, seeded)) == 0
-    async with runtime.db.session() as s:
-        assert await s.get(SessionRow, seeded.session_id) is None
+    assert await runtime.control.session_by_token(token_hash(seeded.token)) is None
     assert await _redis_keys(runtime, str(seeded.session_id)) == []  # `chat:` and `projects:` keys
 
     again = await sweep(runtime, None)
@@ -198,38 +209,30 @@ async def test_expired_project_of_a_live_session_and_expired_exports_are_swept(
     kept = await analyzed_project()
     try:
         await _decorate(runtime, kept)
-        stale_pending = uuid.uuid4()
-        expired = uuid.uuid4()
         old = datetime.now(UTC) - timedelta(minutes=30)
-        expired_key = f"{project_prefix(kept.project_id)}exports/{expired}.md"
+        expired_key = f"{project_prefix(kept.project_id)}exports/old.md"
         await runtime.objects.put_bytes(expired_key, b"old", "text/markdown")
-        async with runtime.db.transaction() as s:
-            for aid, status, key, exp in (
-                (stale_pending, "pending", None, datetime.now(UTC) + timedelta(hours=1)),
-                (expired, "ready", expired_key, datetime.now(UTC) - timedelta(minutes=1)),
-            ):
-                s.add(
-                    ArtifactRow(
-                        id=aid,
-                        project_id=uuid.UUID(kept.project_id),
-                        kind="guide_md",
-                        status=status,
-                        object_key=key,
-                        content_type="text/markdown",
-                        created_at=old,
-                        expires_at=exp,
-                    )
-                )
+        stale_pending = await _artifact(
+            runtime,
+            kept.project_id,
+            "pending",
+            None,
+            datetime.now(UTC) + timedelta(hours=1),
+            old,
+            "guide_pdf",
+        )
+        expired = await _artifact(
+            runtime, kept.project_id, "ready", expired_key, datetime.now(UTC) - timedelta(minutes=1), old
+        )
 
         report = await sweep(runtime, recording_queue)
         assert _total(await inventory(runtime, gone)) == 0
         assert (await inventory(runtime, kept))["pg.projects"] == 1
         assert report.exports_expired >= 1 and report.exports_requeued >= 1
-        assert str(stale_pending) in recording_queue.exports
+        assert stale_pending in recording_queue.exports
         with pytest.raises(NotFound):
             await runtime.objects.get_bytes(expired_key)
-        async with runtime.db.session() as s:
-            assert await s.get(ArtifactRow, expired) is None
+        assert await runtime.control.get_artifact(expired) is None
     finally:
         await cleanup_project(runtime, kept.project_id)
 
@@ -238,23 +241,22 @@ async def test_cleanup_waits_for_a_live_analysis_worker_then_completes(
     seed_project: Callable[..., Awaitable[Seeded]], runtime: Runtime
 ) -> None:
     seeded = await seed_project()
-    async with runtime.db.transaction() as s:
-        await s.execute(
-            update(AnalysisJobRow)
-            .where(AnalysisJobRow.id == uuid.UUID(seeded.job_id))
-            .values(status="running", attempt=1, heartbeat_at=datetime.now(UTC))
-        )
+
+    def running(job: JobRec) -> bool:
+        job.status, job.attempt, job.heartbeat_at = "running", 1, datetime.now(UTC)
+        return True
+
+    await runtime.control.update_job(seeded.job_id, running)
     first = await cleanup_project(runtime, seeded.project_id)
     assert first == {"deferred": 1}
     inv = await inventory(runtime, seeded)
     assert inv["pg.projects"] == 1 and inv["blobs"] == 1  # untouched while a worker could still write
 
-    async with runtime.db.transaction() as s:
-        await s.execute(
-            update(AnalysisJobRow)
-            .where(AnalysisJobRow.id == uuid.UUID(seeded.job_id))
-            .values(status="failed")
-        )
+    def failed(job: JobRec) -> bool:
+        job.status = "failed"
+        return True
+
+    await runtime.control.update_job(seeded.job_id, failed)
     done = await cleanup_project(runtime, seeded.project_id)
     assert done["projects"] == 1 and done["blobs"] == 1
     assert _total(await inventory(runtime, seeded)) == 0
@@ -265,7 +267,7 @@ async def test_a_deleting_project_is_not_analysed(
 ) -> None:
     seeded = await seed_project()
     try:
-        await mark_deleting(runtime, [uuid.UUID(seeded.project_id)])
+        await mark_deleting(runtime, [seeded.project_id])
         outcome = await run_analysis(runtime, ScriptedLLM(), seeded.job_id)
         assert not outcome.succeeded and not outcome.retry
         inv = await inventory(runtime, seeded)
@@ -278,7 +280,7 @@ async def test_worker_sweep_task_runs_the_same_function(
     seed_project: Callable[..., Awaitable[Seeded]], runtime: Runtime, settings: Settings
 ) -> None:
     seeded = await seed_project()
-    await mark_deleting(runtime, [uuid.UUID(seeded.project_id)])
+    await mark_deleting(runtime, [seeded.project_id])
     # The sweep restarts every unfinished job it finds. Nothing but this project may be left to run, and the
     # worker must never reach a real model: no provider keys in its environment.
     async with runtime.db.transaction() as s:
@@ -303,13 +305,7 @@ async def test_worker_sweep_task_runs_the_same_function(
     )
     assert await asyncio.wait_for(proc.wait(), 300) == 0
     assert _total(await inventory(runtime, seeded)) == 0
-    async with runtime.db.session() as s:
-        left = (
-            await s.execute(
-                select(func.count()).select_from(ProjectRow).where(ProjectRow.deleting_at.is_not(None))
-            )
-        ).scalar_one()
-    assert left == 0
+    assert await runtime.control.deleting_projects(10) == []
 
 
 async def test_a_failing_sweep_step_does_not_starve_the_others(

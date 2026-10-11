@@ -23,9 +23,9 @@ from unfold.core.logging import get_logger
 from unfold.domain.enums import ModelCapability, Priority, Proof, RetrievalMode
 from unfold.guide.models import ChapterPlan, EdgeRef, Finding, ResearchBrief, ResearchSpent
 from unfold.indexing.models import Chunk
-from unfold.indexing.store import ChunkRepository
 from unfold.indexing.tokenize import tokenize, tokenize_query
 from unfold.llm.schemas import LLMClient, LLMRequest, Message
+from unfold.ports import ChunkStore
 from unfold.retrieval.errors import RetrievalFailed
 from unfold.retrieval.hybrid import HybridRetriever
 from unfold.retrieval.models import RetrievalResult
@@ -121,7 +121,7 @@ class Investigator:
         *,
         llm: LLMClient,
         retriever: HybridRetriever,
-        chunks: ChunkRepository,
+        chunks: ChunkStore,
         rm: RepoMap,
         arch: ArchitectureModel,
         caps: ResearchCaps,

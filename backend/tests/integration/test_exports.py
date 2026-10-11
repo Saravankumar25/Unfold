@@ -13,17 +13,17 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import func, select
 
 from unfold.cleanup.service import cleanup_project
 from unfold.core.config import Settings
 from unfold.core.errors import ExportError, NotFound
 from unfold.domain.enums import ArtifactKind
+from unfold.domain.records import ArtifactRec
 from unfold.evaluation.scripted import ScriptedLLM
 from unfold.exports.pdf import PdfRenderer
 from unfold.exports.service import export_key, run_export
 from unfold.persistence.postgres.models import ArtifactRow
-from unfold.ports import project_rate_key
+from unfold.ports import project_rate_key, session_rate_key
 from unfold.runtime import Runtime
 from unfold.worker import run as worker_run
 
@@ -50,9 +50,8 @@ async def renderer() -> AsyncIterator[PdfRenderer]:
     await r.close()
 
 
-async def _artifact(runtime: Runtime, artifact_id: str) -> ArtifactRow:
-    async with runtime.db.session() as s:
-        row = await s.get(ArtifactRow, uuid.UUID(artifact_id))
+async def _artifact(runtime: Runtime, artifact_id: str) -> ArtifactRec:
+    row = await runtime.control.get_artifact(artifact_id)
     assert row is not None
     return row
 
@@ -121,7 +120,7 @@ async def test_pdf_exports_render_for_guide_and_chat(
             assert dl.status_code == 200 and dl.headers["content-type"] == "application/pdf"
             assert dl.content.startswith(b"%PDF-") and len(dl.content) > 5_000
         assert (await _artifact(runtime, guide)).kind == "guide_pdf"
-        assert (await _artifact(runtime, chat)).chat_session_id == uuid.UUID(chat_id)
+        assert (await _artifact(runtime, chat)).chat_id == chat_id
 
 
 async def test_a_worker_killed_mid_export_is_rerun_without_duplicates(
@@ -169,13 +168,7 @@ async def test_a_worker_killed_mid_export_is_rerun_without_duplicates(
     assert row.status == "ready" and row.object_key == key
     stored = await runtime.objects.get_bytes(key)
     assert row.size_bytes == len(stored) and stored.startswith(b"%PDF-")
-    async with runtime.db.session() as s:
-        count = (
-            await s.execute(
-                select(func.count()).select_from(ArtifactRow).where(ArtifactRow.id == uuid.UUID(art))
-            )
-        ).scalar_one()
-    assert count == 1
+    assert [a.id for a in await runtime.control.artifacts_of_project(project.project_id)].count(art) == 1
 
 
 class _FailingRenderer:
@@ -207,21 +200,22 @@ async def test_a_permanent_failure_is_recorded_and_the_worker_exits_cleanly(
     runtime: Runtime, seed_project: Callable[..., Awaitable[Seeded]]
 ) -> None:
     unready = await seed_project()  # no guide content: nothing can be exported
-    art = uuid.uuid4()
+    art = str(uuid.uuid4())
     try:
-        async with runtime.db.transaction() as s:
-            s.add(
-                ArtifactRow(
-                    id=art,
-                    project_id=uuid.UUID(unready.project_id),
-                    kind="guide_md",
-                    status="pending",
-                    content_type="text/markdown",
-                    expires_at=datetime.now(UTC) + timedelta(hours=1),
-                )
-            )
-        assert await worker_run._export(runtime, str(art)) == 0
-        row = await _artifact(runtime, str(art))
+        now = datetime.now(UTC)
+        await runtime.control.add_artifact(
+            ArtifactRec(
+                id=art,
+                project_id=unready.project_id,
+                kind="guide_md",
+                created_at=now,
+                expires_at=now + timedelta(hours=1),
+                content_type="text/markdown",
+            ),
+            reuse_since=now - timedelta(minutes=10),
+        )
+        assert await worker_run._export(runtime, art) == 0
+        row = await _artifact(runtime, art)
         assert row.status == "failed" and "no content" in (row.error or "")
     finally:
         await cleanup_project(runtime, unready.project_id)
@@ -239,12 +233,14 @@ async def test_export_ownership_limits_and_expiry(
         await client.post(f"{base}/exports/guide?format=pdf")
         limited = await client.post(f"{base}/exports/guide?format=md")
         assert limited.json()["artifact_id"] == a  # still pending: de-duplicated before it is counted
-        async with runtime.db.transaction() as s:
-            row = await s.get(ArtifactRow, uuid.UUID(a))
-            assert row is not None
+
+        def expire(row: ArtifactRec) -> bool:
             row.status = "ready"
             row.object_key = f"projects/{project.project_id}/exports/{a}.md"
             row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+            return True
+
+        await runtime.control.update_artifact(a, expire)
         expired = await client.get(f"{API}/exports/{a}/download")
         assert expired.status_code == 410 and expired.json()["error"]["code"] == "ARTIFACT_EXPIRED"
         over = await client.post(f"{base}/exports/guide?format=md")
@@ -278,3 +274,26 @@ async def test_presigned_download_hands_back_a_working_url(
             fetched = await direct.get(resp.headers["location"])
         assert fetched.status_code == 200 and fetched.text.startswith("# fastapi_rag")
         assert "attachment" in fetched.headers["content-disposition"]
+
+
+async def test_a_session_has_its_own_hourly_export_ceiling(
+    open_api: Callable[..., Any], project: Seeded, runtime: Runtime
+) -> None:
+    await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
+    await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))
+
+    def finished(art: ArtifactRec) -> bool:
+        art.status = "failed"  # earlier tests left pending exports, which a new request would reuse uncounted
+        return True
+
+    for art in await runtime.control.artifacts_of_project(project.project_id):
+        await runtime.control.update_artifact(art.id, finished)
+    async with open_api(max_exports_per_session_per_hour=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        base = f"{API}/projects/{project.project_id}"
+        assert (await client.post(f"{base}/exports/guide?format=md")).status_code == 202
+        # a different kind is a new export and counts against the session
+        over = await client.post(f"{base}/exports/guide?format=pdf")
+        assert over.status_code == 429 and over.json()["error"]["code"] == "RATE_LIMITED"
+    await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
+    await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))

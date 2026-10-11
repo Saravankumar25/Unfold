@@ -8,23 +8,16 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncGenerator
-
-from sqlalchemy import func, select
+from datetime import UTC, datetime
 
 from unfold.chat.answer import AnswerRequest, generate_answer
 from unfold.chat.models import ChatEvent
 from unfold.core.errors import ErrorCode, NotFound, ProjectNotReady, UnfoldError
 from unfold.domain.enums import ChatMode
 from unfold.domain.models import SessionProfile
+from unfold.domain.records import ChatMessageRec, ChatRec, ProjectRec
 from unfold.guide.generate import project_facts
 from unfold.guide.models import SectionContent
-from unfold.persistence.postgres.models import (
-    ChatMessageRow,
-    ChatSessionRow,
-    GuideSectionRow,
-    ProjectRow,
-    SummaryRow,
-)
 from unfold.project_ir.snapshot import load_ir
 from unfold.retrieval.hybrid import HybridRetriever
 from unfold.runtime import Runtime
@@ -32,64 +25,38 @@ from unfold.runtime import Runtime
 TITLE_CHARS = 60
 
 
-async def _history(rt: Runtime, chat_id: uuid.UUID) -> list[tuple[str, str]]:
+async def _history(rt: Runtime, chat_id: str) -> list[tuple[str, str]]:
     limit = max(0, rt.settings.chat_history_messages)
-    async with rt.db.session() as s:
-        rows = (
-            await s.execute(
-                select(ChatMessageRow.role, ChatMessageRow.content)
-                .where(ChatMessageRow.chat_session_id == chat_id)
-                .order_by(ChatMessageRow.seq.desc())
-                .limit(limit)
-            )
-        ).all()
-    return [(role, str((content or {}).get("text", ""))) for role, content in reversed(rows)]
+    rows = await rt.control.chat_messages(chat_id, last=limit)
+    return [(r.role, str((r.content or {}).get("text", ""))) for r in rows]
 
 
-async def _section(rt: Runtime, project_id: uuid.UUID, key: str) -> tuple[str, str]:
-    async with rt.db.session() as s:
-        row = (
-            await s.execute(
-                select(GuideSectionRow).where(
-                    GuideSectionRow.project_id == project_id, GuideSectionRow.section_key == key
-                )
-            )
-        ).scalar_one_or_none()
+async def _section(rt: Runtime, project_id: str, key: str) -> tuple[str, str]:
+    row = await rt.control.get_section(project_id, key)
     if row is None:
         raise NotFound("Section not found.")
     summary = SectionContent.model_validate(row.content).summary if row.content else ""
     return row.title, summary
 
 
-def require_ready(project: ProjectRow) -> None:
+def require_ready(project: ProjectRec) -> None:
     if not project.ir_object_key or not project.lexical_object_key:
         raise ProjectNotReady("This project has not finished analysis yet.")
 
 
-async def _facts(rt: Runtime, project: ProjectRow) -> tuple[list[str], HybridRetriever]:
+async def _facts(rt: Runtime, project: ProjectRec) -> tuple[list[str], HybridRetriever]:
     require_ready(project)
     assert project.ir_object_key is not None
     ir = await load_ir(rt.objects, project.ir_object_key)
-    async with rt.db.session() as s:
-        subsystems = (
-            (
-                await s.execute(
-                    select(SummaryRow).where(
-                        SummaryRow.project_id == project.id, SummaryRow.level == "subsystem"
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+    subsystems = await rt.control.summaries(project.id, "subsystem")
     facts = project_facts(ir, [(r.title, [str(m) for m in r.members or []]) for r in subsystems])
-    return facts, HybridRetriever.for_project(rt, str(project.id), ir, project.lexical_object_key)
+    return facts, HybridRetriever.for_project(rt, project.id, ir, project.lexical_object_key)
 
 
 async def run_turn(
     rt: Runtime,
-    chat: ChatSessionRow,
-    project: ProjectRow,
+    chat: ChatRec,
+    project: ProjectRec,
     *,
     text: str,
     mode: ChatMode,
@@ -108,11 +75,11 @@ async def run_turn(
     facts, built = await _facts(rt, project)
     history = await _history(rt, chat.id)
     section = await _section(rt, project.id, section_key) if section_key else None
-    user_message_id = uuid.uuid4()
-    yield ChatEvent(type="chat.started", message_id=str(user_message_id))
+    user_message_id = str(uuid.uuid4())
+    yield ChatEvent(type="chat.started", message_id=user_message_id)
     request = AnswerRequest(
-        chat_id=str(chat.id),
-        project_id=str(project.id),
+        chat_id=chat.id,
+        project_id=project.id,
         question=text,
         mode=mode,
         history=history,
@@ -133,56 +100,39 @@ async def run_turn(
         assistant_id, seq = await _persist_turn(
             rt, chat.id, user_message_id, text, mode, event, section_key=section_key
         )
-        yield event.model_copy(update={"message_id": str(assistant_id), "seq": seq})
+        yield event.model_copy(update={"message_id": assistant_id, "seq": seq})
 
 
 async def _persist_turn(
     rt: Runtime,
-    chat_id: uuid.UUID,
-    user_message_id: uuid.UUID,
+    chat_id: str,
+    user_message_id: str,
     question: str,
     mode: ChatMode,
     done: ChatEvent,
     *,
     section_key: str | None,
-) -> tuple[uuid.UUID, int]:
-    assistant_id = uuid.uuid4()
-    async with rt.db.transaction() as s:
-        chat = await s.get(ChatSessionRow, chat_id, with_for_update=True)  # serialises seq per chat
-        if chat is None:
-            raise NotFound("Chat not found.")
-        last = (
-            await s.execute(
-                select(func.coalesce(func.max(ChatMessageRow.seq), 0)).where(
-                    ChatMessageRow.chat_session_id == chat_id
-                )
-            )
-        ).scalar_one()
-        s.add(
-            ChatMessageRow(
-                id=user_message_id,
-                chat_session_id=chat_id,
-                seq=int(last) + 1,
-                role="user",
-                mode=mode.value,
-                content={"text": question},
-                evidence=[],
-                model_metadata={"section_key": section_key} if section_key else {},
-            )
-        )
-        s.add(
-            ChatMessageRow(
-                id=assistant_id,
-                chat_session_id=chat_id,
-                seq=int(last) + 2,
-                role="assistant",
-                mode=mode.value,
-                content={"text": done.text or ""},
-                evidence=[e.model_dump(mode="json") for e in done.evidence or []],
-                model_metadata={"grounding": done.grounding or {}, "timings": done.timings or {}},
-            )
-        )
-        chat.updated_at = func.now()  # the thread list orders by recent activity
-        if not chat.title:
-            chat.title = " ".join(question.split())[:TITLE_CHARS]
-    return assistant_id, int(last) + 2
+) -> tuple[str, int]:
+    assistant_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    user = ChatMessageRec(
+        id=user_message_id,
+        chat_id=chat_id,
+        created_at=now,
+        role="user",
+        mode=mode.value,
+        content={"text": question},
+        model_metadata={"section_key": section_key} if section_key else {},
+    )
+    assistant = ChatMessageRec(
+        id=assistant_id,
+        chat_id=chat_id,
+        created_at=now,
+        role="assistant",
+        mode=mode.value,
+        content={"text": done.text or ""},
+        evidence=[e.model_dump(mode="json") for e in done.evidence or []],
+        model_metadata={"grounding": done.grounding or {}, "timings": done.timings or {}},
+    )
+    seq = await rt.control.append_turn(chat_id, user, assistant, title_chars=TITLE_CHARS)
+    return assistant_id, seq

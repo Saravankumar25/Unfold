@@ -14,13 +14,16 @@ Target runtime (scale to zero on AWS): see `six-phase-plan.md`. Repo state and f
 | Backend integration tests | `cd backend && uv run pytest -m integration` (needs the stores) |
 | Lint / types / migrations | `uv run ruff check src tests` · `uv run mypy` · `uv run alembic check` |
 | Frontend | `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` |
+| Infra (Terraform fmt, offline plans, cost-guard policy tests; never `apply`) | `python scripts/check.py --only infra` |
 
 Detail for the backend lives in `backend/CLAUDE.md`; architecture in `docs/HLD.md` and `docs/LLD.md`;
 decisions in `docs/adr/`.
 
 ## Architecture rules (enforced by `backend/tests/unit/test_architecture.py`)
 
-- Application code depends on `unfold.ports` (`BlobStore`, `JobQueue`, `RateLimiter`, `ProgressStore`).
+- Application code depends on `unfold.ports` (`ControlStore`, `ChunkStore`, `BlobStore`/`UploadStore`, `JobQueue`,
+  `RateLimiter`, `CounterStore`, `ProgressStore`); it never touches an ORM row or a DynamoDB item. The investigation
+  engine (research, verify, revise, regenerate) runs in the worker only, never under `unfold.api`.
   Only adapters import `minio`, `arq` or `boto3`; `redis` is imported only by `persistence.redis_store` and the
   allow-listed LLM coordination modules `llm.budget`, `llm.circuit`, `llm.key_pool` (ADR 0002, known exception;
   `indexing.dense` uses the Redis client it is handed, not the SDK).

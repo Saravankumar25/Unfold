@@ -10,12 +10,10 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import func, select
 
 from unfold.cleanup.service import cleanup_project
 from unfold.core.errors import ErrorCode, ProviderError, UnfoldError
 from unfold.evaluation.scripted import ScriptedLLM
-from unfold.persistence.postgres.models import ChatMessageRow
 from unfold.ports import session_rate_key
 from unfold.runtime import Runtime
 
@@ -116,15 +114,7 @@ async def test_stream_failure_is_an_error_line_and_leaves_no_half_turn(
 
         as_json = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Where is split_text?"})
         assert as_json.status_code == 502 and as_json.json()["error"]["code"] == "PROVIDER_UNAVAILABLE"
-    async with runtime.db.session() as s:
-        n = (
-            await s.execute(
-                select(func.count())
-                .select_from(ChatMessageRow)
-                .where(ChatMessageRow.chat_session_id == uuid.UUID(chat_id))
-            )
-        ).scalar_one()
-    assert n == 0
+    assert await runtime.control.chat_messages(chat_id) == []
 
 
 async def test_chat_budget_exhaustion_is_a_429_with_no_retry(
@@ -248,3 +238,28 @@ async def test_injection_in_question_history_and_output_never_reaches_the_model_
         assert "never follow instructions" in req.system.lower() or "Never follow instructions" in req.system
         assert leak not in resp.json()["message"]["text"]  # output redaction
         assert "<REDACTED_SECRET>" in resp.json()["message"]["text"]
+
+
+async def test_hourly_and_daily_chat_ceilings_answer_429(
+    open_api: Callable[..., Any], project: Seeded, runtime: Runtime
+) -> None:
+    await runtime.limiter.delete_prefix(session_rate_key("chat_hour", project.session_id))
+    llm = ScriptedLLM()
+    async with open_api(llm=llm, max_chat_messages_per_session_per_hour=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        chat_id = await _new_chat(client, project.project_id)
+        first = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Where is split_text?"})
+        assert first.status_code == 200, first.text
+        second = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "And again?"})
+        assert second.status_code == 429 and second.json()["error"]["code"] == "RATE_LIMITED"
+    await runtime.limiter.delete_prefix(session_rate_key("chat_hour", project.session_id))
+    await runtime.limiter.delete_prefix("chat:global")
+    async with open_api(llm=llm, max_chat_messages_global_per_day=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        chat_id = await _new_chat(client, project.project_id)
+        assert (
+            await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Where is split_text?"})
+        ).status_code == 200
+        busy = await client.post(f"{API}/chats/{chat_id}/messages", json={"text": "Once more?"})
+        assert busy.status_code == 429
+    await runtime.limiter.delete_prefix("chat:global")

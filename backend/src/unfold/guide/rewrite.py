@@ -29,8 +29,8 @@ from unfold.guide.verification_models import CheckResult
 from unfold.guide.verify import block_index, block_texts
 from unfold.guide.write import anchor_code
 from unfold.indexing.models import Chunk
-from unfold.indexing.store import ChunkRepository
 from unfold.llm.schemas import LLMClient, LLMRequest, Message
+from unfold.ports import ChunkStore
 from unfold.retrieval.errors import RetrievalFailed
 from unfold.retrieval.hybrid import HybridRetriever
 from unfold.retrieval.models import RetrievalPlan, RetrievalResult, RetrievalTrace, RetrievedItem
@@ -102,7 +102,7 @@ class Rewriter:
         *,
         llm: LLMClient,
         retriever: HybridRetriever,
-        chunks: ChunkRepository,
+        chunks: ChunkStore,
         plan: ChapterPlan,
         evidence: dict[str, dict[str, object]],
         facts: Sequence[str],

@@ -1,0 +1,5 @@
+# Copy to backend.hcl (git-ignored) and fill in the values printed by `terraform output` in ../../bootstrap.
+bucket         = "unfold-tfstate-<account id>"
+region         = "us-east-1"
+dynamodb_table = "unfold-tfstate-lock"
+encrypt        = true

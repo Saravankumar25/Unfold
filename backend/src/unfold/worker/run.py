@@ -27,13 +27,12 @@ from unfold.cleanup.sweeper import sweep
 from unfold.core.config import get_settings
 from unfold.core.errors import ExportError
 from unfold.core.logging import configure_logging, get_logger
-from unfold.exports.pdf import PdfRenderer
-from unfold.exports.service import mark_failed, run_export
+from unfold.exports.status import mark_failed
 from unfold.llm.factory import build_gateway
 from unfold.observability.tracing import configure_tracing
-from unfold.orchestration.pipeline import RETRY_EXIT_CODE, run_analysis
+from unfold.orchestration.constants import RETRY_EXIT_CODE
 from unfold.runtime import Runtime
-from unfold.worker.queue import SubprocessJobQueue
+from unfold.worker.factory import build_job_queue
 
 log = get_logger(__name__)
 
@@ -65,6 +64,10 @@ def _arm_watchdog(seconds: float) -> None:
 
 
 async def _export(rt: Runtime, export_id: str) -> int:
+    # imported here: only the exporter image carries Jinja and Chromium (ADR 0011)
+    from unfold.exports.pdf import PdfRenderer
+    from unfold.exports.service import run_export
+
     renderer = PdfRenderer()
     try:
         await run_export(rt, export_id, renderer)
@@ -80,11 +83,13 @@ async def _export(rt: Runtime, export_id: str) -> int:
 
 
 async def _sweep(rt: Runtime) -> int:
-    queue = await SubprocessJobQueue.connect(rt.settings)
+    queue = await build_job_queue(rt.settings)
     try:
         report = await sweep(rt, queue)
         log.info("sweep.report", **report.as_dict())
-        await queue.join()  # restarted jobs and exports are supervised by this process; let them finish
+        join = getattr(queue, "join", None)  # the local queue supervises restarted work in this process
+        if join is not None:
+            await join()
     finally:
         await queue.aclose()
     return 0
@@ -101,7 +106,8 @@ async def run(task: str, ref: str) -> int:
         log.info("worker.swept_workdirs", count=swept)
     rt = Runtime.create(settings, db_pool_size=4)
     try:
-        await rt.objects.ensure_bucket()
+        if settings.persistence_backend == "postgres":
+            await rt.objects.ensure_bucket()
         if task == "cleanup":
             await cleanup_project(rt, ref)  # logs its own counts
             return 0
@@ -109,7 +115,11 @@ async def run(task: str, ref: str) -> int:
             return await _export(rt, ref)
         if task == "sweep":
             return await _sweep(rt)
-        gateway = build_gateway(settings, rt.redis)
+        from unfold.orchestration.pipeline import run_analysis
+
+        gateway = build_gateway(
+            settings, rt.redis if settings.persistence_backend == "postgres" else None, counters=rt.counters
+        )
         rt.llm = gateway
         outcome = await run_analysis(rt, gateway, ref)
         if outcome.succeeded or not outcome.retry:

@@ -37,6 +37,14 @@ is not used to plan or to research. Documentation quality is therefore bounded b
 - **LLM-only verification:** costly and unreliable; deterministic checks first.
 - **Bigger context window with more chunks:** raises cost and noise, does not trace execution.
 
+## On AWS (phase 4, after the phase 3 merge)
+
+The engine runs unchanged on the DynamoDB/S3/SQS profile: it reads and writes only through `ControlStore`,
+`ChunkStore`, `BlobStore` and `JobQueue`. Research, writing, verification, revision and regeneration execute in the
+Fargate `analysis` task; the API Lambda only records the job. The per-chapter caps are settings
+(`RESEARCH_MAX_*`, `REVISION_MAX_ROUNDS`). Task size and timeout for the longer pipeline are not re-measured on
+Fargate (requires AWS); see `docs/infra/operations.md` section 7 for what was run locally.
+
 ## As built (phase 3B, 2026-10-11)
 
 - `REVISING_GUIDE` is the 21st stage; verification and repair run per chapter and `guide_sections.verification` is
