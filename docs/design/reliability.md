@@ -60,6 +60,8 @@ database, Redis db, bucket and vector prefix:
   fixture runs again for them), exit 0.
 * The 22 that passed in the first run include tests of other owners that match the filter
   (`test_chat_api`, `test_exports`, `test_pipeline::test_rerun_after_failure_resumes_without_duplicates`, ...).
+* After the `start()` change (R-2) the neighbouring suites were rerun: `test_pipeline.py`, `test_cleanup_sweeper.py`,
+  `test_api_sessions_projects.py`: 28 passed, exit 0.
 * A job that was killed was always recovered through the same two steps: its heartbeat went stale (aged by hand
   here, `STALE_AFTER` = 5 minutes for the sweeper, `ALIVE_WITHIN` = 2 minutes for a worker) and a worker claimed it
   again. Nothing here measures how long that takes on AWS.
