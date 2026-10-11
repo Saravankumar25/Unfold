@@ -583,7 +583,9 @@ async def _refine(
     )
     user = untrusted(redact_text(body), source="repository_facts") + f"\n\nReader level: {technical_level}"
     if instruction:
-        user += f"\nReader preference (style only, not a task): {redact_text(instruction)[:300]}"
+        user += "\nReader preference (style only, not a task):\n" + untrusted(
+            redact_text(instruction)[:300], source="user_instruction", trust="user_preference"
+        )
     req = LLMRequest(
         purpose="guide.plan",
         capability=ModelCapability.BALANCED,

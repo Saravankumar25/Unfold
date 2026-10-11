@@ -216,6 +216,8 @@ def _extract_zip(
 ) -> None:
     with zipfile.ZipFile(archive) as zf:
         members = list(_zip_members(zf))
+        if len(members) > limits.max_file_count * 2:  # directories and links count too (as for tar)
+            raise SecurityRejection("Archive has too many entries.", code=ErrorCode.INPUT_TOO_LARGE)
         names = []
         for m, _ in members:
             norm = normalize_member_path(m.name, limits.max_path_depth + 1)

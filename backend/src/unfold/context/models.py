@@ -16,18 +16,18 @@ from pydantic import BaseModel, Field
 
 from unfold.domain.models import EvidenceRef, SessionProfile
 from unfold.retrieval.models import GraphPath
-from unfold.security.fence import untrusted
+from unfold.security.fence import strip_fence_tags, untrusted
 
 SUMMARY_LEVELS: tuple[str, ...] = ("project", "subsystem", "module", "file", "symbol")
 PARENT_LEVELS: frozenset[str] = frozenset({"project", "subsystem", "module"})
 LABEL_RE = re.compile(r"\[?\b(E[1-9][0-9]{0,3})\b\]?")
-_HEADER_UNSAFE = re.compile(r"[\x00-\x1f\x7f]|</?\s*repository_data[^>]*>", re.I)
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _MAX_HEADER_FIELD = 200
 
 
 def safe_header_field(value: str) -> str:
     """Single-line, fence-tag-free, bounded — for repository paths / symbols shown outside the fence."""
-    return _HEADER_UNSAFE.sub(" ", value).strip()[:_MAX_HEADER_FIELD]
+    return _CONTROL.sub(" ", strip_fence_tags(value, " ")).strip()[:_MAX_HEADER_FIELD]
 
 
 def summary_level_rank(level: str) -> int:

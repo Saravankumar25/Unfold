@@ -14,7 +14,6 @@ from dataclasses import dataclass
 
 from unfold.context.budget import estimate_tokens
 from unfold.context.compiler import compile_context
-from unfold.context.models import safe_header_field
 from unfold.core.errors import ErrorCode, GenerationError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ClaimKind, ModelCapability, Priority, Proof, RetrievalMode
@@ -197,9 +196,8 @@ async def write_chapter(
     )
     brief_tokens = estimate_tokens(render_brief(brief))
     ctx = compile_context(
-        objective=f"Write the guide chapter '{safe_header_field(plan.title)}'. "
-        f"Objective: {safe_header_field(plan.objective)}. Depth: {plan.depth}. "
-        f"Aim for about {plan.target_minutes:g} minutes of reading.",
+        objective="Write the guide chapter whose title and objective are given under 'Chapter topic'. "
+        f"Depth: {plan.depth}. Aim for about {plan.target_minutes:g} minutes of reading.",
         retrieval=retrieval,
         facts=facts,
         profile=SessionProfile(technical_level=technical_level, instruction=instruction),
@@ -214,6 +212,13 @@ async def write_chapter(
     labels = {chunk_id: label for label, chunk_id in ctx.label_map.items()}
     prompt = (
         ctx.render()
+        # a model wrote the title and objective after reading the repository: data, not instruction
+        + "\n\n## Chapter topic\n"
+        + untrusted(
+            redact_text(f"Title: {plan.title}\nObjective: {plan.objective}"),
+            source=f"chapter:{plan.key}",
+            trust="derived_summary",
+        )
         + "\n\n## Research brief\n"
         + untrusted(
             redact_text(render_brief(brief, labels)),

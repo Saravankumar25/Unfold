@@ -254,7 +254,7 @@ def compile_context(
     """
     prof = _profile(profile)
     comp = _Compiler(budget_tokens)
-    notes = _notes(retrieval)
+    notes = [redact_text(n) for n in _notes(retrieval)]  # identifiers come from the question or the chapter
 
     # 1. mandatory
     for block in (

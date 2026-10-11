@@ -19,7 +19,6 @@ from collections.abc import Mapping, Sequence
 from pydantic import BaseModel, Field
 
 from unfold.context.compiler import compile_context
-from unfold.context.models import safe_header_field
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ClaimKind, ModelCapability, Priority, RetrievalMode
 from unfold.domain.models import ClaimRecord, SessionProfile
@@ -147,8 +146,7 @@ class Rewriter:
             trace=RetrievalTrace(config_version=f"rewrite-v{REWRITE_PROMPT_VERSION}"),
         )
         ctx = compile_context(
-            objective=f"Repair blocks of the guide chapter '{safe_header_field(self.plan.title)}'. "
-            f"Chapter objective: {safe_header_field(self.plan.objective)}.",
+            objective="Repair blocks of the guide chapter whose title and objective are given under 'Chapter topic'.",
             retrieval=retrieval,
             facts=self.facts,
             profile=SessionProfile(technical_level=self.level, instruction=self.instruction),
@@ -167,6 +165,12 @@ class Rewriter:
         ]
         prompt = (
             ctx.render()
+            + "\n\n## Chapter topic\n"
+            + untrusted(
+                redact_text(f"Title: {self.plan.title}\nObjective: {self.plan.objective}"),
+                source=f"chapter:{self.plan.key}",
+                trust="derived_summary",
+            )
             + "\n\n## Blocks to repair\n"
             + untrusted(
                 redact_text("\n".join(lines)),
