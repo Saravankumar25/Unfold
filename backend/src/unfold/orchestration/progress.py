@@ -62,8 +62,8 @@ class ProgressReporter:
         """
         async with self.db.transaction() as s:
             row = await self._load(s)
-            if row.status == JobStatus.SUCCEEDED.value:
-                return None
+            if row.status in (JobStatus.SUCCEEDED.value, JobStatus.FAILED.value):
+                return None  # finished either way; a duplicate delivery must not rewrite the outcome
             if (
                 row.status == JobStatus.RUNNING.value
                 and row.heartbeat_at is not None

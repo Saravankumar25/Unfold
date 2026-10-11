@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
 from unfold import ANALYSIS_VERSION
-from unfold.core.errors import ErrorCode, InputError, UnfoldError
+from unfold.core.errors import ErrorCode, InputError, StoreUnavailable, UnfoldError
 from unfold.core.ids import diagram_id
 from unfold.core.logging import bind_context, get_logger
 from unfold.diagrams.builders import build_all
@@ -177,15 +178,26 @@ async def run_analysis(rt: Runtime, llm: LLMClient, job_id: str) -> RunOutcome:
     except UnfoldError as exc:
         err = exc
     except Exception as exc:
-        log.exception("job.crashed", error_type=type(exc).__name__)
-        err = UnfoldError(
-            f"Unexpected error ({type(exc).__name__}).", code=ErrorCode.INTERNAL_ERROR, retryable=False
-        )
+        if _store_unreachable(exc):  # a paused or restarting database: every stage is checkpointed, so resume
+            log.warning("job.store_unreachable", error_type=type(exc).__name__)
+            err = StoreUnavailable("The database was unreachable; the job resumes from its last checkpoint.")
+        else:
+            log.exception("job.crashed", error_type=type(exc).__name__)
+            err = UnfoldError(
+                f"Unexpected error ({type(exc).__name__}).", code=ErrorCode.INTERNAL_ERROR, retryable=False
+            )
     finally:
         beat.cancel()
     will_retry = err.retryable and attempt < settings.max_job_attempts
     await reporter.fail(err, will_retry=will_retry)
     return RunOutcome(succeeded=False, retry=will_retry)
+
+
+def _store_unreachable(exc: Exception) -> bool:
+    """A connection-level database failure (not a bad statement): worth another attempt."""
+    if isinstance(exc, DBAPIError):
+        return exc.connection_invalidated or isinstance(exc, OperationalError | InterfaceError)
+    return isinstance(exc, ConnectionError)
 
 
 async def _heartbeat(reporter: ProgressReporter, every_s: float = HEARTBEAT_SECONDS) -> None:
