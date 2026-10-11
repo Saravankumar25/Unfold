@@ -116,6 +116,9 @@ def test_aws_profile_needs_none_of_the_local_store_credentials() -> None:
         ({"jobs_queue_url": ""}, "JOBS_QUEUE_URL"),
         ({"aws_endpoint_url": "http://localhost:4566"}, "AWS_ENDPOINT_URL"),
         ({"cookie_secure": False}, "COOKIE_SECURE"),
+        ({"dense_backend": "qdrant"}, "DENSE_BACKEND"),  # no Qdrant on AWS: the profile would not start
+        ({"graph_backend": "neo4j"}, "GRAPH_BACKEND"),
+        ({"graph_backend": "off"}, "GRAPH_BACKEND"),
     ],
 )
 def test_aws_profile_refuses_unsafe_production_config(override: dict[str, Any], needle: str) -> None:

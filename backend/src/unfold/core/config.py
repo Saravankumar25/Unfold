@@ -209,6 +209,11 @@ class Settings(BaseSettings):
                     problems.append(f"{name.upper()} is required with PERSISTENCE_BACKEND=dynamodb")
             if self.aws_endpoint_url:
                 problems.append("AWS_ENDPOINT_URL must be empty in production")
+            # the AWS images carry neither the Qdrant nor the Neo4j client: fail here, not at the first query
+            if self.dense_backend != "artifact":
+                problems.append("DENSE_BACKEND must be artifact with PERSISTENCE_BACKEND=dynamodb")
+            if self.graph_backend != "memory":
+                problems.append("GRAPH_BACKEND must be memory with PERSISTENCE_BACKEND=dynamodb")
         else:
             if self.object_store_secret_key.get_secret_value() == _DEV_OBJECT_STORE_SECRET:
                 problems.append("OBJECT_STORE_SECRET_KEY is the development default")
