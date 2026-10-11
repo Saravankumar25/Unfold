@@ -176,3 +176,10 @@ async def test_rate_limiter_contract(limiter: RateLimiter) -> None:
     assert await limiter.hit(f"{key}:other", 3, 3600)  # keys are independent
     results: list[Any] = await asyncio.gather(*(limiter.hit(f"{key}:c", 10, 3600) for _ in range(30)))
     assert results.count(True) == 10  # atomic under concurrency
+    # cleanup removes the counters of an owner key (a project or a session) and reports how many there were
+    assert await limiter.delete_prefix(key) >= 1
+    assert await limiter.delete_prefix(key) == 0
+    assert await limiter.hit(key, 3, 3600)  # the window starts again
+    await limiter.delete_prefix(key)
+    await limiter.delete_prefix(f"{key}:other")
+    await limiter.delete_prefix(f"{key}:c")

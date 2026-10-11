@@ -14,6 +14,7 @@ from unfold.persistence.dynamodb.table import ConditionFailed, DynamoTable
 from unfold.ports import CounterStore, RateLimiter
 
 _SK = "C"
+_OWNER_WINDOWS = (60, 3600)  # window lengths of the per-session / per-project buckets (api routes)
 
 
 class DynamoCounters(CounterStore):
@@ -85,8 +86,16 @@ class DynamoRateLimiter(RateLimiter):
         return new["n"] <= limit
 
     async def delete_prefix(self, prefix: str) -> int:
-        # Keys carry a session id or an address, never project data, and every window expires on its own.
-        return 0
+        """Remove the counters of one owner key (`prefix` is the whole key, as cleanup and the sweeper pass it).
+
+        Windows are part of the item key, so there is nothing to scan: the owner-keyed buckets use 60 s (chat) or
+        3600 s windows, and only the current and the previous window of each can still be live. Older ones are
+        gone by `ttl`. Returns how many counters existed."""
+        now = int(time.time())
+        keys = [f"Q#{prefix}#{now // w * w - back}" for w in _OWNER_WINDOWS for back in (0, w)]
+        present = [k for k in keys if await self._counters.get(k)]
+        await self._counters.delete(present)
+        return len(present)
 
     async def ping(self) -> None:
         await self._table.get("PING", "PING", consistent=False)
