@@ -7,7 +7,7 @@
 :root {
   --ink: #14161c;
   --ink-soft: #5b5e68;
-  --ink-faint: #767983; /* design #8A8D96 darkened slightly for AA contrast on paper */
+  --ink-faint: #666973; /* design #8A8D96 darkened: 4.7:1 on paper-dim, 5.2:1 on paper (AA for small text) */
   --paper: #fbfaf6;
   --paper-dim: #f1eee6;
   --panel: #ffffff;

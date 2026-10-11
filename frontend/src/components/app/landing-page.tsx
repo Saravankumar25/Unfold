@@ -86,7 +86,7 @@ export function LandingPage() {
             <input id="repo" value={url} disabled={Boolean(file)} onChange={(e) => { setUrl(e.target.value); setError(null); }} placeholder="github.com/owner/repository" className="min-w-0 flex-1 bg-transparent px-3 py-3 font-mono text-[13px] outline-none placeholder:text-ink-faint disabled:opacity-50" />
           </div>
           <div className="my-4 flex items-center gap-3 text-[11px] text-ink-faint"><span className="h-px flex-1 bg-line" />OR<span className="h-px flex-1 bg-line" /></div>
-          <input ref={fileRef} type="file" accept=".zip,application/zip" className="sr-only" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setUrl(""); setError(null); }} />
+          <input ref={fileRef} type="file" accept=".zip,application/zip" aria-label="Project ZIP file" tabIndex={-1} className="sr-only" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setUrl(""); setError(null); }} />
           <button type="button" onClick={() => fileRef.current?.click()} className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-s border border-dashed border-line-strong bg-paper-dim px-4 py-3 text-[13px] font-medium text-ink-soft hover:border-blueprint hover:text-blueprint">
             <Upload size={15} /> {file ? file.name : "Choose a project ZIP"}
           </button>

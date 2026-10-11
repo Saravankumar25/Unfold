@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileDown, LoaderCircle, RefreshCw } from "lucide-react";
+import { Download, FileDown, FileText, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -31,6 +31,7 @@ export function ExportButton({
 }) {
   const exp = useExport(start, filename);
   const kind = filename.endsWith(".md") ? "Markdown" : "PDF";
+  const Icon = kind === "Markdown" ? FileText : FileDown; // the label is hidden on a phone: the icons must differ
   const { toast } = useToast();
   const lastPhase = useRef(exp.phase);
 
@@ -75,7 +76,7 @@ export function ExportButton({
           ) : exp.phase === "failed" ? (
             <RefreshCw size={14} aria-hidden />
           ) : (
-            <FileDown size={14} aria-hidden />
+            <Icon size={14} aria-hidden />
           )}
           <span className="max-[480px]:sr-only">{busy ? status : exp.phase === "failed" ? "Retry export" : label}</span>
         </Button>

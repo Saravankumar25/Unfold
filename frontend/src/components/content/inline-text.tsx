@@ -50,7 +50,7 @@ export function CiteChip({
         target="_blank"
         rel="noopener noreferrer"
         title={`${full} on GitHub at the analysed commit`}
-        aria-label={`Source ${full}`}
+        aria-label={`Source ${text}`}
         className={cn(CITE_BASE, tone, "no-underline")}
       >
         {text}
@@ -68,7 +68,7 @@ export function CiteChip({
     <button
       type="button"
       onClick={() => onCite(label, refItem)}
-      aria-label={`Evidence: ${full}`}
+      aria-label={`Evidence: ${text}`}
       title={full}
       className={cn(CITE_BASE, tone, "cursor-pointer")}
     >

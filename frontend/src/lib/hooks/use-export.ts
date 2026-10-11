@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isApiError } from "@/lib/api/client";
 import { api } from "@/lib/api/endpoints";
 import type { ArtifactOut, ExportCreated } from "@/lib/api/types";
 
@@ -14,6 +15,8 @@ export interface ExportState {
 
 const POLL_MS = 2000;
 const MAX_POLL_MS = 10 * 60 * 1000;
+/** Consecutive transient poll failures (proxy 502, network) tolerated while the worker renders. */
+const MAX_POLL_FAILURES = 5;
 
 export function triggerDownload(url: string, filename?: string) {
   const a = document.createElement("a");
@@ -54,10 +57,23 @@ export function useExport(start: () => Promise<ExportCreated>, filename: string)
     try {
       const { artifact_id } = await startRef.current();
       const began = Date.now();
+      let failures = 0;
       const poll = async (): Promise<void> => {
         if (cancelled) return;
-        const artifact = await api.getExport(artifact_id, controller.signal);
+        let artifact: ArtifactOut | null = null;
+        try {
+          artifact = await api.getExport(artifact_id, controller.signal);
+          failures = 0;
+        } catch (error) {
+          if (cancelled || !isApiError(error) || !error.retryable || ++failures >= MAX_POLL_FAILURES) throw error;
+        }
         if (cancelled) return;
+        if (artifact === null) {
+          await new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, POLL_MS);
+          });
+          return poll();
+        }
         if (artifact.status === "ready") {
           setState({ phase: "ready", artifact, error: null });
           if (artifact.download_url) triggerDownload(artifact.download_url, filename);

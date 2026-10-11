@@ -37,7 +37,7 @@ export function useProject(): ProjectContextValue {
 }
 
 function CenteredPanel({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-full max-w-[640px] px-4 py-16 sm:px-6">{children}</div>;
+  return <main className="mx-auto w-full max-w-[640px] px-4 py-16 sm:px-6">{children}</main>;
 }
 
 /** Loads the project; renders the error envelope (404 = expired/foreign) or children with the project. */

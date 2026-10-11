@@ -39,7 +39,7 @@ function DiagramBody({ diagram, caption, onAskNode }: { diagram: DiagramOut; cap
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3 sm:px-[22px]">
         <div className="min-w-0">
           <p className="m-0 font-mono text-[11px] text-ink-faint">{titleCase(diagram.kind)}</p>
-          <h3 className="m-0 mt-0.5 font-serif text-[17px] font-medium leading-snug">{diagram.title}</h3>
+          <h2 className="m-0 mt-0.5 font-serif text-[17px] font-medium leading-snug">{diagram.title}</h2>
         </div>
         {diagram.mermaid && diagram.nodes.length ? (
           <Segmented size="sm" label="Diagram view" value={view} onChange={setView} options={VIEW_OPTIONS} />

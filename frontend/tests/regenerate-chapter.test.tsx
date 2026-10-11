@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RegenerateButton } from "@/components/app/regenerate-button";
+import { ApiError } from "@/lib/api/client";
 import { api } from "@/lib/api/endpoints";
 import type { JobOut, ProgressPage } from "@/lib/api/types";
 import { REGENERATE_POLL_MS } from "@/lib/hooks/use-regenerate";
@@ -71,6 +72,29 @@ describe("Regenerate this chapter", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("status")).toHaveTextContent("Chapter regenerated.");
     expect(screen.getByRole("button", { name: "Regenerate this chapter" })).toBeEnabled();
+  });
+
+  it("rides out a transient gateway error while the job keeps running", async () => {
+    vi.spyOn(api, "regenerateSection").mockResolvedValue({ job_id: "j-regen", section_key: "overview" });
+    const answers: (ProgressPage | Error)[] = [
+      new ApiError({ code: "UPSTREAM_UNAVAILABLE", message: "unreachable", status: 502, retryable: true }),
+      page(job({ status: "succeeded", current_stage: "READY" })),
+    ];
+    vi.spyOn(api, "getProgress").mockImplementation(async () => {
+      const next = answers.shift() as ProgressPage | Error;
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    const onDone = vi.fn();
+    render(<RegenerateButton projectId="p1" sectionKey="overview" onDone={onDone} />);
+    await userEvent.click(screen.getByRole("button", { name: "Regenerate this chapter" }));
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(REGENERATE_POLL_MS);
+      });
+    }
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Chapter regenerated.");
   });
 
   it("reports a failed regeneration, keeps the chapter and offers a retry", async () => {

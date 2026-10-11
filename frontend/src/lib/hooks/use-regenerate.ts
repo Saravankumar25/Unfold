@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isApiError } from "@/lib/api/client";
 import { api } from "@/lib/api/endpoints";
 
 export type RegeneratePhase = "idle" | "running" | "done" | "failed";
@@ -14,6 +15,8 @@ const IDLE: RegenerateState = { phase: "idle", error: null };
 
 export const REGENERATE_POLL_MS = 2000;
 const MAX_POLL_MS = 10 * 60 * 1000;
+/** Consecutive transient poll failures (proxy 502, network) tolerated: the job runs on in the worker meanwhile. */
+const MAX_POLL_FAILURES = 5;
 /** `GET /progress?after=` with a cursor past every event: only the durable job state is wanted here. */
 const NO_EVENTS = Number.MAX_SAFE_INTEGER;
 
@@ -49,10 +52,17 @@ export function useRegenerate(projectId: string, sectionKey: string, onDone: () 
     try {
       const { job_id } = await api.regenerateSection(projectId, sectionKey);
       const began = Date.now();
+      let failures = 0;
       for (;;) {
-        const page = await api.getProgress(projectId, NO_EVENTS, controller.signal);
+        let page: Awaited<ReturnType<typeof api.getProgress>> | null = null;
+        try {
+          page = await api.getProgress(projectId, NO_EVENTS, controller.signal);
+          failures = 0;
+        } catch (error) {
+          if (cancelled || !isApiError(error) || !error.retryable || ++failures >= MAX_POLL_FAILURES) throw error;
+        }
         if (cancelled) return;
-        const job = page.regeneration;
+        const job = page?.regeneration;
         if (job && job.id === job_id && job.status === "succeeded") {
           setHeld({ id, phase: "done", error: null });
           doneRef.current();

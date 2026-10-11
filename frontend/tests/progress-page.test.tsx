@@ -87,6 +87,30 @@ describe("ProjectProgressPage", () => {
     expect(screen.queryByText(/waking the service up/i)).not.toBeInTheDocument();
   });
 
+  it("lists every stage the server announced, with the server's own labels", async () => {
+    vi.spyOn(api, "getProject").mockResolvedValue(project());
+    const ev = (index: number, stage: string, label: string) => ({
+      type: "stage" as const, seq: index + 1, stage, label, index, total: 21, detail: null,
+      error_code: null, message: null, retryable: null, at: "2026-01-01T00:00:00Z",
+    });
+    vi.spyOn(api, "getProgress").mockResolvedValue({
+      events: [
+        ev(14, "RESEARCHING_GUIDE", "Researching each chapter"),
+        ev(16, "VERIFYING_GUIDE", "Verifying explanations"),
+        ev(17, "REVISING_GUIDE", "Fixing unsupported statements"),
+      ],
+      cursor: 3,
+      job: job({ current_stage: "REVISING_GUIDE", stage_label: "Fixing unsupported statements", stage_index: 17 }),
+    });
+    mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items).toEqual(expect.arrayContaining(["Researching each chapter", "Verifying explanations", "Fixing unsupported statements"]));
+    expect(screen.getByRole("list", { name: "Pipeline stages" })).toBeInTheDocument();
+  });
+
   it("explains that a project that cannot be loaded is unavailable, with a retry", async () => {
     vi.spyOn(api, "getProject").mockRejectedValue(new Error("gone"));
     mount();

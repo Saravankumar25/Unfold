@@ -12,7 +12,7 @@ import {
   type NodeProps,
   type NodeTypes,
 } from "@xyflow/react";
-import { useMemo } from "react";
+import { useMemo, type KeyboardEvent } from "react";
 import type { DiagramNode, DiagramSpec } from "@/lib/api/types";
 import { layoutDiagram, type UnfoldGroupData, type UnfoldNodeData } from "@/lib/diagram-layout";
 import { cn } from "@/lib/utils";
@@ -72,8 +72,18 @@ export default function DiagramCanvas({
   const layout = useMemo(() => layoutDiagram(spec, direction), [spec, direction]);
   const height = Math.min(560, Math.max(260, layout.height + 40));
 
+  // Nodes are focusable (Tab); Enter / Space opens the focused node's details, as a click does.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const id = (event.target as HTMLElement).closest(".react-flow__node-unfold")?.getAttribute("data-id");
+    const hit = spec.nodes.find((n) => n.id === id);
+    if (!hit) return;
+    event.preventDefault();
+    onSelect(hit);
+  };
+
   return (
-    <div style={{ height }} className="w-full">
+    <div style={{ height }} className="w-full" onKeyDown={onKeyDown}>
       <ReactFlow
         nodes={layout.nodes}
         edges={layout.edges}

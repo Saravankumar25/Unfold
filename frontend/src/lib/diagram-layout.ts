@@ -112,6 +112,7 @@ export function layoutDiagram(spec: Pick<DiagramSpec, "kind" | "nodes" | "edges"
       position: parent ? { x: b.x - parent.x, y: b.y - parent.y } : { x: b.x, y: b.y },
       ...(parent ? { parentId: GROUP_PREFIX + n.group } : {}),
       data: { node: n },
+      ariaLabel: `${n.label}, ${n.kind}${n.inferred ? ", inferred" : ""}`,
       sourcePosition,
       targetPosition,
       width: b.width,
