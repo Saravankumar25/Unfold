@@ -210,6 +210,7 @@ async def regenerate_section(
     if running is not None and not running.terminal:
         return _same_chapter(running, section_key)
     cfg = rt.settings
+    # Every cheap check is above; a slot lost to a later failure (a project deleted meanwhile) is cheap.
     if not await rt.limiter.hit(
         project_rate_key("regenerate", project.id), cfg.max_regenerations_per_hour, 3600
     ):
@@ -227,8 +228,8 @@ async def regenerate_section(
             kind="regenerate",
             section_key=section_key,
         ),
-        max_active_per_session=cfg.max_active_jobs_per_session,
-        max_queued_global=cfg.max_queued_jobs_global,
+        # no analysis caps: a one-chapter redo is bounded by its own per-project and per-session limits above
+        # and by the single-regeneration marker, never by how many analyses the session has running
     )
     if not created:  # a concurrent request won
         return _same_chapter(job, section_key)
