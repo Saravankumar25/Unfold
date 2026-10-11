@@ -295,7 +295,7 @@ class PostgresControlStore(ControlStore):
     ) -> None:
         async with self._db.transaction() as s:
             project = await s.get(ProjectRow, _u(job.project_id), with_for_update=True)
-            if project is None:
+            if project is None or project.deleting_at is not None:
                 raise NotFound("Project not found.")
             existing = await s.execute(
                 select(func.count())

@@ -154,6 +154,33 @@ async def test_pending_upload_has_no_job_until_one_is_added(control: ControlStor
     await control.delete_session(s.token_hash)
 
 
+async def test_a_deleting_project_takes_no_first_job(control: ControlStore) -> None:
+    """The sweeper may mark the project between the caller's lookup and the write: no job, pointer or counter."""
+    s = await _session(control)
+    p = _project(s, input_type="zip", upload_object_key="projects/x/upload/source.zip")
+    await control.create_project(p, None)
+    stale = await control.get_project(p.id)
+    await control.update_project(p.id, _mark_deleting)
+    with pytest.raises(NotFound):
+        await control.add_job(_job(p), max_active_per_session=2)
+    # the race: the lookup inside add_job still sees the project as it was before the marker
+    real_get, lookups = control.get_project, [stale]
+
+    async def lookup(project_id: str) -> ProjectRec | None:
+        return lookups.pop() if lookups else await real_get(project_id)
+
+    control.get_project = lookup  # type: ignore[method-assign]
+    with pytest.raises(NotFound):
+        await control.add_job(_job(p), max_active_per_session=2)
+    control.get_project = real_get  # type: ignore[method-assign]
+    assert await control.jobs_of_project(p.id) == []
+    q = await _project_with_job(control, s, max_active_per_session=2)  # the failed adds took no slot
+    r = await _project_with_job(control, s, max_active_per_session=2)
+    for x in (p, q[0], r[0]):
+        await control.delete_project_data(x.id)
+    await control.delete_session(s.token_hash)
+
+
 async def test_claim_is_exclusive_under_concurrency(control: ControlStore) -> None:
     s = await _session(control)
     p, j = await _project_with_job(control, s)
@@ -670,4 +697,57 @@ async def test_expired_and_stale_pending_exports_are_found_by_the_sweeper(contro
     assert orphan.id not in restart  # its project is being deleted
     for p in (kept, dying):
         await control.delete_project_data(p.id)
+    await control.delete_session(s.token_hash)
+
+
+async def test_every_item_of_a_project_partition_expires_with_the_project(control: ControlStore) -> None:
+    """DynamoDB only: if the sweeper is down past the expiry, TTL removes META; nothing else may be left."""
+    table = getattr(control, "_t", None)
+    if table is None:
+        pytest.skip("TTL is a DynamoDB storage detail")
+    s = await _session(control)
+    p = _project(s, input_type="zip", upload_object_key="projects/x/upload/source.zip")
+    await control.create_project(p, None)
+    job = _job(p)
+    await control.add_job(job)  # FIRSTJOB marker, job item, J# pointer
+    await control.update_job(job.id, _finish)
+    regen, _ = await control.add_regeneration(_job(p, kind="regenerate", section_key="a"))  # REGEN marker
+    await control.put_checkpoint(job.id, "analyze", {})
+    await control.replace_summaries(p.id, [SummaryRec(p.id, "project", p.id, "P")])
+    await control.replace_plan(p.id, {}, "v1", [SectionRec(p.id, "a", "A", 0)])
+    await control.replace_diagrams(p.id, [DiagramRec("dg:1", p.id, "architecture", "A", {}, "x")])
+    await control.update_section(p.id, "a", lambda rec: True)
+    chat = _chat(p)
+    await control.create_chat(chat, max_per_project=2)  # CHATS counter, CHAT item, H# pointer
+    await control.append_turn(chat.id, *_turn(chat, "hi"), title_chars=10)  # MSG items
+    art = await control.add_artifact(_artifact(p), reuse_since=datetime.now(UTC) - timedelta(minutes=10))
+
+    pk = f"P#{p.id}"
+    expected = (await table.get(pk, "META"))["ttl"]
+    items = await table.query(pk, consistent=True)
+    kinds = {i["SK"].split("#")[0] for i in items}
+    assert {
+        "FIRSTJOB",
+        "REGEN",
+        "JOB",
+        "CKPT",
+        "SUM",
+        "SEC",
+        "PLAN",
+        "DIAG",
+        "CHATS",
+        "CHAT",
+        "MSG",
+        "ART",
+    } <= kinds
+    for item in items:
+        if item["SK"].startswith("ART#"):
+            continue  # an export carries its own, shorter expiry
+        assert item.get("ttl") == expected, item["SK"]
+    for pointer in (f"J#{job.id}", f"H#{chat.id}"):
+        assert (await table.get(pointer, "META"))["ttl"] == expected, pointer
+    artifact_ttl = next(i for i in items if i["SK"] == f"ART#{art.id}")["ttl"]
+    assert (await table.get(f"A#{art.id}", "META"))["ttl"] == artifact_ttl
+    await control.update_job(regen.id, _finish)
+    await control.delete_project_data(p.id)
     await control.delete_session(s.token_hash)

@@ -7,7 +7,9 @@ counters (active per session, queued globally) change in the same transaction as
 are exact and a crash cannot leak them.
 
 Partition `P#<project_id>` holds everything of a project, so cleanup is one partition delete. TTL attributes are a
-storage backstop only: reads compare `expires_at` and the sweeper deletes explicitly.
+storage backstop only: reads compare `expires_at` and the sweeper deletes explicitly. Every item of the partition
+(and the `J#`/`H#`/`A#` pointers to it) carries the project's own `ttl`, so a sweeper that is down past the expiry
+cannot leave children behind once `META` is gone. Exports expire on their own, earlier, `ttl`.
 """
 
 from __future__ import annotations
@@ -122,8 +124,14 @@ def _project_attrs(rec: ProjectRec) -> dict[str, Any]:
     return attrs
 
 
-def _job_item(rec: JobRec) -> dict[str, Any]:
-    item: dict[str, Any] = {"PK": f"P#{rec.project_id}", "SK": job_sk(rec), "d": encode(rec), "ver": 1}
+def _job_item(rec: JobRec, ttl: int) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "PK": f"P#{rec.project_id}",
+        "SK": job_sk(rec),
+        "d": encode(rec),
+        "ver": 1,
+        "ttl": ttl,
+    }
     item.update(_job_index(rec))
     return item
 
@@ -265,12 +273,25 @@ class DynamoControlStore(ControlStore):
 
     # --- projects and jobs ------------------------------------------------------------------------------
 
+    async def _project_ttl(self, pk: str) -> int:
+        """The `ttl` of the project record, for the items written into its partition after creation."""
+        meta = await self._t.get(pk, "META")
+        if meta is None:
+            raise NotFound("Project not found.")
+        return int(meta["ttl"])
+
     async def _write_new_job(
-        self, job: JobRec, ops: list[dict[str, Any]], max_active: int, max_queued: int
+        self, job: JobRec, ops: list[dict[str, Any]], max_active: int, max_queued: int, ttl: int
     ) -> None:
         """Create the job item, its pointer and the cap counters in one transaction (after `ops`)."""
-        item = _job_item(job)
-        pointer = {"PK": f"J#{job.id}", "SK": "META", "project_id": job.project_id, "sk": item["SK"]}
+        item = _job_item(job, ttl)
+        pointer = {
+            "PK": f"J#{job.id}",
+            "SK": "META",
+            "project_id": job.project_id,
+            "sk": item["SK"],
+            "ttl": ttl,
+        }
         batch = [
             *ops,
             {"put": {"item": item, "condition": "attribute_not_exists(PK)"}},
@@ -359,23 +380,35 @@ class DynamoControlStore(ControlStore):
             await self._t.transact([put])
             return
         job.session_id = project.session_id
-        await self._write_new_job(job, [put], max_active_per_session, max_queued_global)
+        await self._write_new_job(
+            job, [put], max_active_per_session, max_queued_global, _epoch(project.expires_at)
+        )
 
     async def add_job(
         self, job: JobRec, *, max_active_per_session: int = 0, max_queued_global: int = 0
     ) -> None:
         project = await self.get_project(job.project_id)
-        if project is None:
+        if project is None or project.deleting_at is not None:
             raise NotFound("Project not found.")
         job.session_id = project.session_id
+        ttl = _epoch(project.expires_at)
+        pk = f"P#{job.project_id}"
         # the marker makes "the first job of this project" exclusive: a second concurrent add_job is a Conflict
         first = {
             "put": {
-                "item": {"PK": f"P#{job.project_id}", "SK": "FIRSTJOB"},
+                "item": {"PK": pk, "SK": "FIRSTJOB", "ttl": ttl},
                 "condition": "attribute_not_exists(PK)",
             }
         }
-        await self._write_new_job(job, [first], max_active_per_session, max_queued_global)
+        try:  # `_alive`: the delete marker may land between the lookup above and this write
+            await self._write_new_job(
+                job, [first, _alive(pk)], max_active_per_session, max_queued_global, ttl
+            )
+        except Conflict:
+            current = await self.get_project(job.project_id)
+            if current is None or current.deleting_at is not None:
+                raise NotFound("Project not found.") from None
+            raise
 
     async def get_project(self, project_id: str) -> ProjectRec | None:
         item = await self._t.get(f"P#{project_id}", "META")
@@ -505,17 +538,18 @@ class DynamoControlStore(ControlStore):
                     return running, False
                 await self._t.delete(pk, marker)  # left by a job that is gone: nothing owns it
             job.session_id = project.session_id
+            ttl = _epoch(project.expires_at)
             ops = [
                 {
                     "put": {
-                        "item": {"PK": pk, "SK": marker, "job_id": job.id},
+                        "item": {"PK": pk, "SK": marker, "job_id": job.id, "ttl": ttl},
                         "condition": "attribute_not_exists(PK)",
                     }
                 },
                 _alive(pk),
             ]
             try:
-                await self._write_new_job(job, ops, max_active_per_session, max_queued_global)
+                await self._write_new_job(job, ops, max_active_per_session, max_queued_global, ttl)
             except Conflict:
                 continue  # a concurrent request took the marker, or the project was just marked deleting
             return job, True
@@ -585,7 +619,8 @@ class DynamoControlStore(ControlStore):
         loc = await self._locate(job_id)
         if loc is None:
             raise NotFound("Analysis job not found.")
-        await self._t.put({"PK": loc[0], "SK": f"CKPT#{job_id}#{name}", "data": data})
+        ttl = await self._project_ttl(loc[0])
+        await self._t.put({"PK": loc[0], "SK": f"CKPT#{job_id}#{name}", "data": data, "ttl": ttl})
 
     # --- guide content ----------------------------------------------------------------------------------
 
@@ -598,8 +633,10 @@ class DynamoControlStore(ControlStore):
 
     async def replace_summaries(self, project_id: str, rows: Sequence[SummaryRec]) -> None:
         pk = f"P#{project_id}"
+        ttl = await self._project_ttl(pk)
         keep = {
-            f"SUM#{r.level}#{r.key}": {"PK": pk, "SK": f"SUM#{r.level}#{r.key}", "d": encode(r)} for r in rows
+            f"SUM#{r.level}#{r.key}": {"PK": pk, "SK": f"SUM#{r.level}#{r.key}", "d": encode(r), "ttl": ttl}
+            for r in rows
         }
         await self._replace(project_id, "SUM#", keep)
 
@@ -612,12 +649,21 @@ class DynamoControlStore(ControlStore):
         self, project_id: str, plan: dict[str, Any], planner_version: str, sections: Sequence[SectionRec]
     ) -> None:
         pk = f"P#{project_id}"
+        ttl = await self._project_ttl(pk)
         keep = {
-            f"SEC#{s.section_key}": {"PK": pk, "SK": f"SEC#{s.section_key}", "d": encode(s), "ver": 1}
+            f"SEC#{s.section_key}": {
+                "PK": pk,
+                "SK": f"SEC#{s.section_key}",
+                "d": encode(s),
+                "ver": 1,
+                "ttl": ttl,
+            }
             for s in sections
         }
         await self._replace(project_id, "SEC#", keep)
-        await self._t.put({"PK": pk, "SK": "PLAN", "plan": plan, "planner_version": planner_version})
+        await self._t.put(
+            {"PK": pk, "SK": "PLAN", "plan": plan, "planner_version": planner_version, "ttl": ttl}
+        )
 
     async def get_plan(self, project_id: str) -> dict[str, Any] | None:
         item = await self._t.get(f"P#{project_id}", "PLAN")
@@ -636,8 +682,10 @@ class DynamoControlStore(ControlStore):
 
     async def replace_diagrams(self, project_id: str, rows: Sequence[DiagramRec]) -> None:
         pk = f"P#{project_id}"
+        ttl = await self._project_ttl(pk)
         keep = {
-            f"DIAG#{r.id}": {"PK": pk, "SK": f"DIAG#{r.id}", "d": encode(r), "kind": r.kind} for r in rows
+            f"DIAG#{r.id}": {"PK": pk, "SK": f"DIAG#{r.id}", "d": encode(r), "kind": r.kind, "ttl": ttl}
+            for r in rows
         }
         await self._replace(project_id, "DIAG#", keep)
 
@@ -661,12 +709,13 @@ class DynamoControlStore(ControlStore):
 
     async def create_chat(self, chat: ChatRec, *, max_per_project: int) -> None:
         pk = f"P#{chat.project_id}"
+        ttl = await self._project_ttl(pk)  # NotFound for a project that is gone; `_alive` covers the race
         counter: dict[str, Any] = {
             "pk": pk,
             "sk": "CHATS",
-            "expression": "ADD #n :one",
-            "names": {"#n": "n"},
-            "values": {":one": 1},
+            "expression": "SET #ttl = :ttl ADD #n :one",
+            "names": {"#n": "n", "#ttl": "ttl"},
+            "values": {":one": 1, ":ttl": ttl},
         }
         if max_per_project > 0:
             counter["condition"] = "attribute_not_exists(#n) OR #n < :cap"
@@ -678,11 +727,26 @@ class DynamoControlStore(ControlStore):
                     {"update": counter},
                     {
                         "put": {
-                            "item": {"PK": pk, "SK": f"CHAT#{chat.id}", "d": encode(chat), "ver": 1},
+                            "item": {
+                                "PK": pk,
+                                "SK": f"CHAT#{chat.id}",
+                                "d": encode(chat),
+                                "ver": 1,
+                                "ttl": ttl,
+                            },
                             "condition": "attribute_not_exists(PK)",
                         }
                     },
-                    {"put": {"item": {"PK": f"H#{chat.id}", "SK": "META", "project_id": chat.project_id}}},
+                    {
+                        "put": {
+                            "item": {
+                                "PK": f"H#{chat.id}",
+                                "SK": "META",
+                                "project_id": chat.project_id,
+                                "ttl": ttl,
+                            }
+                        }
+                    },
                 ]
             )
         except ConditionFailed as exc:
@@ -732,6 +796,7 @@ class DynamoControlStore(ControlStore):
         if project_id is None:
             raise NotFound("Chat not found.")
         pk, sk = f"P#{project_id}", f"CHAT#{chat_id}"
+        ttl = await self._project_ttl(pk)
         for _ in range(_RETRIES):
             item = await self._t.get(pk, sk)
             if item is None:
@@ -767,6 +832,7 @@ class DynamoControlStore(ControlStore):
                                 "PK": pk,
                                 "SK": self._msg_sk(chat_id, msg.seq),
                                 "d": encode(msg),
+                                "ttl": ttl,
                             },
                             "condition": "attribute_not_exists(PK)",
                         }
@@ -821,7 +887,16 @@ class DynamoControlStore(ControlStore):
                 [
                     _alive(pk),
                     {"put": {"item": item, "condition": "attribute_not_exists(PK)"}},
-                    {"put": {"item": {"PK": f"A#{rec.id}", "SK": "META", "project_id": rec.project_id}}},
+                    {
+                        "put": {
+                            "item": {
+                                "PK": f"A#{rec.id}",
+                                "SK": "META",
+                                "project_id": rec.project_id,
+                                "ttl": item["ttl"],
+                            }
+                        }
+                    },
                 ]
             )
         except ConditionFailed as exc:
