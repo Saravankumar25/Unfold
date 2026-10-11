@@ -18,7 +18,7 @@ from unfold.indexing.reranker import CrossEncoderReranker
 pytestmark = pytest.mark.integration
 
 MAX_RATIO = 1.25  # expected ~0.5-0.75; the bound only has to catch a regression back to unordered batches
-REPEATS = 3
+REPEATS = 7  # min of more interleaved repeats: a loaded machine only ever adds time
 
 
 @pytest.fixture(scope="module")
