@@ -40,7 +40,7 @@ log = get_logger(__name__)
 
 SECTION_CONTEXT_TOKENS = 9_000  # brief + excerpts + facts
 MIN_EXCERPT_TOKENS = 2_000
-WRITER_PROMPT_VERSION = "5"
+WRITER_PROMPT_VERSION = "6"
 _RELATION = re.compile(
     r"\b(calls?|invokes?|imports?|reads?|writes?|queries|uses?|depends on|delegates? to|hands|forwards?|"
     r"enqueues?|publishes?|consumes?|passes)\b",

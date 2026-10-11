@@ -38,7 +38,7 @@ from unfold.security.secrets import redact_text
 
 log = get_logger(__name__)
 
-REWRITE_PROMPT_VERSION = "1"
+REWRITE_PROMPT_VERSION = "2"
 REWRITE_CONTEXT_TOKENS = 5_000
 _LABEL = re.compile(r"\bE(\d+)\b")
 _BLOCK_CHARS = 900
