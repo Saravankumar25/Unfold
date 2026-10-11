@@ -172,18 +172,29 @@ DynamoDB TTL behaviour (never relied on); 24 h / 7 d recovery; Cost Explorer vs 
   The concurrency cap is read (`ListTasks`) and then used (`RunTask`) without a lock, so two invocations racing on
   different jobs can exceed it by at most `dispatcher_max_concurrency - 1`; the Fargate vCPU quota is the hard stop.
 * Deleting a project whose task is still running removes everything at that moment; a write the task makes before
-  its next heartbeat can leave a few items under the deleted partition (no `ttl`, not found by the sweeper).
+  its next heartbeat can leave a few items under the deleted partition (not found by the sweeper). Every item of a
+  project partition and its `J#`/`H#`/`A#` pointers carry the project's `ttl`, so DynamoDB removes such leftovers
+  with the project record even when the sweeper was down past the expiry (TTL deletion is itself delayed, typically
+  by hours to two days, and reads never rely on it).
 * Chat sessions, messages, export artifacts, the delete marker and typed jobs are behind `ControlStore` on both
-  adapters. DynamoDB accepts one race that Postgres does not: two simultaneous identical export requests can both
-  create a pending export (both valid; the per-project and per-session export limits bound the cost).
+  adapters. DynamoDB's export idempotency is weaker than Postgres: two simultaneous identical export requests (a
+  double click) can both create a pending export, because the reuse check and the insert are not one atomic step
+  (both valid; the per-project hourly limiter and the per-session export limit bound the cost).
   `stale_pending_artifacts` reads the not-yet-expired part of the `ARTIFACTS` index (bounded by the 24 h lifetime and
   the limits) and filters it; a pending-only index would be needed for a very large export backlog.
 * The exporter image is the heaviest artifact (3.28 GB uncompressed, Chromium with its system packages plus the
   worker's analysis packages). It is pulled only by the `export` task, but each cold task pays that pull. Shrinking it
   (a headless-shell-only Chromium, a venv without the analysis group, since the exporter reads guides and does not
   parse repositories) is the first reduction and is not done; Fargate pull time is unmeasured (requires AWS).
-* Per-project rate-limit counters (`export:project:*`, `regenerate:project:*`) are not deleted with the project on
-  DynamoDB (`delete_prefix` is a no-op there): they hold a count and a project id and expire by TTL within hours.
+* Rate-limit windows are part of a counter's key, so DynamoDB cannot delete "by prefix". Project and session cleanup
+  delete the owner's counters by exact key for the current and the previous window (60 s and 3600 s windows, the
+  ones the routes use); a counter of an older window is not touched and expires by its own `ttl` (at most
+  two windows plus an hour).
+* The per-job LLM usage cap on DynamoDB (`CounterUsageStore.admit`) is a read of the counters followed by a
+  conditional add, not one atomic step: only the hard call cap is exact. Concurrent calls can all pass the soft
+  ceiling and token checks together and overshoot the soft ceiling, by at most the number of concurrent callers and
+  never past the hard cap. When several limits are reached at once the reason differs from the Redis script:
+  `tokens` is reported before `hard` (Lua reported `hard` first).
 * The investigation engine runs on these ports unchanged; its Fargate memory, wall clock and token budget for the
   21-stage pipeline are **not** re-measured on Fargate. The local run (section 7) and `docs/design/quality-report.md`
   give calls and tokens per guide; the task size and `JOB_TIMEOUT_SECONDS` stay the phase 4 values until a real run.
