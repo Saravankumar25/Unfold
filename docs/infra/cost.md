@@ -2,99 +2,107 @@
 
 **These are estimates, never actuals.** Nothing was deployed. Prices are the AWS Price List figures retrieved
 2026-10-09/10 and recorded in `architecture-decision.md` section 3 and 4 (us-east-1 unless stated; credits and the
-12-month free tier excluded; the always-free allowances are included). The request counts below are **measured**
-locally (section 2); everything else is an assumption written next to its number. Phase 5 re-checks this against
-measured tokens, Fargate seconds and request counts (`six-phase-plan.md`).
+12-month free tier excluded; the always-free allowances are included). Phase 5 re-checked the model against measured
+token counts, request profiles, chat latency and worker seconds (`performance.md`, measured on a laptop, 2026-10-12).
+What a laptop cannot give (Fargate speed, Lambda cold start) is an explicit assumption below and is re-measured in
+phase 6 from Cost Explorer.
 
 ## 1. Assumptions
 
 | Item | Value | Basis |
 |---|---|---|
-| Analysis task | 4 vCPU / 8 GB x86, **8 min** per analysis | laptop run of a 2 424-chunk repo took 7.7 min; Fargate unmeasured, benchmark plan in `architecture-decision.md` 4.10 |
-| Fargate price | $0.04048 per vCPU-hour, $0.004445 per GB-hour, per second, 1 min minimum | AWS Fargate pricing |
+| Analysis task | 4 vCPU / 8 GB x86 (confirmed by the profile, `performance.md` section 3), **9 min blended** per analysis (540 s) | measured on the laptop with `MODEL_THREADS=4`: a 100-chunk repository takes 70 to 80 s of local work plus 2 to 4 min of model latency, a 2 500-chunk one about 15 min (embedding 1 200 s on a loaded machine, 400 s quiet). Fargate is assumed **1.5x slower than the laptop thread** (UNVERIFIED), so 80 % small at 6 min plus 20 % large at 22 min is 9.2 min. The earlier 8 min figure came from one unloaded laptop run; this one is derived from several inputs |
+| Fargate price | $0.04048 per vCPU-hour, $0.004445 per GB-hour, per second, 1 min minimum | AWS Fargate pricing; one task-hour is $0.2025 with the public IPv4 |
 | Public IPv4 | $0.005 per hour while a task runs | VPC pricing |
-| Chat turn | 10 s at 3 GB on the API Lambda | assumption; chat now runs in the API function. With a scripted model a local turn took 1.0 to 1.3 s of retrieval and answer assembly; the provider's first token and the Lambda figure are unmeasured (require AWS) |
-| Export task | 2 vCPU / 4 GB x86, **90 s** per export (image pull, Chromium start, render, upload) | assumption; the task definition sizes are `export_cpu`/`export_memory`, the time is unmeasured on Fargate |
-| Regeneration | 4 vCPU / 8 GB analysis task, **3 min** per chapter (start, research, write, verify, revise one chapter) | assumption derived from the 8 min whole-guide figure and 6 to 10 chapters; unmeasured on Fargate |
-| Light request (poll, read) | 0.25 s at 2 GB, 3 DynamoDB reads, no S3 | measured shape: a status poll is 2 to 4 reads, no other service |
-| DynamoDB per analysis | **258 requests, about 350 WRU and 190 RRU** plus polling (about 4 RRU per poll) | measured, section 2 |
+| Chat turn | 10.2 s at 3 538 MB (35.2 GB-s) on the API Lambda | measured shape: retrieval 3.2 to 3.9 s (rerank on 2 CPUs), first token 6.6 s, full answer 10.2 s with real Gemini; Lambda speed unmeasured |
+| Export task | 2 vCPU / 4 GB x86, **90 s** per export | assumption; unmeasured on Fargate (needs AWS) |
+| Regeneration | 4 vCPU / 8 GB analysis task, **3 min** per chapter | the measured chapter (research, write, verify, revise) is 35 to 60 s of local time plus task and model load; with the 1.5x factor and the 1-minute minimum 3 min stands |
+| Light request (poll, read) | 0.25 s at 2 GB | measured: status poll 150 ms, project read 60 ms, guide read 450 ms on emulated stores |
+| DynamoDB per analysis | **about 600 WRU and 1 945 RRU** (265 RRU for the pipeline plus 240 polls of 7 RRU) | measured counts (`performance.md` section 7), units estimated from payload size |
+| DynamoDB per chat turn | 15 WRU and 13 RRU | measured, 16.5 requests per turn |
+| DynamoDB per light request | 0.3 WRU and 10 RRU | measured mix of reads (a guide read is 27 RRU, a section 11, a status read 3) |
 | SQS idle polling | about 0.65 M requests per month | five long pollers, inside the 1 M free tier |
 | S3 | 30 MB resident per project, 3-day expiry | measured artifact sizes: IR 18 KB, BM25 24 KB, dense 0.18 MB per 100 chunks, chunks object |
 | Logs | 0.5 MB per job, 14-day retention | assumption; 5 GB free |
-| ECR | api-lambda 0.31 GB + worker 0.35 GB compressed (proxy), exporter 3.28 GB uncompressed; 5 tags kept per repository | measured sizes, section 3; ECR shares identical layers between tags, so a tag costs only what changed. The $0.30 in the table assumes about 3 GB stored; five fully distinct tags of all three images would be roughly $1 to $2 per month |
+| ECR | api-lambda 0.31 GB + worker 0.35 GB compressed (proxy), exporter 3.28 GB uncompressed; 5 tags kept per repository | measured sizes (`operations.md` section 3); the $0.30 in the table assumes about 3 GB stored |
 
-## 2. Measured request profile (local, `UNFOLD_DDB_PROFILE_OUT`)
+## 2. Measured request profile
 
-One analysis of the 33-file fixture, two attempts (one retryable failure after the plan, resumed), the API reads
-that follow, and cleanup, through the real adapters on an emulator: 64 `UpdateItem`, 30 `PutItem`, 118 `GetItem`,
-31 `Query`, 6 transactions, 7 batch writes, 2 deletes. Capacity units are estimated from payload size (writes 1 WRU
-per KB, reads 0.5 RRU per 4 KB eventual / 1 consistent), about 350 WRU and 190 RRU. At $0.625 per million WRU and
-$0.125 per million RRU that is **$0.0002 per analysis**: DynamoDB is not a cost driver at any scenario below. A
-production repository with more sections and events costs a small multiple of this.
+One analysis of the 33-file fixture through the real adapters on an emulator: 262 to 268 requests (about 90 `UpdateItem`,
+125 `GetItem`, 31 `PutItem`, 12 `Query`, 3 transactions, 3 batch writes), about 600 WRU and 265 RRU; the 2 464-chunk
+input needed 403 requests, 665 WRU and 313 RRU. At $0.625 per million WRU and $0.125 per million RRU one analysis is
+**$0.0004 for the pipeline and $0.0002 for its polling**. DynamoDB stays under 4 % of every scenario.
 
 ## 3. Scenarios (us-east-1, USD per month, LLM excluded)
 
 Counts per month: **zero** 0 jobs; **occasional** 10 jobs, 100 chat turns, 3 000 light requests; **demo** 15 jobs,
 200 chats, 5 000 light, 2 hours of one provisioned warm Lambda; **moderate** 300 jobs, 3 000 chats, 100 000 light;
-**spike** 660 jobs, 20 000 chats, 500 000 light (300 plus one day at the 2-concurrent cap).
+**spike** 660 jobs, 20 000 chats, 500 000 light. Exports and regenerations are now inside compute: 3 and 2, 5 and 3,
+90 and 60, 200 and 150. One 9-minute analysis is **$0.0296 of Fargate plus $0.00075 of IPv4**.
 
-| Scenario | Compute (Fargate + Lambda) | Storage (S3, ECR) | DB I/O (DynamoDB) | API requests | Orchestration (SQS, EventBridge) | Networking (public IPv4) | Observability | **Total** | Always-on `t4g.large` |
-|---|---|---|---|---|---|---|---|---|---|
-| Zero month | 0.00 | 0.30 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | **0.30** | 55.11 |
-| Occasional | 0.26 | 0.30 | 0.01 | 0.00 | 0.00 | 0.01 | 0.00 | **0.58** | 55.11 |
-| Interview demo | 0.46 | 0.31 | 0.01 | 0.00 | 0.00 | 0.01 | 0.00 | **0.78** | 55.11 |
-| Moderate | 7.90 | 0.39 | 0.26 | 0.00 | 0.00 | 0.20 | 0.00 | **8.75** | 55.11 |
-| Spike | 24.88 | 0.52 | 0.89 | 0.00 | 0.00 | 0.44 | 0.00 | **26.73** | 55.11 |
+| Scenario | Compute (Fargate + Lambda) | Storage (S3, ECR) | DB I/O (DynamoDB) | Networking (public IPv4) | Orchestration, API requests, observability | **Total** | Previous total | Always-on `t4g.large` |
+|---|---|---|---|---|---|---|---|---|
+| Zero month | 0.00 | 0.30 | 0.00 | 0.00 | 0.00 | **0.30** | 0.30 | 55.11 |
+| Occasional | 0.32 | 0.30 | 0.01 | 0.01 | 0.00 | **0.64** | 0.61 | 55.11 |
+| Interview demo | 0.55 | 0.31 | 0.02 | 0.01 | 0.00 | **0.89** | 0.82 | 55.11 |
+| Moderate | 9.70 | 0.39 | 0.37 | 0.25 | 0.00 | **10.71** | 9.59 | 55.11 |
+| Spike | 30.77 | 0.52 | 1.35 | 0.56 | 0.00 | **33.20** | 28.77 | 55.11 |
 
-"Zero" is the only month with no workload; its $0.30 is ECR storage. There is no idle compute, database, NAT, load
-balancer, endpoint or secret-store charge. Budgets alert at 50/80/100 % of $10 per month and $3 per day (variables);
-they are alerts, not caps; the caps are the quotas in `deployment.md` section 6. Mumbai (`ap-south-1`) is within 5 %
-of these totals for the serverless design (`architecture-decision.md` 3.1) and cheaper for the EC2 comparison.
+"Previous total" is the phase 4 table plus its separate export and regeneration addition (0.03, 0.04, 0.84, 2.04).
+The new totals are 5 to 15 % higher, almost entirely the longer analysis (9 min instead of 8) and the measured,
+heavier chat Lambda. There is no idle compute, database, NAT, load balancer, endpoint or secret-store charge; the zero
+month is ECR storage. The spike's Lambda line ($9.25) is chat: 20 000 turns of 35 GB-s past the free 400 000 GB-s.
+Mumbai (`ap-south-1`) stays within about 5 % of these totals for the serverless design.
 
-### Added by the phase 3 features (export and regeneration), derived
+### Budget alarms (variables `monthly_budget_usd`, `daily_budget_usd`)
 
-The five scenarios above were computed before exports and regeneration existed on this profile. Their Fargate cost
-is `seconds x (vCPU x $0.04048/3600 + GB x $0.004445/3600 + $0.005/3600)`: one export task about **$0.0026**, one
-regeneration about **$0.0101** (assumptions in section 1). The counts per scenario are assumptions.
+The owner chose **$20 per month and $5 per day** (the Terraform defaults; this document previously said $10 and $3).
+The model supports them:
 
-| Scenario | Exports | Regenerations | Added USD per month |
-|---|---|---|---|
-| Zero month | 0 | 0 | 0.00 |
-| Occasional | 3 | 2 | 0.03 |
-| Interview demo | 5 | 3 | 0.04 |
-| Moderate | 90 | 60 | 0.84 |
-| Spike | 200 | 150 | 2.04 |
-
-Neither changes a conclusion: Fargate seconds of full analyses remain the driver. The exporter image's ECR storage is
-already inside the storage column (section 1 assumes about 3 GB of images).
+* Monthly $20 is 1.9x the moderate month ($10.71) and 30x the occasional one. Alerts at 50 / 80 / 100 % are $10 / $16 /
+  $20: the 50 % alert fires in a moderate month (about 280 analyses, a useful early signal), the 100 % alert fires
+  only between moderate and spike (the spike is $33.20), and the forecast alert fires well before. A quiet, demo or
+  occasional month never alerts.
+* Daily $5 is 14x an ordinary moderate day ($0.36). With `concurrent_analysis_tasks = 1` the most Fargate can bill in a
+  day is 24 task-hours, **$4.86**, so the alert fires only if saturation is combined with chat or Lambda spend (1 000
+  chat turns add $0.59) or after the concurrency is raised to 2 (maximum $9.72). Read it as a saturation and abuse
+  tripwire, not a spend ceiling.
+* If the concurrency limit is raised to 2, raise `daily_budget_usd` to 10 so that normal bursts do not alert.
+* Budgets cover AWS only. **Gemini spend never appears in them** (section 4), and they alert after the cost, they do
+  not cap it: the caps are the application quotas in `deployment.md` section 6.
 
 ## 4. External model spend (a parameter, not an estimate)
 
-The engine's LLM spend is **not** in the table: it is a parameter, because paid Gemini prices were not retrieved
-(UNVERIFIED) and the keys used for the runs are free tier. What exists now is the measured token and call profile of
-the engine (`evals/baselines/pipeline-v2`, `docs/design/quality-report.md`): per guide, 19 and 13 model calls and
-43 018 / 11 140 and 34 716 / 6 530 input / output tokens on the two fixture repositories (fastapi_rag, requests),
-2.5x and 1.2x the tokens of the previous pipeline. A run of the same pipeline on this AWS profile is recorded in
-`operations.md` section 7.
+LLM spend is **not** in the table: paid Gemini prices were not retrieved (UNVERIFIED) and the keys used for the runs
+are free tier. The token profile of the engine is now measured (`performance.md` section 4):
+
+| Guide | Model calls | Input / output tokens |
+|---|---|---|
+| small (15 chunks, real run) | 13 | 17k / 9k |
+| typical (about 100 chunks, two real runs) | 19 to 20 | 42k / 12k |
+| large (about 2 500 chunks, derived from prompt size) | about 25 | about 55k / 18k |
 
     llm_usd = jobs x (input_tokens_per_guide x P_in + output_tokens_per_guide x P_out) / 1e6
 
-* `P_in`, `P_out`: dollars per million tokens of the configured models (`gemini_model_*`). Unknown here.
-* Hard ceilings that exist in code and Terraform: **1.5 M tokens and 195 calls per job** (`ANALYSIS_LLM_*`), so
-  `llm_usd <= jobs x 1.5 x (P_in + P_out) / 2` for any realistic split; chat is bounded by 200 messages per session
-  per hour and 2 000 per day globally.
-* On the free tier the cost is $0 but the quota binds first: 1 000 requests per day on `gemini-3.5-flash-lite`
-  (about 170 to 200 analyses per day at 5 to 6 calls each, derived). The spike scenario is quota-bound before it is
-  money-bound.
+* `P_in`, `P_out`: dollars per million tokens of the configured models. Unknown here. For orientation only, at
+  $0.30 in / $2.50 out per million (an assumed mid-tier flash price, not the configured models, not a quote) a typical
+  guide costs $0.04, so 300 jobs a month is about $13: **the same size as the whole AWS bill**. Verify prices before
+  launch.
+* Hard ceilings in code and Terraform: 150 calls and 1.5 M tokens per job. Measured guides use 13 to 25 calls and 26k to
+  73k tokens, so the ceilings are 6x and 20x above the largest figure; they stop a runaway, they do not predict a
+  bill. A tighter ceiling (60 calls, 300k tokens) would still clear every measured guide. Chat is bounded by 200
+  messages per session per hour and 2 000 per day globally; a chat turn is one call.
+* On the free tier the cost is $0 but the quota binds first: 1 000 requests per day on `gemini-3.5-flash-lite` divided
+  by 13 to 20 calls per analysis is **about 50 to 75 analyses per day** (derived; the writer and reviser calls use
+  `gemini-3.5-flash`, whose daily quota is not recorded here). The earlier "170 to 200 per day" assumed 5 to 6 calls.
+  The spike scenario is quota-bound before it is money-bound.
 
-Example for orientation only (an assumption, not a quote): at a blended $1 per million tokens and the hard ceiling,
-a job costs at most $1.50, 10 jobs $15, 300 jobs $450. The real number replaces this once the profile is measured.
 
 ## 5. What drives cost, and the levers
 
 | Driver | Lever |
 |---|---|
-| Fargate seconds (about 90 % of the moderate bill) | task size from the benchmark matrix, chunk cap (5 000), arm64 once wheels are verified (-18 % in the model), Spot (documented, off by default) |
+| Fargate seconds (about 90 % of the moderate bill) | task size (4 vCPU / 8 GB held by the profile), `MODEL_THREADS=4`, chunk cap (5 000, 2 500 suggested), arm64 once wheels are verified (-18 % in the model), Spot (documented, off by default) |
 | LLM tokens | per-job token and call caps, model tiering, quota windows |
 | Public IPv4 per task | none needed beyond task lifetime; NAT would cost $32.85 per month fixed |
 | ECR | lifecycle keeps 5 tags; compressed size is lower than the uncompressed figure used |

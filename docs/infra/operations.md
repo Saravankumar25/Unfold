@@ -44,10 +44,13 @@ pressure (Windows, 16 GB, about 0.5 to 1 GB free, other agents running), so abso
 
 | What | Result | Meaning |
 |---|---|---|
-| `import unfold.api.main` | 1.10 to 1.37 s cumulative over three runs, 835 modules (bm25s and numpy are loaded; no store client, no onnxruntime, no networkx at import) | interpreter + imports, no store client, no ML runtime. The phase 4 figure before the phase 3 merge was 1.61 s and 677 modules; chat retrieval (bm25s, numpy) is now imported by the API process. Before the import hygiene work the imports alone were 5.6 to 14 s |
+| `import unfold.api.aws` in the `api-lambda` dependency set (phase 5 re-measure) | 7.3 to 8.0 s on a loaded Windows laptop, 1 049 modules, process start to `/health` 12.4 to 13.6 s; the same machine took 5.4 to 6.6 s on the development venv, so this is an upper bound dominated by file system and load (`fastapi` alone 2.1 s). Lambda on Linux must be measured on AWS | `performance.md` section 6.3 |
+| (earlier) `import unfold.api.main` | 1.10 to 1.37 s cumulative over three runs, 835 modules (bm25s and numpy are loaded; no store client, no onnxruntime, no networkx at import) | interpreter + imports, no store client, no ML runtime. The phase 4 figure before the phase 3 merge was 1.61 s and 677 modules; chat retrieval (bm25s, numpy) is now imported by the API process. Before the import hygiene work the imports alone were 5.6 to 14 s |
 | API request, emulated stores | see table below | handler + adapter overhead on moto; **not** a Lambda or network figure |
 | `api-lambda` image | see section 3 | |
-| 33-file fixture through the whole pipeline on moto + local models | about 12 s of pipeline time, of which about 10 s embedding | CPU-bound locally; Fargate numbers require AWS |
+| 33-file fixture (102 chunks) through the whole 21-stage pipeline, AWS profile on moto, 4 pinned CPUs, scripted model | 71 to 115 s (79 s and 71 s with `MODEL_THREADS=2` / `4`), peak RSS 1.1 to 1.4 GB; research (retrieval) is 60 % of it and the cross-encoder rerank is 85 to 95 % of each retrieval (p50 5 s tuned, 8 to 9 s at the default 6 threads) | measured in phase 5, `performance.md` sections 2 to 5. A real-model run adds 2 to 4 min of model latency. The earlier "12 s" was the pre-investigation pipeline |
+| 2 464-chunk input (this repository's `backend/src`) | 1 599 s on a loaded laptop (embedding 1 196 s), peak RSS 2.7 GB | `performance.md` section 2; the 1 800 s job timeout is marginal at this size |
+| Chat first token, scripted / real Gemini, API pinned to 2 CPUs | 4.0 s p50 (p95 5.4) / 6.6 s (n = 3), retrieval 3.2 to 3.9 s | `performance.md` section 6.2; the first chat after a cold start adds about 10 s of model loads |
 
 API layer over moto, n = 100 per endpoint (one session, one project):
 
@@ -94,7 +97,7 @@ the API reads of the finished guide and the cleanup, through the real adapters:
 | `DeleteItem` | 2 |
 | **Total** | **258** |
 
-Estimated from payload sizes: about 350 write units and 190 read units (`cost.md` section 2). The number of requests
+Estimated from payload sizes: about 350 write units and 190 read units (`cost.md` section 2). This table is the phase 4 pipeline with its API reads and cleanup. **Phase 5 re-count of the current 21-stage pipeline** (analysis only, client-side count, `performance.md` section 7): 262 to 268 requests, about 600 WRU and 265 RRU for the 33-file fixture; 403 requests, 665 WRU and 313 RRU for 2 464 chunks; one status poll is 5 requests and 7 RRU, one chat turn 16.5 requests, 15 WRU and 13 RRU. The number of requests
 does not grow with repository size except through the number of guide sections, diagrams and progress events
 (chunks are one S3 object).
 
@@ -102,7 +105,7 @@ does not grow with repository size except through the number of guide sections, 
 
 | Mode | Behaviour |
 |---|---|
-| Personal | No idle compute. First request after idle pays a Lambda cold start (image pull + imports; **unmeasured on AWS**). A job pays Fargate start + image pull (unmeasured). |
+| Personal | No idle compute. First request after idle pays a Lambda cold start (image pull + imports; imports measured locally at 5 to 8 s on a loaded Windows laptop, the Lambda figure **requires AWS**). A job pays Fargate start + image pull (requires AWS), then about 70 to 115 s of local work plus model latency for a 100-chunk repository (`performance.md`). |
 | Interview demo | Optional deliberate warm-up: one request to `/health` before the demo wakes the API Lambda; the worker image is pulled on the first task. Status is explicit (`queued`, stage labels), failures are typed. |
 | Growth / public share | Bounded everywhere: 2 active jobs per session, 20 queued, 1 concurrent task (2 after the quota raise), API reserved concurrency 5, per-IP and global creation windows. Overload returns 429 with a retry hint, never silent drops. Raising a limit is a Terraform variable. |
 
@@ -147,11 +150,13 @@ of the pipeline on this profile (moto DynamoDB and S3, embedded dense artifact, 
 coordination, real Gemini through the real gateway), `fastapi_rag`, scored by `unfold.evaluation.rubric` against
 `evals/baselines/pipeline-v2`: two runs (`gemini-3.5-flash-lite`, 19 and 20 model calls, 41.1k / 11.8k and 42.6k / 12.3k tokens in / out, one attempt each with two provider rate-limit waits, 287 s and 400 s of wall clock on a loaded laptop, which is not comparable to the 118 s of the local-stack run). Scores: coverage 4.0 / 4.0, groundedness 2.92 / 2.42, citation accuracy 4.0 / 4.0 (resolve rate 1.0), depth proxy 2.67 / 2.83, specificity 1.33 / 1.46, redundancy 3.88 / 3.93, uncertainty honesty 4.0 / 4.0; unsupported, uncited and unverified-fact counts 0. Against the v1 baseline of the gate no dimension is more than 0.3 lower (redundancy -0.12 / -0.07). Against the v2 primary run the worst gap is specificity (-0.27 / -0.14); against the v2 replicate specificity is -0.52 / -0.39 and depth proxy -0.33 / -0.17, while the two v2 runs themselves differ by 0.25 on specificity. Two runs cannot separate a backend effect from model variance: read it as no regression shown, not none. Artifacts and method: `evals/baselines/pipeline-v2-aws/` (`scripts/aws_profile_guide_run.py`); human review sheets are not filled. The retrieval swaps themselves are proven by the differential tests against Qdrant and Neo4j (`test_retrieval_backend_parity`).
 
+**Measured locally in phase 5 (2026-10-12, laptop, `performance.md`):** worker wall time per stage, peak RSS (1.1 to 1.4 GB for 100 chunks, 2.7 GB for 2 464), CPU seconds, model calls, tokens and seconds per role and chapter (real Gemini on `cli_tool`: 13 calls, 17.3k / 9.3k tokens), retrieval p50/p95 (5 s tuned, 8 to 9 s at default threads; rerank is 85 to 95 %), flow trace (under 5 ms), API non-LLM endpoints p50/p95 (n = 100), chat first token (4.0 s scripted, 6.6 s real Gemini), the API cold-start proxy and the DynamoDB request profile of the current pipeline. Findings: `MODEL_THREADS=4` on the worker (1.5x faster, default 6 oversubscribes 4 vCPU), `MODEL_THREADS=2` on the API, the 1 800 s job timeout is marginal for about 2 500 chunks (cap the chunks or raise the timeout), 4 vCPU / 8 GB stays. These replace the earlier statements that the engine profile and chat latency were not measured.
+
 **Requires a real AWS account (not run, not claimed):** Function URL + Web Adapter response streaming end to end
 through Vercel (chat first token, full answer); Lambda cold start p50/p95/p99 of the API image (it now also imports
 the retrieval stack); Fargate image pull and task start latency for the `analysis` and the 3.28 GB `export` image,
 arm64 viability, the actual `RunTask` quota (6 vCPU?), Fargate memory and wall clock of the longer 21-stage pipeline
-(the sizes are carried over from the phase 4 benchmark plan); Lambda reserved concurrency feasibility in a new
+(the 4 vCPU / 8 GB size is confirmed locally by the phase 5 profile, `performance.md` section 3; only the Fargate speed, `memory.peak` and `os.cpu_count()` need AWS); Lambda reserved concurrency feasibility in a new
 account; `clientToken` / `startedBy` behaviour (including the `export-` prefix) and the STOPPED event payload for OOM
 and spot; `GetParametersByPath` IAM resource evaluation; SSM loader and ECS `secrets` injection; the browser POST to
 S3 with real CORS and CSP and the browser following the 302 to a presigned download; IAM least-privilege completeness
@@ -195,11 +200,11 @@ DynamoDB TTL behaviour (never relied on); 24 h / 7 d recovery; Cost Explorer vs 
   ceiling and token checks together and overshoot the soft ceiling, by at most the number of concurrent callers and
   never past the hard cap. When several limits are reached at once the reason differs from the Redis script:
   `tokens` is reported before `hard` (Lua reported `hard` first).
-* The investigation engine runs on these ports unchanged; its Fargate memory, wall clock and token budget for the
-  21-stage pipeline are **not** re-measured on Fargate. The local run (section 7) and `docs/design/quality-report.md`
-  give calls and tokens per guide; the task size and `JOB_TIMEOUT_SECONDS` stay the phase 4 values until a real run.
+* The investigation engine runs on these ports unchanged. Its memory, wall clock, calls and tokens are measured locally
+  (section 7, `performance.md`); only the Fargate speed and `memory.peak` are not, so the task size stays 4 vCPU / 8 GB
+  and `JOB_TIMEOUT_SECONDS` 1 800 until a Fargate run (phase 6), with the chunk-cap caveat in `performance.md` section 2.
 * Chat runs in the API function with the in-memory graph and the dense artifact loaded per instance from S3: first
-  turn after a cold start pays the artifact loads (unmeasured). `stream=true` through the Function URL and Vercel is an
+  turn after a cold start pays the artifact loads and the model loads (about 10 s locally, `performance.md` section 6.2; the Lambda figure requires AWS). `stream=true` through the Function URL and Vercel is an
   acceptance test that requires AWS; `stream=false` always works.
 * One region per environment; no cross-region failover. Single AZ failure is absorbed by the second public subnet.
 * The tree-sitter 0.26 memory corruption is avoided by the pin `<0.26`; Linux behaviour of 0.26 was not measured.

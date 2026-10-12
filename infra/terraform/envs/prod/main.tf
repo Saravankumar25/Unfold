@@ -41,6 +41,7 @@ locals {
       ECS_CLUSTER_ARN     = module.worker.cluster_arn
       SSM_PATH_PREFIX     = module.secrets.path_prefix
       AWS_REGION_NAME     = var.region
+      MODEL_THREADS       = "4" # measured: 4 threads cut a 102-chunk analysis from ~110 s to ~71 s (docs/infra/performance.md)
     },
     local.limit_env,
   )

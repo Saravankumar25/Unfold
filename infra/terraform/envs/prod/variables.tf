@@ -144,7 +144,7 @@ variable "limits" {
     max_file_count                   = optional(number, 20000)
     max_single_file_bytes            = optional(number, 1048576)
     max_compression_ratio            = optional(number, 100)
-    chunks_per_project               = optional(number, 5000)
+    chunks_per_project               = optional(number, 2500)
     job_timeout_seconds              = optional(number, 1800)
     job_attempts                     = optional(number, 3)
     llm_calls_per_job                = optional(number, 150)
