@@ -24,3 +24,14 @@ def test_fence_stripper_is_linear_on_repeated_unclosed_tag_openers() -> None:
 def test_mermaid_directives_cannot_be_rebuilt_from_the_text_around_a_removed_one() -> None:
     out = sanitize_mermaid('A-->B %%%%{x}%%{init:{"themeCSS":"a{}"}}%%')
     assert "%%{" not in out
+
+
+def test_a_long_or_unclosed_fence_tag_opener_is_still_removed() -> None:
+    assert "<repository_data" not in strip_fence_tags("x <repository_data " + "a" * 500 + "> y")
+    assert "<repository_data" not in strip_fence_tags("<repository_data source=")
+
+
+def test_mermaid_front_matter_and_directives_cannot_be_rebuilt_in_any_order() -> None:
+    for src in ("%%%%{init}%%{init:{}}%%", "---\n---\n%%{init:{}}%%", "A-->B %%%%{{x", "%%{unclosed\nA-->B"):
+        out = sanitize_mermaid(src)
+        assert "%%{" not in out and not out.startswith("---"), (src, out)

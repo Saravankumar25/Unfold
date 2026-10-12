@@ -85,15 +85,19 @@ _HEADING = re.compile(r"^\s*(#{1,6})\s+(.*)$")
 
 def sanitize_mermaid(source: str) -> str:
     """Drop init/config directives and front-matter from untrusted Mermaid so nothing can reconfigure the renderer."""
-    lines = _clean(source).lstrip().splitlines()
+    text = _clean(source).lstrip()
+    while (cleaned := _strip_directives(text)) != text:  # removing one thing can join the text around it
+        text = cleaned
+    return text.strip()[:20_000]
+
+
+def _strip_directives(text: str) -> str:
+    lines = text.lstrip().splitlines()
     if lines and lines[0].strip() == "---":
         end = next((i for i, ln in enumerate(lines[1:], start=1) if ln.strip() == "---"), None)
         lines = lines[end + 1 :] if end is not None else lines[1:]
-    kept = [ln for ln in lines if not ln.lstrip().startswith("%%")]
-    text = "\n".join(kept)
-    while (cleaned := _INIT_DIRECTIVE.sub("", text)) != text:  # removing one can join the text around it
-        text = cleaned
-    return text.strip()[:20_000]
+    kept = "\n".join(ln for ln in lines if not ln.lstrip().startswith("%%"))
+    return _INIT_DIRECTIVE.sub("", kept).replace("%%{", "")  # an unclosed opener goes too
 
 
 def _mermaid_figure(source: str, caption: str | None = None) -> str:
