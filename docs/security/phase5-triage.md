@@ -96,3 +96,10 @@ Open, accepted: the export task still shares the worker task role (data-plane ri
 A separate least-privilege export role is a phase 6 hardening item; it needs a real account to test the `PassRole`
 change. Chromium sandboxing on Fargate is not available without extra capabilities.
 Not read line by line: the chat route and the dispatcher and sweeper handlers (covered by the red team in `redteam.md`).
+
+## 7. Phase 5 items not run before the merge
+
+* Lighthouse and `agent-skills:webperf` against a deployed frontend, Lambda cold-start measurement and the final
+  Fargate size need a real deployment; they are phase 6 verification items (`docs/deploy-log.md`).
+* The full multi-agent `claude-security` scan was replaced by the focused audit in section 6 plus the red team; run
+  it once against `main` before the first prod apply if the budget allows.

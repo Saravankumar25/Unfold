@@ -39,9 +39,9 @@ regressed and hardened in phase 5 and verified live in phase 6. It adds no phase
 |---|---|---|---|---|
 | 1 | Foundation: green gates, CI, security, ports | [x] | [x] | [x] |
 | 2 | Core pipeline end to end (local) | [x] | [x] | [x] |
-| 3 | Chat, exports, cleanup, evals, frontend contract, investigation engine | [x] | [ ] | [ ] |
-| 4 | AWS-native adapters + Terraform | [ ] | [ ] | [ ] |
-| 5 | Hardening and full verification | [ ] | [ ] | [ ] |
+| 3 | Chat, exports, cleanup, evals, frontend contract, investigation engine | [x] | [x] | [x] |
+| 4 | AWS-native adapters + Terraform | [x] | [x] | [x] |
+| 5 | Hardening and full verification | [x] | [x] | [x] |
 | 6 | Deploy to AWS and ship | n/a | n/a | n/a |
 
 Phases 1-2 are complete and unchanged by the quality strategy. Phase 3 (3A features, 3B engine) is built,
