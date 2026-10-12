@@ -418,10 +418,3 @@ def load_jsonc(text: str) -> Any:
 def line_of(text: str, index: int) -> int:
     """1-based line number of character offset `index`."""
     return text.count("\n", 0, max(index, 0)) + 1
-
-
-def find_line(text: str, pattern: str | re.Pattern[str], start: int = 0) -> int:
-    """Line of the first regex match at/after `start` (0 when absent)."""
-    rx = re.compile(pattern) if isinstance(pattern, str) else pattern
-    match = rx.search(text, start)
-    return line_of(text, match.start()) if match else 0

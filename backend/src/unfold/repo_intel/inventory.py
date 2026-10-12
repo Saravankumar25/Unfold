@@ -14,7 +14,6 @@ import os
 import posixpath
 import re
 import stat
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1000,8 +999,3 @@ def _describe(path: str, scan: _Scan, max_bytes: int, large_data: int, all_paths
         role=role,
         tier=tier,
     )
-
-
-def paths_by_role(inventory: Inventory, roles: Iterable[str]) -> list[str]:
-    wanted = set(roles)
-    return [f.path for f in inventory.files if f.role in wanted]

@@ -4,13 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-import uuid
 
 _SEP = "\x1f"
-
-
-def new_uuid() -> uuid.UUID:
-    return uuid.uuid4()
 
 
 def new_session_token() -> str:

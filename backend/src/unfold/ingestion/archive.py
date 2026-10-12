@@ -6,7 +6,6 @@ never on header-declared sizes. Nothing here executes or interprets repository c
 
 from __future__ import annotations
 
-import io
 import os
 import posixpath
 import shutil
@@ -303,13 +302,3 @@ def _strip(rel: str | None, root: str | None) -> str | None:
     if rel == root:
         return None
     return rel[len(root) + 1 :] if rel.startswith(root + "/") else rel
-
-
-def zip_bytes_from_dir(root: Path) -> bytes:
-    """Test/eval helper: zip a directory in memory (deterministic order)."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(root.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(root).as_posix())
-    return buf.getvalue()

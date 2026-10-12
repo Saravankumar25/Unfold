@@ -47,14 +47,6 @@ def problems(spec: DiagramSpec, *, max_nodes: int = MAX_NODES) -> list[str]:
     return out
 
 
-def assert_valid(spec: DiagramSpec, *, max_nodes: int = MAX_NODES) -> None:
-    issues = problems(spec, max_nodes=max_nodes)
-    if issues:
-        raise DiagramValidationError(
-            f"invalid diagram {spec.id}: {'; '.join(issues)}", detail={"issues": issues}
-        )
-
-
 def validate_spec(spec: DiagramSpec, *, max_nodes: int = MAX_NODES) -> DiagramSpec:
     """Return a repaired copy of `spec` that satisfies `problems(...) == []`."""
     if max_nodes < 2:
