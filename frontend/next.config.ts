@@ -14,6 +14,17 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
+ * Upload target of the browser's presigned ZIP POST: the bucket's regional host, e.g. `unfold-up.s3.eu-west-1.amazonaws.com`.
+ * Read when the config is evaluated (`next build`), so set it for the build. Unset: the wildcard in dev and test only;
+ * a production build then allows no S3 origin (S3 uploads are blocked until it is set).
+ */
+const uploadHost = (process.env.UPLOAD_BUCKET_HOST ?? "").trim();
+if (uploadHost && !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.amazonaws\.com(\.cn)?$/i.test(uploadHost)) {
+  throw new Error("UPLOAD_BUCKET_HOST must be a bare *.amazonaws.com host name (no scheme, path or spaces)");
+}
+const uploadOrigin = uploadHost ? `https://${uploadHost}` : isDev ? "https://*.amazonaws.com" : "";
+
+/**
  * Content-Security-Policy (audit S-6). Next injects inline bootstrap scripts, so `script-src` keeps
  * `'unsafe-inline'`; a per-request nonce needs a request proxy and fully dynamic rendering (tracked as a follow-up).
  * Everything else is closed: generated markup (Shiki, Mermaid) is DOMPurify-sanitised before it reaches the DOM,
@@ -25,8 +36,8 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  // https://*.amazonaws.com: the browser POSTs a ZIP straight to the S3 bucket with a presigned policy
-  `connect-src 'self' https://*.amazonaws.com${isDev ? " ws: wss:" : ""}`,
+  // the browser POSTs a ZIP straight to the S3 bucket with a presigned policy
+  `connect-src 'self'${uploadOrigin ? ` ${uploadOrigin}` : ""}${isDev ? " ws: wss:" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

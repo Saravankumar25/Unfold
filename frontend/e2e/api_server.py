@@ -26,7 +26,8 @@ from unfold.core.config import Settings
 from unfold.core.errors import ExportError
 from unfold.evaluation.scripted import ScriptedLLM
 from unfold.exports.pdf import PdfRenderer
-from unfold.exports.service import mark_failed, run_export
+from unfold.exports.service import run_export
+from unfold.exports.status import mark_failed
 from unfold.orchestration.pipeline import run_analysis
 from unfold.persistence.postgres.models import AnalysisJobRow, ProjectRow
 from unfold.ports import JobQueue

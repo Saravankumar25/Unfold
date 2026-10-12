@@ -1,7 +1,6 @@
 "use client";
 
 import { X } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -45,16 +44,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="status"
         className="pointer-events-none fixed bottom-4 left-1/2 z-[70] flex w-[min(420px,calc(100vw-32px))] -translate-x-1/2 flex-col gap-2"
       >
-        <AnimatePresence initial={false}>
           {items.map((t) => (
-            <motion.div
+            <div
               key={t.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.18 }}
               className={cn(
-                "pointer-events-auto flex items-start gap-3 rounded-m border bg-panel px-4 py-3 text-[13.5px] shadow-lg",
+                "toast-in pointer-events-auto flex items-start gap-3 rounded-m border bg-panel px-4 py-3 text-[13.5px] shadow-lg",
                 t.tone === "error" && "border-danger/50",
                 t.tone === "success" && "border-ok/50",
                 t.tone === "info" && "border-line-strong",
@@ -72,9 +66,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               >
                 <X size={14} aria-hidden />
               </button>
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

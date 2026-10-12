@@ -59,7 +59,7 @@ function Conversation() {
     <div className="grid h-[calc(100vh-var(--topbar-h)-42px)] min-h-[560px] lg:h-[calc(100vh-var(--topbar-h))] lg:grid-cols-[var(--sidebar-w)_1fr]">
       <div className="hidden border-r border-line lg:block">{sidebar}</div>
       {sideOpen ? <div className="fixed inset-0 z-40 lg:hidden"><button className="absolute inset-0 bg-ink/25" aria-label="Close menu" onClick={() => setSideOpen(false)} /><div className="absolute inset-y-0 left-0 w-[min(84vw,280px)] border-r border-line shadow-xl">{sidebar}<button className="absolute right-2 top-2 p-2" onClick={() => setSideOpen(false)} aria-label="Close"><X size={16} /></button></div></div> : null}
-      <section className="flex min-h-0 min-w-0 flex-col bg-paper">
+      <main className="flex min-h-0 min-w-0 flex-col bg-paper">
         <div className="flex-1 overflow-y-auto px-4 py-7 sm:px-7"><div className="mx-auto max-w-[760px]">
           {thread.historyError ? <ErrorPanel error={thread.historyError} onRetry={thread.reloadHistory} title="Couldn't load this conversation" /> : null}
           {thread.loadingHistory ? <LoadingLines label="Loading conversation…" lines={6} /> : null}
@@ -67,7 +67,7 @@ function Conversation() {
           <ChatMessages items={thread.state.items} slow={slow} onOpenEvidence={openEvidence} onRetry={(q) => void thread.send(q, mode, sectionKey)} /><div ref={bottomRef} />
         </div></div>
         <div className="border-t border-line bg-panel px-4 pb-[calc(14px+env(safe-area-inset-bottom))] pt-3"><form onSubmit={submit} className="mx-auto max-w-[760px]"><div className="mb-2 flex items-center justify-between gap-2"><Select value={mode} onChange={(e) => setMode(e.target.value as ChatMode)} aria-label="Answer mode" className="w-[150px]"><option value="default">Answer normally</option><option value="simpler">Explain simpler</option><option value="deeper">Go deeper</option><option value="quiz">Quiz me</option><option value="interview">Interview me</option></Select>{sectionKey ? <span className="flex items-center gap-1 font-mono text-[10px] text-ink-faint"><BookOpen size={11} />Guide context attached</span> : null}</div><div className="flex items-end gap-2"><textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} rows={1} placeholder="Ask about this project…" className="max-h-[120px] min-h-[44px] flex-1 resize-none rounded-[18px] border border-line-strong bg-paper px-4 py-3 text-[14px] outline-none focus:border-blueprint" /><Button type="submit" size="icon" variant="primary" aria-label="Send message" disabled={!text.trim() || thread.pending || thread.loadingHistory}><Send size={15} /></Button></div><p className="mb-0 mt-2 text-center font-mono text-[9.5px] text-ink-faint">Grounded answers can still be imperfect. Open the evidence to verify.</p></form></div>
-      </section>
+      </main>
     </div>
   </>;
 }

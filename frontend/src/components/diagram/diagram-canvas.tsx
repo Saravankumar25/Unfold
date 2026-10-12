@@ -103,6 +103,7 @@ export default function DiagramCanvas({
           if (node.type === "unfold") onSelect((node.data as UnfoldNodeData).node);
         }}
         onPaneClick={() => onSelect(null)}
+        attributionPosition="bottom-left"
         aria-label={`${spec.title} — interactive diagram`}
       >
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="var(--line-strong)" />

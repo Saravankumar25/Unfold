@@ -5,7 +5,8 @@ import { AppProviders } from "@/components/app/app-providers";
 
 const serif = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap" });
 const sans = Space_Grotesk({ subsets: ["latin"], variable: "--font-grotesk", display: "swap" });
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-plex-mono", display: "swap" });
+// optional: the mono text is small and secondary, so a late font is skipped rather than swapped in (a swap shifted the landing form, CLS 0.09)
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-plex-mono", display: "optional", adjustFontFallback: false, fallback: ["ui-monospace", "monospace"] });
 
 const description = "Turn a public repository or ZIP into a visual, evidence-grounded project guide.";
 
