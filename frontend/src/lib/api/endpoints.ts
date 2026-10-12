@@ -1,5 +1,5 @@
 /** Typed endpoint functions (LLD §20). All paths are relative to `/api/v1`. */
-import { apiClient, type ApiClient } from "./client";
+import { ApiError, apiClient, type ApiClient } from "./client";
 import type {
   ArchitectureOut,
   ArtifactOut,
@@ -21,6 +21,7 @@ import type {
   SessionCurrentOut,
   SessionOut,
   TechnicalLevel,
+  UploadTicket,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -34,7 +35,38 @@ export function createEndpoints(client: ApiClient) {
 
     // projects
     createGithubProject: (body: CreateGithubProject) => client.post<ProjectCreated>("/projects/github", body),
-    createZipProject: (input: { file: File; technical_level: TechnicalLevel; instruction: string | null }) => {
+    createZipProject: async (input: { file: File; technical_level: TechnicalLevel; instruction: string | null }) => {
+      // Preferred: browser -> S3 with a presigned POST (the API and the proxy never carry the file). A deployment
+      // without it answers 404 and the multipart route below is used (local stack).
+      let ticket: UploadTicket | null = null;
+      try {
+        ticket = await client.post<UploadTicket>("/projects/zip/upload-url", {
+          filename: input.file.name,
+          size: input.file.size,
+          technical_level: input.technical_level,
+          instruction: input.instruction,
+        });
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      }
+      if (ticket) {
+        const form = new FormData();
+        for (const [name, value] of Object.entries(ticket.fields)) form.append(name, value);
+        form.append("file", input.file, input.file.name); // the file must be the last field
+        const uploaded = await fetch(ticket.url, { method: "POST", body: form });
+        if (!uploaded.ok) {
+          throw new ApiError({
+            code: "UPLOAD_FAILED",
+            message:
+              uploaded.status === 400 || uploaded.status === 403 || uploaded.status === 413
+                ? "The upload was rejected (too large, not a ZIP, or the link expired)."
+                : "The upload could not be completed. Please try again.",
+            status: uploaded.status,
+            retryable: uploaded.status >= 500,
+          });
+        }
+        return client.post<ProjectCreated>(`/projects/${enc(ticket.project_id)}/zip/complete`);
+      }
       const form = new FormData();
       form.append("file", input.file, input.file.name);
       form.append("technical_level", input.technical_level);

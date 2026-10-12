@@ -36,6 +36,7 @@ All settings come from environment (`.env` locally, never committed).
 | Limits | `SESSION_TTL_SECONDS` (86400), `SESSION_MAX_LIFETIME_SECONDS` (259200), `MAX_ZIP_BYTES` (50 MiB), `MAX_EXTRACTED_BYTES` (300 MiB), `MAX_FILE_COUNT` (20000), `MAX_SINGLE_FILE_BYTES` (1 MiB), `MAX_PATH_DEPTH` (32), `MAX_COMPRESSION_RATIO` (100), `MAX_REPO_ARCHIVE_BYTES` (100 MiB) |
 | GitHub | `GITHUB_TOKEN` (optional; only raises API rate limit, never used for private repos) |
 | Guide | `SECTION_CONCURRENCY` (2), `RESEARCH_MAX_ROUNDS` (2), `RESEARCH_MAX_RETRIEVALS` (12), `RESEARCH_MAX_LLM_CALLS` (4), `RESEARCH_BRIEF_TOKENS` (6000), `REVISION_MAX_ROUNDS` (2), `MAX_REGENERATIONS_PER_HOUR` (6, per project), `MAX_REGENERATIONS_PER_SESSION_HOUR` (12, per session) |
+| Persistence profile | `PERSISTENCE_BACKEND` (postgres\|dynamodb), `DENSE_BACKEND` (qdrant\|artifact), `GRAPH_BACKEND` (neo4j\|memory\|off); AWS: `DYNAMODB_TABLE`, `JOBS_QUEUE_URL`, `ECS_CLUSTER_ARN`, `TASK_DEFINITION_ANALYSIS`, `TASK_DEFINITION_EXPORT`, `SUBNET_IDS`, `SECURITY_GROUP_IDS`, `SSM_PATH_PREFIX`, `PROXY_HMAC_SECRET`, `ALLOW_DIRECT_UPLOAD`, `MAX_ACTIVE_JOBS_PER_SESSION`, `MAX_QUEUED_JOBS_GLOBAL`, `MAX_CHUNKS_PER_PROJECT`, `MAX_CONCURRENT_EXPORTS`; `EXPORT_DOWNLOAD` (proxy locally, presigned on `dynamodb` unless set) |
 | Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` (unset → spans not exported, ids still logged), `OTEL_SERVICE_NAME` |
 
 `get_settings()` is lru-cached per process. Secrets are `SecretStr` and never logged.
@@ -50,6 +51,11 @@ All settings come from environment (`.env` locally, never committed).
 | diagram | `dg:{sha1(project_id␟kind␟key)[:16]}` | deterministic |
 
 ## 4. PostgreSQL schema (`unfold.persistence.postgres.models`, Alembic `migrations/`)
+
+This is the **local profile's** adapter of the `ControlStore` (section 25). Application code never touches these
+tables or rows: it reads and writes the dataclasses in `domain/records.py` (`SessionRec`, `ProjectRec`, `JobRec`,
+`SummaryRec`, `SectionRec`, `DiagramRec`, `ChatRec`, `ChatMessageRec`, `ArtifactRec`) through the port. The AWS profile
+stores the same records in DynamoDB.
 
 Child rows `ON DELETE CASCADE` from `projects`; projects cascade from `sessions`. Timestamps `TIMESTAMPTZ` UTC.
 
@@ -67,7 +73,7 @@ Child rows `ON DELETE CASCADE` from `projects`; projects cascade from `sessions`
 | `diagrams` | `id` PK, `project_id`, `kind`, `title`, `description`, `spec` JSONB, `mermaid`, `origin` (deterministic\|refined), `section_key` NULL |
 | `chat_sessions` | `id` PK, `project_id`, `title`, `summary`, `summarized_through` (int seq), `learning_state` JSONB, `created_at`, `updated_at` |
 | `chat_messages` | `id` PK, `chat_session_id`, `seq`, `role` (user\|assistant), `mode`, `content` JSONB `{text}`, `evidence` JSONB, `model_metadata` JSONB, `created_at`; UNIQUE(`chat_session_id`,`seq`) |
-| `artifacts` | `id` PK, `project_id`, `chat_session_id` NULL, `kind` (guide_pdf\|chat_pdf), `status` (pending\|ready\|failed), `object_key`, `content_type`, `size_bytes`, `error`, `created_at`, `expires_at` |
+| `artifacts` | `id` PK, `project_id`, `chat_session_id` NULL, `kind` (guide_pdf\|guide_md\|chat_pdf\|chat_md), `status` (pending\|ready\|failed), `object_key`, `content_type`, `size_bytes`, `error`, `created_at`, `expires_at` |
 | `eval_runs` | `id` PK, `suite`, `config` JSONB, `metrics` JSONB, `passed`, `created_at` |
 
 LangGraph checkpoint tables are created by `AsyncPostgresSaver.setup()` in the same database; `thread_id = job_id`.
@@ -238,7 +244,7 @@ Input hash: not built. Chapter-level reuse by input hash is not built: a project
 
 ## 19. Exports (`unfold.exports`)
 
-`exports.service.run_export(rt, export_id, renderer)` is the body of the worker task `export <id>` (ADR 0005). Guide: `GuideSectionRow`/`GuidePlanRow`/`DiagramRow` -> `render_guide_html` (Jinja2, same structured blocks, claim badges, Mermaid via the vendored bundle) -> Playwright Chromium `page.pdf(A4)`, or `render_guide_markdown`. Chat: `ChatMessageRow` -> `render_chat_html` / `render_chat_markdown`. Output goes to `projects/{id}/exports/{artifact_id}.{pdf|md}` through `BlobStore.put_bytes`, then the artifact row is `ready` with size. Chromium runs offline with every request except `data:` aborted and a CSP allowing only the hashed Mermaid script. Kinds: `guide_pdf, guide_md, chat_pdf, chat_md`.
+`exports.service.run_export(rt, export_id, renderer)` is the body of the worker task `export <id>` (ADR 0005). Guide: `ControlStore.get_plan/sections/diagrams` -> `render_guide_html` (Jinja2, same structured blocks, claim badges, Mermaid via the vendored bundle) -> Playwright Chromium `page.pdf(A4)`, or `render_guide_markdown`. Chat: `ControlStore.chat_messages` -> `render_chat_html` / `render_chat_markdown`. Output goes to `projects/{id}/exports/{artifact_id}.{pdf|md}` through `BlobStore.put_bytes`, then the artifact record is `ready` with size (`ControlStore.update_artifact`; a project marked for deletion mid-render makes the blob be removed again). Marking an export failed needs no renderer (`exports.status.mark_failed`), so the AWS control Lambdas, whose image has neither Jinja nor Chromium, can do it. Chromium runs offline with every request except `data:` aborted and a CSP allowing only the hashed Mermaid script. Kinds: `guide_pdf, guide_md, chat_pdf, chat_md`.
 
 ## 20. HTTP API (`unfold.api`, prefix `/api/v1`)
 
@@ -272,7 +278,7 @@ Deviations from ESD §24 (intentional): `GET /chats/{id}/stream` is folded into 
 
 ## 21. Cleanup & recovery (`unfold.cleanup`)
 
-`cleanup.sweeper.sweep(rt, queue=None)` (ADR 0006) is the one idempotent entry point: expired sessions and projects are marked (`projects.deleting_at`), every marked project goes through `cleanup_project` (blobs, IR cache, Qdrant points, Neo4j nodes, progress, project rate-limit and usage keys, then the project row and its cascade), emptied sessions are removed with their session rate-limit keys, stale analysis jobs (running with an old heartbeat, or queued) and exports pending > 5 min are re-enqueued, expired artifacts are deleted. A project whose analysis worker has a fresh heartbeat is deferred to the next pass. Callers: API start-up, the API's `SWEEP_INTERVAL_SECONDS` loop, `python -m unfold.worker.run sweep`. `DELETE /projects/{id}` sets the marker first, so a lost enqueue loses nothing.
+`cleanup.sweeper.sweep(rt, queue=None)` (ADR 0006) is the one idempotent entry point, written against `ControlStore` only: expired sessions and projects are marked (`ProjectRec.deleting_at`), every marked project goes through `cleanup_project` (blobs, IR cache, dense vectors, graph nodes, progress, project rate-limit keys, per-job and per-chat usage counters, then the project record and everything under it: jobs, checkpoints, sections, diagrams, chats, messages, exports), emptied sessions are removed with their session rate-limit keys, stale analysis jobs (running with an old heartbeat, or queued) and exports pending > 5 min are re-enqueued, expired artifacts are deleted. A project whose analysis worker has a fresh heartbeat is deferred to the next pass. Callers: API start-up and its `SWEEP_INTERVAL_SECONDS` loop (local profile only), `python -m unfold.worker.run sweep`, and on AWS the scheduled sweeper Lambda (`worker.dispatch.Dispatcher.sweep`), which calls it without a queue and adds the task-aware work: re-sending lost jobs after the outbox age, re-sending pending exports whose task is not running, stopping tasks past their deadline, failing dead-lettered jobs and exports, healing the cap counters. `DELETE /projects/{id}` sets the marker first, so a lost enqueue loses nothing.
 
 ## 22. Observability (`unfold.observability`)
 
@@ -306,3 +312,46 @@ structlog JSON with `request_id, project_id, job_id, trace_id, span_id, stage, p
 | evals | `evals/` + `unfold.evaluation` | offline golden metrics vs `evals/baseline.json`; online DeepEval (bounded) |
 
 `python scripts/check.py` runs ruff, format check, mypy, unit+security tests, offline evals and frontend lint/typecheck/test/build. It is the definition of "green".
+
+## 25. Persistence ports and the AWS profile (`unfold.ports`, `unfold.persistence`, phase 4)
+
+`Runtime.create(settings)` builds one bundle per `PERSISTENCE_BACKEND`; nothing else in the code base branches on it
+(the sweeper's start-up loop, which only the local API runs, is the one deliberate exception in `api.main`).
+
+**`ControlStore`** (`ports.py`). Records are plain dataclasses; a *mutator* is a pure function over the current record
+(`fn(rec) -> bool | None`, `False` = do not write) that the store may run more than once. Groups:
+
+| Group | Methods | Invariants both adapters keep |
+|---|---|---|
+| sessions | `create_session`, `session_by_token`, `update_session`, `expired_sessions`, `delete_session` | token hash unique; expiry compared by the caller on every read |
+| projects | `create_project`, `get_project`, `update_project`, `projects_of_session`, `expired_projects`, `deleting_projects`, `delete_project_data` | `expired_projects` are live ones past expiry, `deleting_projects` carry the marker; delete is complete and idempotent |
+| jobs | `add_job`, `add_regeneration`, `get_job`, `latest_job(kind?)`, `jobs_of_project`, `update_job`, `recoverable_jobs`, `active_job_counts`, `checkpoints`, `put_checkpoint` | exactly one claim wins; the first job of a project is exclusive; per-session and global caps are exact and released with the job; one non-terminal regeneration per project; jobs of a deleting project are not recoverable |
+| guide | `replace_summaries/plan/diagrams`, `summaries`, `get_plan`, `sections`, `get_section`, `update_section`, `diagrams`, `get_diagram` | replace writes the new set then drops what is not in it; section `research` and `verification` are the per-chapter checkpoints |
+| chats | `create_chat(max_per_project)`, `get_chat`, `chats_of_project`, `chat_messages(after_seq, last)`, `append_turn` | a turn is two messages written atomically with the next two `seq` values, also under concurrency; the cap holds; a deleting project takes no chat |
+| exports | `pending_artifact`, `add_artifact(reuse_since)`, `get_artifact`, `artifacts_of_project`, `update_artifact`, `delete_artifact`, `expired_artifacts`, `stale_pending_artifacts` | an identical pending export is reused, a finished one is not; a deleting project takes none |
+
+Ownership is enforced in `api.deps` (`owned_project`, `owned_chat`): a chat is reachable only through a project the
+session owns that is neither expired nor deleting; anything else is a 404.
+
+**DynamoDB layout** (`persistence/dynamodb/control.py`, one table, `docs/infra/architecture-decision.md` 4.4.1). Items
+of a project share the partition `P#<project_id>`:
+
+| Sort key | Item |
+|---|---|
+| `META` | project (`d`, `ver`, `evt_seq`; `GSI1` by session, `GSI3` `PROJECTS` by expiry or `DELETING` by marker time; `deleting` flag) |
+| `JOB#<created>#<id>` | job (`GSI2` only while non-terminal: by status and heartbeat), `CKPT#<job>#<name>` checkpoints |
+| `SUM#`, `SEC#<key>`, `DIAG#`, `PLAN` | guide content |
+| `CHAT#<id>` (+ `CHATS` counter) | chat (`message_count` is the seq source, written with `ver`) |
+| `MSG#<chat>#<seq:08d>` | message |
+| `ART#<id>` | export (`GSI3` `ARTIFACTS` by expiry) |
+| `REGEN` | marker owned by the one non-terminal regeneration; removed in the transaction that finishes it |
+| `EVT#<seq>` | progress events (owned by `ProgressStore`) |
+
+Pointer items `J#<id>`, `H#<chat>`, `A#<artifact>` map an id to its project partition. A mutation is read, mutated and
+written under `ver = <seen>` and retried; counters change in the same transaction as the job they describe.
+Cleanup deletes the pointers, then the partition except `META`, then `META`, so a crash leaves a findable project.
+
+**Known limits of the DynamoDB adapter** (also in `infra/operations.md` section 8): two simultaneous identical export
+requests can both create a pending export (Postgres serialises them; both are valid and rate-limited);
+`stale_pending_artifacts` reads the not-yet-expired part of the `ARTIFACTS` index (bounded by the 24 h lifetime and the
+per-project export limit) and filters; a record is capped at 300 KB (a chat message is far below it).

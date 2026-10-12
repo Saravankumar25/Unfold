@@ -25,7 +25,7 @@ import random
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import orjson
 from pydantic import BaseModel, ValidationError
@@ -33,11 +33,14 @@ from pydantic import BaseModel, ValidationError
 from unfold.core.config import Settings
 from unfold.core.errors import ErrorCode, GenerationError, ProviderCapacityError, ProviderError, UnfoldError
 from unfold.core.logging import get_logger
-from unfold.llm._redis import resolve
-from unfold.llm.budget import WAIT_BUDGET_S, ProviderBudget
-from unfold.llm.cache import ResponseCache
-from unfold.llm.circuit import CircuitBreaker
-from unfold.llm.key_pool import KeyPool
+from unfold.llm.coordination import (
+    WAIT_BUDGET_S,
+    BudgetPort,
+    CachePort,
+    CircuitPort,
+    KeyPoolPort,
+    UsageStore,
+)
 from unfold.llm.providers.base import (
     AuthError,
     BadRequest,
@@ -50,34 +53,21 @@ from unfold.llm.providers.base import (
 from unfold.llm.router import Candidate, ModelRouter
 from unfold.llm.schemas import CHAT_JOB_PREFIX, LLMRequest, LLMResponse, Message, Usage
 from unfold.observability.tracing import llm_calls, llm_tokens, set_attrs, span
-from unfold.persistence.redis_store import RedisStore
 from unfold.security.secrets import redact_text
 
 T = TypeVar("T", bound=BaseModel)
 R = TypeVar("R")
 
+if TYPE_CHECKING:
+    from unfold.persistence.redis_store import RedisStore
+
 log = get_logger(__name__)
 
 DEFAULT_RATE_LIMIT_COOLDOWN_S = 30.0
 MAX_TRANSIENT_RETRIES = 2
-USAGE_TTL_SECONDS = 7 * 86_400
 HARD_STOP_FACTOR = 1.3
 
 Invoke = Callable[[Provider, str, int, LLMRequest], Awaitable[R]]
-
-# KEYS: usage hash   ARGV: soft_budget, hard_budget, priority, ttl, token_budget
-#   → {1, calls} | {0, 'soft'|'hard'|'tokens'}
-_ADMIT = """
-local calls = tonumber(redis.call('HGET', KEYS[1], 'calls') or '0')
-if calls >= tonumber(ARGV[2]) then return {0, 'hard'} end
-local used = tonumber(redis.call('HGET', KEYS[1], 'input_tokens') or '0')
-  + tonumber(redis.call('HGET', KEYS[1], 'output_tokens') or '0')
-if used >= tonumber(ARGV[5]) then return {0, 'tokens'} end
-if tonumber(ARGV[3]) >= 2 and calls >= tonumber(ARGV[1]) then return {0, 'soft'} end
-local n = redis.call('HINCRBY', KEYS[1], 'calls', 1)
-redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
-return {1, n}
-"""
 
 
 # --- redaction -----------------------------------------------------------------------------------------------
@@ -142,29 +132,47 @@ class LLMGateway:
     def __init__(
         self,
         settings: Settings,
-        redis: RedisStore,
+        redis: RedisStore | None,
         providers: Mapping[str, Provider],
         *,
         prefix: str = "llm",
-        circuit: CircuitBreaker | None = None,
-        budget: ProviderBudget | None = None,
-        keys: KeyPool | None = None,
-        cache: ResponseCache | None = None,
+        circuit: CircuitPort | None = None,
+        budget: BudgetPort | None = None,
+        keys: KeyPoolPort | None = None,
+        cache: CachePort | None = None,
+        usage: UsageStore | None = None,
         backoff_base_s: float = 0.5,
         not_configured_reason: str | None = None,
     ) -> None:
+        """Coordination comes from Redis when `redis` is given; otherwise every collaborator must be passed
+        (the AWS profile builds them from the counter store, see `llm.counter_coordination`)."""
         self._settings = settings
-        self._redis = redis
         self._providers = dict(providers)
         self._prefix = prefix
         self._router = ModelRouter(self._providers)
-        self._circuit = circuit or CircuitBreaker(redis.client, prefix=prefix)
-        self._budget = budget or ProviderBudget(settings, redis.client, prefix=prefix)
-        self._keys = keys or KeyPool(redis.client, prefix=prefix)
-        self._cache = cache or ResponseCache(redis, prefix=prefix)
+        if redis is not None:
+            from unfold.llm.budget import ProviderBudget
+            from unfold.llm.cache import ResponseCache
+            from unfold.llm.circuit import CircuitBreaker
+            from unfold.llm.key_pool import KeyPool
+            from unfold.llm.usage import RedisUsageStore
+
+            circuit = circuit or CircuitBreaker(redis.client, prefix=prefix)
+            budget = budget or ProviderBudget(settings, redis.client, prefix=prefix)
+            keys = keys or KeyPool(redis.client, prefix=prefix)
+            cache = cache or ResponseCache(redis, prefix=prefix)
+            usage = usage or RedisUsageStore(redis.client, prefix=prefix)
+        if circuit is None or budget is None or keys is None or cache is None or usage is None:
+            raise ValueError("LLMGateway needs Redis or explicit circuit, budget, keys, cache and usage")
+        self._circuit, self._budget, self._keys, self._cache, self._usage = (
+            circuit,
+            budget,
+            keys,
+            cache,
+            usage,
+        )
         self._backoff = backoff_base_s
         self._not_configured_reason = not_configured_reason
-        self._admit_script = redis.client.register_script(_ADMIT)
 
     # --- introspection ------------------------------------------------------------------------------------
     @property
@@ -190,9 +198,6 @@ class LLMGateway:
             )
 
     # --- per-job accounting ----------------------------------------------------------------------------------
-    def _usage_key(self, job_id: str) -> str:
-        return f"usage:{job_id}" if self._prefix == "llm" else f"{self._prefix}:usage:{job_id}"
-
     async def _admit(self, req: LLMRequest) -> None:
         if not req.job_id:
             return
@@ -205,14 +210,12 @@ class LLMGateway:
         tokens = max(
             0, self._settings.chat_llm_token_budget if chat else self._settings.analysis_llm_token_budget
         )
-        result: Any = await self._admit_script(
-            keys=[self._usage_key(req.job_id)],
-            args=[soft, hard, int(req.priority), USAGE_TTL_SECONDS, tokens],
+        which = await self._usage.admit(
+            req.job_id, soft=soft, hard=hard, priority=int(req.priority), tokens=tokens
         )
-        if int(result[0]) == 1:
+        if which is None:
             return
-        which = result[1].decode() if isinstance(result[1], bytes) else str(result[1])
-        await resolve(self._redis.client.hincrby(self._usage_key(req.job_id), "budget_rejections", 1))
+        await self._usage.reject(req.job_id)
         raise UnfoldError(
             f"LLM call budget exhausted for this analysis ({which} limit; purpose={req.purpose})",
             code=ErrorCode.LLM_BUDGET_EXHAUSTED,
@@ -239,8 +242,6 @@ class LLMGateway:
             llm_tokens.add(usage.output_tokens, {"provider": provider, "model": model, "direction": "output"})
         if not req.job_id:
             return
-        key = self._usage_key(req.job_id)
-        pipe = self._redis.client.pipeline(transaction=False)
         incr = {
             "input_tokens": usage.input_tokens,
             "output_tokens": usage.output_tokens,
@@ -257,16 +258,11 @@ class LLMGateway:
             incr[f"model:{model}:calls"] = 1
             incr[f"model:{model}:input_tokens"] = usage.input_tokens
             incr[f"model:{model}:output_tokens"] = usage.output_tokens
-        for name, amount in incr.items():
-            if amount:
-                pipe.hincrby(key, name, int(amount))
-        pipe.expire(key, USAGE_TTL_SECONDS)
-        await pipe.execute()
+        await self._usage.add(req.job_id, {name: int(v) for name, v in incr.items() if v})
 
     async def usage(self, job_id: str) -> dict[str, Any]:
         """Per-job accounting: totals plus `by_purpose` / `by_model` breakdowns."""
-        raw = await resolve(self._redis.client.hgetall(self._usage_key(job_id)))
-        flat = {(k.decode() if isinstance(k, bytes) else str(k)): int(v) for k, v in raw.items()}
+        flat = await self._usage.read(job_id)
         out: dict[str, Any] = {
             "calls": 0,
             "input_tokens": 0,

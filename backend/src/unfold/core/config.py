@@ -6,10 +6,10 @@ import ipaddress
 import json
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy.engine import make_url
 
 # Conservative free-tier defaults. Override with LLM_MODEL_LIMITS (JSON) when providers change quotas.
 # Gemini 2.5 models are closed to new API users since 2026 (404 "no longer available"); Pro tiers have no
@@ -39,6 +39,7 @@ def _trusts_everyone(entry: str) -> bool:
 
 
 _SECRET_FIELDS = (
+    "proxy_hmac_secret",
     "gemini_api_key_1",
     "gemini_api_key_2",
     "gemini_api_key_3",
@@ -146,10 +147,49 @@ class Settings(BaseSettings):
     otel_service_name: str = "unfold"
     work_dir: str = ""
 
+    # --- phase 4 retrieval backends (appended block; the first value is the default and the parity oracle)
+    dense_backend: Literal["qdrant", "artifact"] = "qdrant"
+    graph_backend: Literal["neo4j", "memory", "off"] = "neo4j"
+    # --- end phase 4 retrieval backends
+
+    # --- phase 4 AWS profile (ADR 0010-0016). `dynamodb` switches the whole bundle: control store, progress,
+    # limiter, counters, S3 objects and chunks, SQS queue. `postgres` keeps the local stack unchanged.
+    persistence_backend: Literal["postgres", "dynamodb"] = "postgres"
+    aws_region_name: str = ""  # empty: boto3's own resolution (AWS_REGION, AWS_DEFAULT_REGION)
+    aws_endpoint_url: str = ""  # emulators only (moto server, MinIO, DynamoDB Local); never set on AWS
+    dynamodb_table: str = ""
+    jobs_queue_url: str = ""
+    ecs_cluster_arn: str = ""
+    task_definition_analysis: str = ""
+    task_definition_export: str = ""  # empty: PDF/Markdown export is not offered on this deployment
+    max_concurrent_exports: int = 1  # export tasks (Chromium) running at once
+    subnet_ids: str = ""  # comma separated
+    security_group_ids: str = ""  # comma separated
+    ssm_path_prefix: str = ""  # e.g. /unfold/dev/ ; secrets are read from here at start (core.ssm_env)
+    proxy_hmac_secret: SecretStr | None = None  # shared with the Vercel proxy; verifies X-Unfold-Client
+    allow_direct_upload: bool = True  # multipart ZIP through the API; off on Lambda (6 MB request limit)
+    upload_url_ttl_seconds: int = 600
+    max_upload_urls_per_session_per_hour: int = 10
+    max_active_jobs_per_session: int = 2
+    max_queued_jobs_global: int = 20
+    max_chunks_per_project: int = 5000
+    max_chat_messages_per_session_per_hour: int = 200
+    max_chat_messages_global_per_day: int = 2000
+    max_exports_per_session_per_hour: int = 5
+    task_stopped_resend_delay_seconds: int = 5
+    # --- end phase 4 AWS profile
+
     @field_validator(*_SECRET_FIELDS, mode="before")
     @classmethod
     def _blank_is_none(cls, v: object) -> object:
         return None if v in ("", None) else v
+
+    @model_validator(mode="after")
+    def _aws_export_download(self) -> Settings:
+        """On AWS a download is a redirect to a presigned URL: a function must not buffer a PDF (ADR 0014)."""
+        if self.persistence_backend == "dynamodb" and "export_download" not in self.model_fields_set:
+            self.export_download = "presigned"
+        return self
 
     @model_validator(mode="after")
     def _production_guard(self) -> Settings:
@@ -159,16 +199,30 @@ class Settings(BaseSettings):
         problems: list[str] = []
         if not self.cookie_secure:
             problems.append("COOKIE_SECURE must be true")
-        if self.neo4j_password.get_secret_value() == _DEV_NEO4J_PASSWORD:
+        if self.graph_backend == "neo4j" and self.neo4j_password.get_secret_value() == _DEV_NEO4J_PASSWORD:
             problems.append("NEO4J_PASSWORD is the development default")
-        if self.object_store_secret_key.get_secret_value() == _DEV_OBJECT_STORE_SECRET:
-            problems.append("OBJECT_STORE_SECRET_KEY is the development default")
-        if make_url(self.database_url).password in (None, "", "unfold"):
-            problems.append("DATABASE_URL has an empty or development password")
-        if self.object_store_access_key == _DEV_OBJECT_STORE_ACCESS_KEY:
-            problems.append("OBJECT_STORE_ACCESS_KEY is the development default")
-        if not self.trusted_proxies or any(_trusts_everyone(p) for p in self.trusted_proxies):
-            problems.append("TRUSTED_PROXY_IPS must list specific proxies, not '*' or a /0 network")
+        if self.persistence_backend == "dynamodb":
+            # PROXY_HMAC_SECRET is the API's identity key (ADR 0016); the API checks it in `create_app`, because
+            # tasks and control Lambdas run this same production profile without it.
+            for name in ("dynamodb_table", "jobs_queue_url", "object_store_bucket"):
+                if not getattr(self, name):
+                    problems.append(f"{name.upper()} is required with PERSISTENCE_BACKEND=dynamodb")
+            if self.aws_endpoint_url:
+                problems.append("AWS_ENDPOINT_URL must be empty in production")
+            # the AWS images carry neither the Qdrant nor the Neo4j client: fail here, not at the first query
+            if self.dense_backend != "artifact":
+                problems.append("DENSE_BACKEND must be artifact with PERSISTENCE_BACKEND=dynamodb")
+            if self.graph_backend != "memory":
+                problems.append("GRAPH_BACKEND must be memory with PERSISTENCE_BACKEND=dynamodb")
+        else:
+            if self.object_store_secret_key.get_secret_value() == _DEV_OBJECT_STORE_SECRET:
+                problems.append("OBJECT_STORE_SECRET_KEY is the development default")
+            if urlsplit(self.database_url).password in (None, "", "unfold"):
+                problems.append("DATABASE_URL has an empty or development password")
+            if self.object_store_access_key == _DEV_OBJECT_STORE_ACCESS_KEY:
+                problems.append("OBJECT_STORE_ACCESS_KEY is the development default")
+            if not self.trusted_proxies or any(_trusts_everyone(p) for p in self.trusted_proxies):
+                problems.append("TRUSTED_PROXY_IPS must list specific proxies, not '*' or a /0 network")
         if problems:
             raise ValueError("Unsafe production configuration: " + "; ".join(problems))
         return self

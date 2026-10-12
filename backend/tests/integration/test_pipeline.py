@@ -423,7 +423,7 @@ async def test_resuming_inside_a_stage_group_does_not_move_the_job_backwards(run
 
     project_id, job_id = await _seed(runtime, _zip_of(FIXTURE))
     try:
-        reporter = ProgressReporter(runtime.db, runtime.progress, project_id, job_id)
+        reporter = ProgressReporter(runtime.control, runtime.progress, project_id, job_id)
         assert await reporter.start(alive_within=_td(minutes=2)) == 1
         await reporter.stage(JobStage.INGESTING)
         await reporter.stage(JobStage.VALIDATING_INPUT)  # a rerun re-enters the group from its first stage

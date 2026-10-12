@@ -1,4 +1,7 @@
-"""Chunk persistence in Postgres (`chunks` table, LLD §4) — the evidence store behind every retrieval hit."""
+"""Chunk persistence (LLD §4) — the evidence store behind every retrieval hit.
+
+`ChunkRepository` keeps chunks in Postgres (the local stack). The AWS profile uses `indexing.object_chunks`.
+"""
 
 from __future__ import annotations
 

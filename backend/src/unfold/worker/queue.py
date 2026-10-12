@@ -1,8 +1,8 @@
 """`JobQueue` adapter for local runs (HLD D2): one one-shot worker process per job.
 
 `python -m unfold.worker.run analysis <job_id>` (or `export <id>`, `cleanup <id>`) is exactly what a Fargate task
-runs in the AWS adapter; only the launcher differs. No long-lived worker loop exists. The job row in Postgres is the durable queue; this adapter just
-starts processes (bounded by `MAX_CONCURRENT_JOBS`) and restarts a job whose worker asked to be retried or died.
+runs in the AWS adapter; only the launcher differs. No long-lived worker loop exists. The job row in Postgres is the
+durable queue; this adapter just starts processes (bounded by `MAX_CONCURRENT_JOBS`) and restarts a job whose worker asked to be retried or died.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ import sys
 
 from unfold.core.config import Settings
 from unfold.core.logging import get_logger
-from unfold.exports.service import mark_failed
-from unfold.orchestration.pipeline import ALIVE_WITHIN, RETRY_EXIT_CODE
+from unfold.exports.status import mark_failed
+from unfold.orchestration.constants import ALIVE_WITHIN, RETRY_EXIT_CODE
 from unfold.ports import JobQueue
 from unfold.runtime import Runtime
 from unfold.worker.recovery import fail_abandoned_job
@@ -49,8 +49,8 @@ class SubprocessJobQueue(JobQueue):
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         self._spawn(f"cleanup:{project_id}", "cleanup", project_id, 0.0)
 
-    async def enqueue_export(self, export_id: str) -> None:
-        self._spawn(f"export:{export_id}", "export", export_id, 0.0)
+    async def enqueue_export(self, export_id: str, *, defer_s: float | None = None) -> None:
+        self._spawn(f"export:{export_id}", "export", export_id, defer_s or 0.0)
 
     async def join(self) -> None:
         """Wait for every supervised task (a one-shot caller such as `worker.run sweep` needs this)."""

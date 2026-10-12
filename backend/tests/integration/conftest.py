@@ -76,6 +76,13 @@ def settings(migrated_database: str) -> Settings:
         max_sessions_per_hour=100_000,
         max_projects_per_ip_per_hour=100_000,
         max_projects_per_hour_global=100_000,
+        # the shared test database keeps `queued` jobs from earlier runs; the caps have their own tests
+        max_active_jobs_per_session=100_000,
+        max_queued_jobs_global=100_000,
+        # per-session chat and export ceilings have their own tests (they override these)
+        max_chat_messages_per_session_per_hour=100_000,
+        max_chat_messages_global_per_day=100_000,
+        max_exports_per_session_per_hour=100_000,
     )
 
 
@@ -102,9 +109,9 @@ from datetime import UTC, datetime, timedelta  # noqa: E402
 from typing import Any  # noqa: E402
 
 from unfold.core.ids import new_session_token, token_hash  # noqa: E402
+from unfold.domain.records import JobRec, ProjectRec  # noqa: E402
 from unfold.evaluation.scripted import ScriptedLLM  # noqa: E402
 from unfold.orchestration.pipeline import run_analysis  # noqa: E402
-from unfold.persistence.postgres.models import AnalysisJobRow, ProjectRow, SessionRow  # noqa: E402
 
 FIXTURE_REPO = BACKEND.parent / "evals" / "fixtures" / "repos" / "fastapi_rag"
 
@@ -132,7 +139,7 @@ class RecordingQueue:
     async def enqueue_project_cleanup(self, project_id: str) -> None:
         self.cleanups.append(project_id)
 
-    async def enqueue_export(self, export_id: str) -> None:
+    async def enqueue_export(self, export_id: str, *, defer_s: float | None = None) -> None:
         self.exports.append(export_id)
 
     async def aclose(self) -> None:
@@ -143,7 +150,7 @@ class RecordingQueue:
 class SeededProject:
     project_id: str
     job_id: str
-    session_id: uuid.UUID
+    session_id: str
     token: str
 
 
@@ -156,39 +163,27 @@ def seed_project(runtime: Runtime) -> Callable[..., Awaitable[SeededProject]]:
     ) -> SeededProject:
         now = datetime.now(UTC)
         token = new_session_token()
-        project_id = uuid.uuid4()
+        project_id = str(uuid.uuid4())
         key = f"projects/{project_id}/upload/source.zip"
         await runtime.objects.put_bytes(key, zip_of(FIXTURE_REPO), "application/zip")
-        async with runtime.db.transaction() as s:
-            session = SessionRow(
-                token_hash=token_hash(token),
-                created_at=now,
-                last_active_at=now,
-                expires_at=now + (session_expires_in or timedelta(hours=1)),
-                status="active",
-            )
-            s.add(session)
-            await s.flush()
-            s.add(
-                ProjectRow(
-                    id=project_id,
-                    session_id=session.id,
-                    input_type="zip",
-                    source_locator="fastapi_rag.zip",
-                    detected_name="fastapi_rag",
-                    technical_level="intermediate",
-                    analysis_version="test",
-                    upload_object_key=key,
-                    expires_at=now + expires_in,
-                )
-            )
-            await s.flush()
-            job = AnalysisJobRow(
-                project_id=project_id, status="queued", current_stage="RECEIVED", stage_progress={}, attempt=0
-            )
-            s.add(job)
-            await s.flush()
-            return SeededProject(str(project_id), str(job.id), session.id, token)
+        session = await runtime.control.create_session(
+            token_hash(token), now, now + (session_expires_in or timedelta(hours=1))
+        )
+        project = ProjectRec(
+            id=project_id,
+            session_id=session.id,
+            input_type="zip",
+            technical_level="intermediate",
+            analysis_version="test",
+            created_at=now,
+            expires_at=now + expires_in,
+            source_locator="fastapi_rag.zip",
+            detected_name="fastapi_rag",
+            upload_object_key=key,
+        )
+        job = JobRec(id=str(uuid.uuid4()), project_id=project_id, created_at=now)
+        await runtime.control.create_project(project, job)
+        return SeededProject(project_id, job.id, session.id, token)
 
     return seed
 

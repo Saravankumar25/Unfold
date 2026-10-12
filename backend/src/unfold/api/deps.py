@@ -9,11 +9,11 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Request
-from sqlalchemy import select
 
+from unfold.api import proxy_auth
 from unfold.core.errors import ErrorCode, NotFound, RateLimited, SessionError
 from unfold.core.ids import token_hash
-from unfold.persistence.postgres.models import ChatSessionRow, ProjectRow, SessionRow
+from unfold.domain.records import ChatRec, ProjectRec
 from unfold.ports import session_rate_key
 from unfold.runtime import Runtime
 
@@ -30,9 +30,10 @@ RuntimeDep = Annotated[Runtime, Depends(get_runtime)]
 
 @dataclass(frozen=True)
 class CurrentSession:
-    id: uuid.UUID
+    id: str
     expires_at: datetime
     created_at: datetime
+    token_hash: str = ""
 
 
 def session_token_from(request: Request, cookie_name: str) -> str | None:
@@ -40,14 +41,10 @@ def session_token_from(request: Request, cookie_name: str) -> str | None:
     return request.cookies.get(cookie_name)
 
 
-def client_ip(request: Request) -> str:
-    """Peer address as rewritten by the trusted-proxy middleware; a forged X-Forwarded-For is never honoured.
-
-    Normalised to a rate-limit key: IPv6 clients share their /64, so rotating addresses inside one allocation
-    does not mint new buckets. A peer that is not an IP (unix socket, test transport) keeps its own capped key
-    instead of collapsing every such client into one bucket.
-    """
-    host = request.client.host if request.client else ""
+def _bucket(host: str) -> str:
+    """Normalised to a rate-limit key: IPv6 clients share their /64, so rotating addresses inside one allocation
+    does not mint new buckets. A host that is not an IP (unix socket, test transport) keeps its own capped key
+    instead of collapsing every such client into one bucket."""
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
@@ -59,19 +56,29 @@ def client_ip(request: Request) -> str:
     return str(addr)
 
 
+def client_ip(request: Request) -> str:
+    """Rate-limit key of the caller. With `PROXY_HMAC_SECRET` set (AWS) it is the address the Vercel proxy
+    signed, or the shared `unverified` bucket; otherwise the peer address as rewritten by the trusted-proxy
+    middleware. A forged X-Forwarded-For is never honoured."""
+    runtime: Runtime | None = getattr(getattr(request.scope.get("app"), "state", None), "runtime", None)
+    key = runtime.settings.proxy_hmac_secret if runtime is not None else None
+    if key is not None:
+        ip = proxy_auth.verified_ip(request.headers.get(proxy_auth.HEADER), key.get_secret_value().encode())
+        return _bucket(ip) if ip else proxy_auth.UNVERIFIED
+    return _bucket(request.client.host if request.client else "")
+
+
 async def require_session(request: Request, rt: RuntimeDep) -> CurrentSession:
     token = session_token_from(request, rt.settings.session_cookie_name)
     if not token or len(token) > 200:
         raise SessionError("A session is required. Create one with POST /api/v1/sessions.")
-    async with rt.db.session() as s:
-        row = (
-            await s.execute(select(SessionRow).where(SessionRow.token_hash == token_hash(token)))
-        ).scalar_one_or_none()
+    row = await rt.control.session_by_token(token_hash(token))
     if row is None:
         raise SessionError("Unknown session.", code=ErrorCode.SESSION_EXPIRED)
+    # compared on every read: a store's own expiry (TTL) is a storage backstop and may lag by days
     if row.status != "active" or row.expires_at <= datetime.now(UTC):
         raise SessionError("Your session has expired.", code=ErrorCode.SESSION_EXPIRED)
-    return CurrentSession(row.id, row.expires_at, row.created_at)
+    return CurrentSession(row.id, row.expires_at, row.created_at, row.token_hash)
 
 
 SessionDep = Annotated[CurrentSession, Depends(require_session)]
@@ -84,11 +91,9 @@ def parse_uuid(value: str) -> uuid.UUID:
         raise NotFound("Not found.") from exc
 
 
-async def owned_project(rt: Runtime, session: CurrentSession, project_id: str) -> ProjectRow:
-    """404 (not 403) on foreign ids so project ids are not enumerable."""
-    pid = parse_uuid(project_id)
-    async with rt.db.session() as s:
-        row = await s.get(ProjectRow, pid)
+async def owned_project(rt: Runtime, session: CurrentSession, project_id: str) -> ProjectRec:
+    """404 (not 403) on foreign ids so project ids are not enumerable. Expired or deleting counts as missing."""
+    row = await rt.control.get_project(str(parse_uuid(project_id)))
     if (
         row is None
         or row.session_id != session.id
@@ -99,19 +104,15 @@ async def owned_project(rt: Runtime, session: CurrentSession, project_id: str) -
     return row
 
 
-async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tuple[ChatSessionRow, ProjectRow]:
-    cid = parse_uuid(chat_id)
-    async with rt.db.session() as s:
-        chat = await s.get(ChatSessionRow, cid)
-        project = await s.get(ProjectRow, chat.project_id) if chat else None
-    if (
-        chat is None
-        or project is None
-        or project.session_id != session.id
-        or project.deleting_at is not None
-        or project.expires_at <= datetime.now(UTC)
-    ):
+async def owned_chat(rt: Runtime, session: CurrentSession, chat_id: str) -> tuple[ChatRec, ProjectRec]:
+    """The chat and its project; 404 unless the project is the session's and alive (same rule as projects)."""
+    chat = await rt.control.get_chat(str(parse_uuid(chat_id)))
+    if chat is None:
         raise NotFound("Chat not found.")
+    try:
+        project = await owned_project(rt, session, chat.project_id)
+    except NotFound:
+        raise NotFound("Chat not found.") from None
     return chat, project
 
 

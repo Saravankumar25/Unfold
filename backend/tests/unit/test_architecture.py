@@ -8,8 +8,9 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[2] / "src" / "unfold"
 
 
-def _modules() -> dict[str, set[str]]:
-    """module dotted name -> set of imported absolute module names."""
+def _modules(*, names: bool = False) -> dict[str, set[str]]:
+    """module dotted name -> set of imported absolute module names. With `names`, `from a import b` also counts
+    as importing `a.b` (it may be a module)."""
     out: dict[str, set[str]] = {}
     for path in SRC.rglob("*.py"):
         rel = path.relative_to(SRC.parent).with_suffix("")
@@ -21,11 +22,14 @@ def _modules() -> dict[str, set[str]]:
                 imports.update(a.name for a in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                 imports.add(node.module)
+                if names:
+                    imports.update(f"{node.module}.{a.name}" for a in node.names)
         out[name] = imports
     return out
 
 
 MODULES = _modules()
+MODULES_WITH_NAMES = _modules(names=True)
 
 
 def _pkg(mod: str) -> str:
@@ -89,11 +93,20 @@ _REDIS_COORDINATION = {
     "unfold.llm.circuit",
     "unfold.llm.key_pool",
 }
+_AWS_ADAPTERS = {
+    "unfold.persistence.s3_store",
+    "unfold.persistence.dynamodb.table",
+    "unfold.persistence.ssm_secrets",
+    "unfold.worker.sqs_queue",
+    "unfold.worker.dispatch",
+}
 _ADAPTER_SDKS = {
     "redis": {"unfold.persistence.redis_store", *_REDIS_COORDINATION},
     "minio": {"unfold.persistence.object_store"},
     "arq": set(),  # replaced by one-shot workers (ADR 0003)
-    "boto3": set(),  # the S3 adapter lands in phase 4 and is added here then
+    # the AWS adapters (ADR 0010-0014): S3, DynamoDB, SQS, ECS; `botocore` only for their error types
+    "boto3": _AWS_ADAPTERS,
+    "botocore": _AWS_ADAPTERS,
 }
 
 
@@ -121,3 +134,39 @@ def test_chat_and_exports_reach_models_only_through_the_gateway_contract() -> No
                 assert imp != "unfold.llm.gateway" and not imp.startswith("unfold.llm.providers"), (
                     f"{mod} imports {imp}"
                 )
+
+
+_ENGINE = {
+    "unfold.orchestration.pipeline",
+    "unfold.guide.plan",
+    "unfold.guide.research",
+    "unfold.guide.write",
+    "unfold.guide.verify",
+    "unfold.guide.revise",
+    "unfold.guide.rewrite",
+    "unfold.guide.critique",
+    "unfold.understand.architecture",
+    "unfold.understand.repomap",
+}
+
+
+def _reachable(start: str) -> set[str]:
+    seen: set[str] = set()
+    todo = [start]
+    while todo:
+        mod = todo.pop()
+        for imp in MODULES_WITH_NAMES.get(mod, ()):
+            if imp.startswith("unfold.") and imp not in seen:
+                seen.add(imp)
+                todo.append(imp)
+    return seen
+
+
+def test_the_investigation_engine_runs_in_the_worker_never_in_the_api() -> None:
+    """The investigator, verifier, reviser and regenerate are Fargate work (ADR 0011, 0017): the API function may
+    only record a job. Nothing under `unfold.api` may reach the pipeline or its stages, directly or by a helper."""
+    for mod in MODULES:
+        if _pkg(mod) != "api":
+            continue
+        reached = _reachable(mod)
+        assert not reached & _ENGINE, f"{mod} reaches the engine: {sorted(reached & _ENGINE)}"

@@ -30,8 +30,8 @@ from unfold.guide.models import (
 )
 from unfold.guide.research import render_brief
 from unfold.indexing.models import Chunk
-from unfold.indexing.store import ChunkRepository
 from unfold.llm.schemas import LLMClient, LLMRequest, Message
+from unfold.ports import ChunkStore
 from unfold.retrieval.models import RetrievalPlan, RetrievalResult, RetrievalTrace, RetrievedItem
 from unfold.security.fence import UNTRUSTED_POLICY, untrusted
 from unfold.security.secrets import redact_text
@@ -169,7 +169,7 @@ def _edge_ids(text: str, edges: Sequence[EdgeRef]) -> list[str]:
 
 async def write_chapter(
     llm: LLMClient,
-    chunks: ChunkRepository,
+    chunks: ChunkStore,
     plan: ChapterPlan,
     brief: ResearchBrief,
     facts: Sequence[str],

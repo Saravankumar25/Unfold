@@ -23,6 +23,10 @@ Never hard-code ports; always go through `unfold.core.config.Settings`.
 - `core` and `domain` import nothing else from `unfold` (except each other and `security.secrets` for log redaction).
 - Provider SDKs (`google.genai`, groq HTTP) are imported **only** under `unfold.llm.providers`.
 - All model calls go through `unfold.llm.schemas.LLMClient` (implemented by `unfold.llm.gateway.LLMGateway`).
+- Persistence goes through the ports in `unfold.ports` (`ControlStore`, `ChunkStore`, `BlobStore`/`UploadStore`,
+  `ProgressStore`, `RateLimiter`, `CounterStore`, `JobQueue`). `PERSISTENCE_BACKEND` picks the profile: `postgres`
+  (local stack) or `dynamodb` (AWS). Only adapters import `boto3`/`botocore`/`redis`/`minio`; the AWS
+  profile and the AWS images must import none of the local-stack packages (`tests/unit/test_aws_profile.py`).
 - `unfold.api` and `unfold.worker` are the only composition roots; they build one `unfold.runtime.Runtime`.
   Library code receives stores/clients as arguments — never constructs clients or reads settings globally
   except via an injected `Settings`.

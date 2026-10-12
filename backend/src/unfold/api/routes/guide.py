@@ -8,10 +8,10 @@ a job and asks the queue to run it.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
-from sqlalchemy import Select, select
 
 from unfold.api.deps import RuntimeDep, SessionDep, enforce_rate_limit, owned_project
 from unfold.api.routes.projects import latest_job
@@ -30,16 +30,8 @@ from unfold.core.logging import get_logger
 from unfold.diagrams.models import DiagramSpec
 from unfold.domain.enums import JobStage, JobStatus
 from unfold.domain.models import ClaimRecord, EvidenceRef
+from unfold.domain.records import DiagramRec, JobRec, ProjectRec, SectionRec
 from unfold.guide.models import GuidePlan, SectionContent
-from unfold.indexing.store import ChunkRepository
-from unfold.persistence.postgres.models import (
-    AnalysisJobRow,
-    DiagramRow,
-    GuidePlanRow,
-    GuideSectionRow,
-    ProjectRow,
-    SummaryRow,
-)
 from unfold.ports import JobQueue, project_rate_key
 from unfold.project_ir.snapshot import load_ir
 from unfold.runtime import Runtime
@@ -50,15 +42,14 @@ router = APIRouter(prefix="/projects", tags=["guide"])
 log = get_logger(__name__)
 
 
-async def _plan(rt: Runtime, project: ProjectRow) -> GuidePlan:
-    async with rt.db.session() as s:
-        row = await s.get(GuidePlanRow, project.id)
-    if row is None:
+async def _plan(rt: Runtime, project: ProjectRec) -> GuidePlan:
+    stored = await rt.control.get_plan(project.id)
+    if stored is None:
         raise ProjectNotReady("The guide is not ready yet.")
-    return GuidePlan.model_validate(row.plan)
+    return GuidePlan.model_validate(stored)
 
 
-def _summary(row: GuideSectionRow, kind: str, minutes: float) -> GuideSectionSummary:
+def _summary(row: SectionRec, kind: str, minutes: float) -> GuideSectionSummary:
     content = SectionContent.model_validate(row.content) if row.content else None
     return GuideSectionSummary(
         key=row.section_key,
@@ -75,18 +66,7 @@ def _summary(row: GuideSectionRow, kind: str, minutes: float) -> GuideSectionSum
 async def get_guide(project_id: str, rt: RuntimeDep, session: SessionDep) -> GuideOut:
     project = await owned_project(rt, session, project_id)
     plan = await _plan(rt, project)
-    async with rt.db.session() as s:
-        rows = (
-            (
-                await s.execute(
-                    select(GuideSectionRow)
-                    .where(GuideSectionRow.project_id == project.id)
-                    .order_by(GuideSectionRow.position)
-                )
-            )
-            .scalars()
-            .all()
-        )
+    rows = await rt.control.sections(project.id)
     spec = {sec.key: sec for sec in plan.sections}
     sections = [
         _summary(
@@ -97,7 +77,7 @@ async def get_guide(project_id: str, rt: RuntimeDep, session: SessionDep) -> Gui
         for r in rows
     ]
     return GuideOut(
-        project_id=str(project.id), estimated_read_minutes=plan.estimated_read_minutes, sections=sections
+        project_id=project.id, estimated_read_minutes=plan.estimated_read_minutes, sections=sections
     )
 
 
@@ -105,14 +85,7 @@ async def get_guide(project_id: str, rt: RuntimeDep, session: SessionDep) -> Gui
 async def get_section(project_id: str, key: str, rt: RuntimeDep, session: SessionDep) -> GuideSectionOut:
     project = await owned_project(rt, session, project_id)
     plan = await _plan(rt, project)
-    async with rt.db.session() as s:
-        row = (
-            await s.execute(
-                select(GuideSectionRow).where(
-                    GuideSectionRow.project_id == project.id, GuideSectionRow.section_key == key
-                )
-            )
-        ).scalar_one_or_none()
+    row = await rt.control.get_section(project.id, key)
     if row is None:
         raise NotFound("Section not found.")
     spec = next((sec for sec in plan.sections if sec.key == key), None)
@@ -143,7 +116,7 @@ async def get_section(project_id: str, key: str, rt: RuntimeDep, session: Sessio
 @router.get("/{project_id}/evidence/{chunk_id}", response_model=EvidenceOut)
 async def get_evidence(project_id: str, chunk_id: str, rt: RuntimeDep, session: SessionDep) -> EvidenceOut:
     project = await owned_project(rt, session, project_id)
-    found = await ChunkRepository(rt.db).get_many(str(project.id), [chunk_id])
+    found = await rt.chunks.get_many(project.id, [chunk_id])
     if not found:
         raise NotFound("Evidence not found.")
     chunk = found[0]
@@ -159,7 +132,7 @@ async def get_evidence(project_id: str, chunk_id: str, rt: RuntimeDep, session: 
     )
 
 
-def _diagram_out(row: DiagramRow) -> DiagramOut:
+def _diagram_out(row: DiagramRec) -> DiagramOut:
     spec = DiagramSpec.model_validate(row.spec)
     return DiagramOut(**spec.model_dump(), mermaid=row.mermaid, origin=row.origin)
 
@@ -167,9 +140,8 @@ def _diagram_out(row: DiagramRow) -> DiagramOut:
 @router.get("/{project_id}/diagrams/{diagram_id}", response_model=DiagramOut)
 async def get_diagram(project_id: str, diagram_id: str, rt: RuntimeDep, session: SessionDep) -> DiagramOut:
     project = await owned_project(rt, session, project_id)
-    async with rt.db.session() as s:
-        row = await s.get(DiagramRow, diagram_id)
-    if row is None or row.project_id != project.id:
+    row = await rt.control.get_diagram(project.id, diagram_id)
+    if row is None:
         raise NotFound("Diagram not found.")
     return _diagram_out(row)
 
@@ -180,29 +152,9 @@ async def get_architecture(project_id: str, rt: RuntimeDep, session: SessionDep)
     if not project.ir_object_key:
         raise ProjectNotReady("The guide is not ready yet.")
     ir = await load_ir(rt.objects, project.ir_object_key)
-    async with rt.db.session() as s:
-        subsystems = (
-            (
-                await s.execute(
-                    select(SummaryRow).where(
-                        SummaryRow.project_id == project.id, SummaryRow.level == "subsystem"
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        diagram = (
-            (
-                await s.execute(
-                    select(DiagramRow).where(
-                        DiagramRow.project_id == project.id, DiagramRow.kind == "architecture"
-                    )
-                )
-            )
-            .scalars()
-            .first()
-        )
+    subsystems = await rt.control.summaries(project.id, "subsystem")
+    diagrams = await rt.control.diagrams(project.id, "architecture")
+    diagram = diagrams[0] if diagrams else None
     counts: dict[str, int] = {
         "files": len(ir.files),
         "symbols": len(ir.symbols),
@@ -231,22 +183,10 @@ async def get_architecture(project_id: str, rt: RuntimeDep, session: SessionDep)
     )
 
 
-def _running_regeneration(project_id: uuid.UUID) -> Select[Any]:
-    return (
-        select(AnalysisJobRow)
-        .where(
-            AnalysisJobRow.project_id == project_id,
-            AnalysisJobRow.kind == "regenerate",
-            AnalysisJobRow.status.in_([JobStatus.QUEUED.value, JobStatus.RUNNING.value]),
-        )
-        .limit(1)
-    )
-
-
-def _same_chapter(job: AnalysisJobRow, key: str) -> RegenerateCreated:
+def _same_chapter(job: JobRec, key: str) -> RegenerateCreated:
     if job.section_key != key:  # one regeneration at a time per project: two would race on the same stores
         raise Conflict(f"The chapter '{job.section_key}' is being regenerated; try again when it is done.")
-    return RegenerateCreated(job_id=str(job.id), section_key=key)
+    return RegenerateCreated(job_id=job.id, section_key=key)
 
 
 @router.post(
@@ -263,14 +203,14 @@ async def regenerate_section(
     plan = await _plan(rt, project)
     if section_key not in {s.key for s in plan.sections}:
         raise NotFound("Section not found.")
-    if (await latest_job(rt, project.id)).status != JobStatus.SUCCEEDED.value:
+    analysis = await latest_job(rt, project.id)
+    if analysis.status != JobStatus.SUCCEEDED.value:
         raise ProjectNotReady("The guide is not ready yet.")
-    async with rt.db.session() as s:
-        running = (await s.execute(_running_regeneration(project.id))).scalar_one_or_none()
-    if running is not None:
+    running = await rt.control.latest_job(project.id, "regenerate")
+    if running is not None and not running.terminal:
         return _same_chapter(running, section_key)
     cfg = rt.settings
-    # the limiter is a network call: keep it outside the transaction (a slot lost to a later failure is cheap)
+    # Every cheap check is above; a slot lost to a later failure (a project deleted meanwhile) is cheap.
     if not await rt.limiter.hit(
         project_rate_key("regenerate", project.id), cfg.max_regenerations_per_hour, 3600
     ):
@@ -278,35 +218,24 @@ async def regenerate_section(
             f"At most {cfg.max_regenerations_per_hour} chapter regenerations per project per hour."
         )
     await enforce_rate_limit(rt, session, "regenerate", cfg.max_regenerations_per_session_hour, 3600)
-    async with rt.db.transaction() as s:
-        # the project row lock serialises concurrent requests and refuses a project deleted since the lookup
-        alive = (
-            await s.execute(
-                select(ProjectRow.id)
-                .where(ProjectRow.id == project.id, ProjectRow.deleting_at.is_(None))
-                .with_for_update()
-            )
-        ).first()
-        if alive is None:
-            raise NotFound("Project not found.")
-        raced = (await s.execute(_running_regeneration(project.id))).scalar_one_or_none()
-        if raced is not None:
-            return _same_chapter(raced, section_key)
-        job = AnalysisJobRow(
+    job, created = await rt.control.add_regeneration(
+        JobRec(
+            id=str(uuid.uuid4()),
             project_id=project.id,
-            kind="regenerate",
-            section_key=section_key,
+            created_at=datetime.now(UTC),
             status=JobStatus.QUEUED.value,
             current_stage=JobStage.RECEIVED.value,
-            stage_progress={},
-            attempt=0,
-        )
-        s.add(job)
-        await s.flush()
-        job_id = str(job.id)
+            kind="regenerate",
+            section_key=section_key,
+        ),
+        # no analysis caps: a one-chapter redo is bounded by its own per-project and per-session limits above
+        # and by the single-regeneration marker, never by how many analyses the session has running
+    )
+    if not created:  # a concurrent request won
+        return _same_chapter(job, section_key)
     queue: JobQueue = request.app.state.queue
     try:
-        await queue.enqueue_analysis(job_id, 1)
+        await queue.enqueue_analysis(job.id, 1)
     except UnfoldError as exc:  # committed and queued: the sweeper starts it
-        log.warning("regenerate.enqueue_failed", job_id=job_id, code=exc.code.value)
-    return RegenerateCreated(job_id=job_id, section_key=section_key)
+        log.warning("regenerate.enqueue_failed", job_id=job.id, code=exc.code.value)
+    return RegenerateCreated(job_id=job.id, section_key=section_key)

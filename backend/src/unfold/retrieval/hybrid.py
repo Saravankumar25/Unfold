@@ -25,15 +25,13 @@ from unfold.core.errors import InputError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import RetrievalIntent, RetrievalMode
 from unfold.graph.models import GraphNode
-from unfold.graph.queries import GraphQueries
-from unfold.indexing.dense import DenseIndex
-from unfold.indexing.embeddings import embedder_for
+from unfold.graph.queries import GraphQueries, graph_queries_for
+from unfold.indexing.dense import DenseStore, dense_store_for
 from unfold.indexing.lexical import LexicalIndexCache
 from unfold.indexing.models import Chunk
 from unfold.indexing.reranker import CrossEncoderReranker, reranker_for
-from unfold.indexing.store import ChunkRepository
 from unfold.observability.tracing import retrieval_latency, set_attrs, span
-from unfold.ports import BlobStore
+from unfold.ports import BlobStore, ChunkStore
 from unfold.project_ir.schema import ProjectIR
 from unfold.retrieval.config import CHUNKABLE_LABELS, DEFAULT_CONFIG, FINAL_K_BY_BREADTH, RetrievalConfig
 from unfold.retrieval.errors import RetrievalFailed
@@ -87,11 +85,11 @@ class HybridRetriever:
         self,
         *,
         project_id: str,
-        chunks: ChunkRepository,
+        chunks: ChunkStore,
         lexical_cache: LexicalIndexCache,
         objects: BlobStore,
         lexical_key: str | None,
-        dense: DenseIndex | None,
+        dense: DenseStore | None,
         reranker: CrossEncoderReranker | None,
         graph: GraphQueries | None,
         ir: ProjectIR | None,
@@ -121,16 +119,15 @@ class HybridRetriever:
         config: RetrievalConfig = DEFAULT_CONFIG,
     ) -> HybridRetriever:
         """Wire every retriever from the process `Runtime` (singleton embedder / reranker / BM25 cache)."""
-        embedder = embedder_for(runtime)
         return cls(
             project_id=project_id,
-            chunks=ChunkRepository(runtime.db),
+            chunks=runtime.chunks,
             lexical_cache=lexical_cache_for(runtime),
             objects=runtime.objects,
             lexical_key=lexical_key,
-            dense=DenseIndex(runtime.qdrant, embedder, runtime.redis),
+            dense=dense_store_for(runtime),
             reranker=reranker_for(runtime),
-            graph=GraphQueries(runtime.neo4j),
+            graph=graph_queries_for(runtime, ir),
             ir=ir,
             config=config,
         )

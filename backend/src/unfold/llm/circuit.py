@@ -7,16 +7,13 @@ probe failure → OPEN again.
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Any
 
 from redis.asyncio import Redis
 
+from unfold.llm.coordination import CircuitState
 
-class CircuitState(StrEnum):
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
+__all__ = ["CircuitBreaker", "CircuitState"]
 
 
 # KEYS: hash   ARGV: open_ms, probe_lease_ms  → 1 allowed / 0 denied

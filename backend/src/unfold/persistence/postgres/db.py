@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from unfold.core.config import Settings
+from unfold.core.errors import StoreUnavailable
+
+
+@contextmanager
+def _store_outage() -> Iterator[None]:
+    """A paused or restarting database (connection-level failure, not a bad statement) is retryable: every
+    pipeline stage is checkpointed, so the job resumes."""
+    try:
+        yield
+    except DBAPIError as exc:
+        if exc.connection_invalidated or isinstance(exc, OperationalError | InterfaceError):
+            raise StoreUnavailable("The database was unreachable; try again.") from exc
+        raise
+    except ConnectionError as exc:
+        raise StoreUnavailable("The database was unreachable; try again.") from exc
 
 
 class Database:
@@ -24,13 +40,15 @@ class Database:
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
-        async with self.sessions() as s:
-            yield s
+        with _store_outage():
+            async with self.sessions() as s:
+                yield s
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[AsyncSession]:
-        async with self.sessions() as s, s.begin():
-            yield s
+        with _store_outage():
+            async with self.sessions() as s, s.begin():
+                yield s
 
     async def ping(self) -> None:
         async with self.engine.connect() as conn:

@@ -41,7 +41,7 @@ from unfold.guide.plan import PlanRefinement
 from unfold.guide.research import QuestionSet
 from unfold.guide.rewrite import RewriteDraft
 from unfold.guide.verification_models import SemanticCritique
-from unfold.indexing.dense import DenseIndex
+from unfold.indexing.dense_qdrant import DenseIndex
 from unfold.indexing.embeddings import embedder_for
 from unfold.llm.circuit import CircuitBreaker, CircuitState
 from unfold.llm.gateway import LLMGateway
