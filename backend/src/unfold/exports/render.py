@@ -85,10 +85,13 @@ _HEADING = re.compile(r"^\s*(#{1,6})\s+(.*)$")
 
 def sanitize_mermaid(source: str) -> str:
     """Drop init/config directives and front-matter from untrusted Mermaid so nothing can reconfigure the renderer."""
-    text = _clean(source).lstrip()
-    while (cleaned := _strip_directives(text)) != text:  # removing one thing can join the text around it
+    text = _clean(source).lstrip()[:20_000]  # the output is cut to this size anyway: bound the work first
+    for _ in range(32):  # removing one thing can join the text around it; each pass shrinks it
+        cleaned = _strip_directives(text)
+        if cleaned == text:
+            return text.strip()
         text = cleaned
-    return text.strip()[:20_000]
+    return ""  # still changing after 32 passes: not a diagram worth rendering
 
 
 def _strip_directives(text: str) -> str:

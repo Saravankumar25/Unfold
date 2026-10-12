@@ -35,3 +35,7 @@ def test_mermaid_front_matter_and_directives_cannot_be_rebuilt_in_any_order() ->
     for src in ("%%%%{init}%%{init:{}}%%", "---\n---\n%%{init:{}}%%", "A-->B %%%%{{x", "%%{unclosed\nA-->B"):
         out = sanitize_mermaid(src)
         assert "%%{" not in out and not out.startswith("---"), (src, out)
+
+
+def test_mermaid_sanitizer_is_fast_on_a_directive_ladder() -> None:
+    assert _seconds(sanitize_mermaid, "%%" * 10_000 + "{" * 10_000) < 2.0
