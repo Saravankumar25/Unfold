@@ -79,3 +79,20 @@ fixed with a test that failed first. Reliability defects R-1 and R-2 are in `doc
   gates phase 6.
 * `pip-audit` and `npm audit` see published advisories only; they say nothing about the vendored Mermaid bundle
   or about the Chromium build Playwright downloads.
+
+## 6. Review of the phase 4 and 5 surfaces (security audit, no Critical or High)
+
+Read-only audit of the signed proxy identity, the DynamoDB adapters, the presigned upload, archive extraction, IAM,
+the PDF renderer and the frontend proxy. Result: no Critical or High finding. Fixed:
+
+| Id | Finding | Fix | Test |
+|---|---|---|---|
+| M-1 | A presigned POST stays valid after `complete`; the file could be replaced by a tar.gz that the worker then accepted | `safe_extract(..., only="zip")` on the upload path | `tests/security/test_archive.py::test_a_swapped_upload_is_refused_when_only_zip_is_allowed` |
+| M-2 | Chromium runs without a sandbox in the export task, which had the analysis task's injected LLM and GitHub secrets | the export task definition injects no secrets (it never builds a model client) | `infra` plan checks |
+| L-1 | Public `/ready` named failing dependencies | in production the body is only `status` | existing readiness tests |
+| L-2 | `PROXY_HMAC_SECRET` only had to be non-empty | production refuses fewer than 32 characters | `test_api_refuses_a_short_proxy_secret_in_production` |
+
+Open, accepted: the export task still shares the worker task role (data-plane rights on the table and `projects/*`).
+A separate least-privilege export role is a phase 6 hardening item; it needs a real account to test the `PassRole`
+change. Chromium sandboxing on Fargate is not available without extra capabilities.
+Not read line by line: the chat route and the dispatcher and sweeper handlers (covered by the red team in `redteam.md`).

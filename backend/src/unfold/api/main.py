@@ -48,11 +48,11 @@ def create_app(
     if (
         settings.is_production
         and settings.persistence_backend == "dynamodb"
-        and settings.proxy_hmac_secret is None
+        and (settings.proxy_hmac_secret is None or len(settings.proxy_hmac_secret.get_secret_value()) < 32)
     ):
         # no address-based proxy trust behind a Function URL: the signed header is the client identity (ADR 0016)
         raise ValueError(
-            "Unsafe production configuration: PROXY_HMAC_SECRET is required with PERSISTENCE_BACKEND=dynamodb"
+            "Unsafe production configuration: PROXY_HMAC_SECRET (32+ characters) is required with PERSISTENCE_BACKEND=dynamodb"
         )
     configure_logging(settings)
     configure_tracing(settings, "api")
@@ -134,9 +134,10 @@ def create_app(
             for name, r in zip(checks, results, strict=True)
         }
         ok = all(v == "ok" for v in status.values())
-        return JSONResponse(
-            {"status": "ok" if ok else "degraded", "checks": status}, status_code=200 if ok else 503
-        )
+        body: dict[str, Any] = {"status": "ok" if ok else "degraded"}
+        if not settings.is_production:  # the Function URL is public: no dependency names or error classes
+            body["checks"] = status
+        return JSONResponse(body, status_code=200 if ok else 503)
 
     if not settings.is_production:
         from fastapi.middleware.cors import CORSMiddleware

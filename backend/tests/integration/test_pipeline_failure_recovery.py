@@ -146,6 +146,13 @@ class FlakyDB:
             yield _Session(s, self)
 
 
+def _swap_db(rt: Runtime, db: Any) -> None:
+    """Point every Postgres-backed store of the runtime at `db` (the stores keep their own reference)."""
+    rt._stores["db"] = db
+    for store, attr in ((rt.control, "_db"), (rt.progress, "_db"), (rt.chunks, "db")):
+        setattr(store, attr, db)
+
+
 class _Session:
     def __init__(self, inner: Any, db: FlakyDB) -> None:
         self._inner, self._db = inner, db
@@ -389,7 +396,7 @@ async def chain(
     c = Chain(seeded)
     flaky = FlakyDB(rt.db)
     inner = rt.db
-    rt.db = flaky  # type: ignore[assignment]
+    _swap_db(rt, flaky)
     try:
         # 1. the same job delivered twice at once; the winner is killed after research, before the first write
         a, b = FaultyLLM([Fault("guide.section", 1, Kill())]), FaultyLLM([Fault("guide.section", 1, Kill())])
@@ -507,7 +514,7 @@ async def chain(
         c.obs["redelivery_unchanged"] = {k: _frozen(r) for k, r in rows.items()} == c.obs["final_frozen"]
         yield c
     finally:
-        rt.db = inner
+        _swap_db(rt, inner)
         with contextlib.suppress(Exception):
             await cleanup_project(rt, pid)
 
@@ -789,7 +796,7 @@ async def provider_faults(
     gw = _gateway(rt)
     flaky = FlakyDB(rt.db)
     inner = rt.db
-    rt.db = flaky  # type: ignore[assignment]
+    _swap_db(rt, flaky)
     try:
         # the database refuses the checkpoint of the dense index after the vectors were written: the stage reruns
         flaky.fail_checkpoint = "dense"
@@ -834,7 +841,7 @@ async def provider_faults(
         obs["final_counts"] = await _counts(rt, pid)
         yield obs
     finally:
-        rt.db = inner
+        _swap_db(rt, inner)
         await rt.redis.delete_prefix(gw.prefix)
         with contextlib.suppress(Exception):
             await cleanup_project(rt, pid)

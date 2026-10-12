@@ -53,7 +53,7 @@ async def acquire_zip(
         raise InputError("The uploaded archive is missing.", code=ErrorCode.ZIP_INVALID)
     archive = await objects.get_file(upload_key, workdir / "upload.zip")
     limits = ExtractionLimits.from_settings(settings)
-    report = await asyncio.to_thread(safe_extract, archive, workdir / "src", limits)
+    report = await asyncio.to_thread(safe_extract, archive, workdir / "src", limits, only="zip")
     archive.unlink(missing_ok=True)
     return AcquiredSource(
         root=report.root, name=name, commit_sha=None, default_branch=None, description=None, report=report

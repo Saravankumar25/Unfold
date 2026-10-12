@@ -15,16 +15,18 @@ locals {
   tasks = merge(
     {
       analysis = {
-        image  = var.worker_image_uri
-        cpu    = var.analysis_cpu
-        memory = var.analysis_memory
+        image   = var.worker_image_uri
+        cpu     = var.analysis_cpu
+        memory  = var.analysis_memory
+        secrets = var.secrets
       }
     },
     var.enable_export_task ? {
       export = {
-        image  = var.exporter_image_uri
-        cpu    = var.export_cpu
-        memory = var.export_memory
+        image   = var.exporter_image_uri
+        cpu     = var.export_cpu
+        memory  = var.export_memory
+        secrets = {} # renders PDFs only, never calls a model: a compromised Chromium finds no keys to read
       }
     } : {},
   )
@@ -58,7 +60,7 @@ resource "aws_ecs_task_definition" "this" {
       command   = [each.key]
 
       environment = [for k, v in var.environment : { name = k, value = v }]
-      secrets     = [for k, arn in var.secrets : { name = k, valueFrom = arn }]
+      secrets     = [for k, arn in each.value.secrets : { name = k, valueFrom = arn }]
 
       logConfiguration = {
         logDriver = "awslogs"

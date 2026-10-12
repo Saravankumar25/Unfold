@@ -204,3 +204,10 @@ def test_worker_image_needs_no_local_stack_package() -> None:
         ],
     )
     assert proc.returncode == 0, proc.stderr[-800:]
+
+
+def test_api_refuses_a_short_proxy_secret_in_production() -> None:
+    from unfold.api.main import create_app
+
+    with pytest.raises(ValueError, match="32"):
+        create_app(_aws(proxy_hmac_secret="short"))

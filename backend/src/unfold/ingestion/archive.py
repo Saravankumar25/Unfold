@@ -176,10 +176,16 @@ def _copy_limited(src: IO[bytes], dst: Path, declared: int, budget: _Budget, rat
     return written
 
 
-def safe_extract(archive: Path, dest: Path, limits: ExtractionLimits) -> ExtractionReport:
-    """Extract `archive` into `dest` (must be empty/new). Raises SecurityRejection/InputError on violations."""
+def safe_extract(
+    archive: Path, dest: Path, limits: ExtractionLimits, *, only: str | None = None
+) -> ExtractionReport:
+    """Extract `archive` into `dest` (must be empty/new). Raises SecurityRejection/InputError on violations.
+
+    `only` pins the format: an upload that passed the ZIP check can be replaced before the worker reads it."""
     dest.mkdir(parents=True, exist_ok=True)
     fmt = detect_format(archive)
+    if only is not None and fmt != only:
+        raise InputError("The upload is not a ZIP archive.", code=ErrorCode.ZIP_INVALID)
     report = ExtractionReport(root=dest)
     budget = _Budget(limits, archive.stat().st_size)
     try:

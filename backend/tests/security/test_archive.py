@@ -155,3 +155,15 @@ def test_tar_traversal_rejected(tmp_path: Path) -> None:
     with pytest.raises(SecurityRejection):
         safe_extract(_tar(tmp_path, build), tmp_path / "out", LIMITS)
     assert not (tmp_path / "outside.txt").exists()
+
+
+def test_a_swapped_upload_is_refused_when_only_zip_is_allowed(tmp_path: Path) -> None:
+    """A presigned POST stays valid after the ZIP check: the worker must not accept what replaced the file."""
+    p = tmp_path / "swapped.zip"
+    with tarfile.open(p, "w:gz") as tf:
+        info = tarfile.TarInfo("a.py")
+        info.size = 2
+        tf.addfile(info, io.BytesIO(b"x\n"))
+    with pytest.raises(InputError) as exc:
+        safe_extract(p, tmp_path / "out", LIMITS, only="zip")
+    assert exc.value.code == ErrorCode.ZIP_INVALID
