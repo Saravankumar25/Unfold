@@ -20,6 +20,7 @@ from unfold.api.deps import (
     CurrentSession,
     RuntimeDep,
     SessionDep,
+    enforce_ip_limits,
     enforce_rate_limit,
     owned_chat,
     owned_project,
@@ -74,6 +75,9 @@ async def _create(
     if not await rt.limiter.hit(project_rate_key("export", project.id), cfg.max_exports_per_hour, 3600):
         raise RateLimited(f"At most {cfg.max_exports_per_hour} exports per project per hour.")
     await enforce_rate_limit(rt, session, "export", cfg.max_exports_per_session_per_hour, 3600)
+    await enforce_ip_limits(
+        rt, request, "export", cfg.max_exports_per_ip_per_hour, cfg.max_exports_global_per_hour
+    )
     rec = ArtifactRec(
         id=str(uuid.uuid4()),
         project_id=project.id,
@@ -120,6 +124,8 @@ async def _owned_artifact(rt: Runtime, session_id: str, artifact_id: str) -> Art
     row = await rt.control.get_artifact(str(parse_uuid(artifact_id)))
     project = await rt.control.get_project(row.project_id) if row else None
     if row is None or project is None or project.session_id != session_id or project.deleting_at is not None:
+        raise NotFound("Export not found.")
+    if project.expires_at <= datetime.now(UTC):
         raise NotFound("Export not found.")
     return row
 

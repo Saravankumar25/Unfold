@@ -21,7 +21,7 @@ locals {
   state_bucket = "unfold-tfstate-${var.account_id}"
   lock_table   = "unfold-tfstate-lock"
   repo         = "${var.github_owner}/${var.github_repo}"
-  oidc_arn     = aws_iam_openid_connect_provider.github.arn
+  oidc_arn     = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
   oidc_host    = "token.actions.githubusercontent.com"
 }
 
@@ -131,9 +131,17 @@ resource "aws_dynamodb_table" "lock" {
 
 # --- GitHub OIDC ----------------------------------------------------------------------------------------------
 
+# One GitHub OIDC provider exists per account. When the account already has one, reuse it (create_oidc_provider =
+# false) instead of managing, and one day destroying, something other stacks may depend on.
 resource "aws_iam_openid_connect_provider" "github" {
+  count          = var.create_oidc_provider ? 1 : 0
   url            = "https://${local.oidc_host}"
   client_id_list = ["sts.amazonaws.com"]
+}
+
+data "aws_iam_openid_connect_provider" "github" {
+  count = var.create_oidc_provider ? 0 : 1
+  url   = "https://${local.oidc_host}"
 }
 
 data "aws_iam_policy_document" "trust" {

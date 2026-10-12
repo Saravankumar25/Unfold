@@ -136,3 +136,11 @@ the fastembed and reranker models; cache them to keep the job under a few minute
    is listed in `worker_secret_names`.
 4. Push the first images (step 3 above), then apply `envs/<env>` with the image URIs.
 5. Confirm the SNS e-mail subscription for alarms (a click in the mailbox).
+
+## 6. Hardening to apply with these additions (security review, phase 5)
+
+* Pin every `uses:` to a commit SHA (the existing `ci.yml` already is; resolve `actions/cache`, `hashicorp/setup-terraform`,
+  `aws-actions/configure-aws-credentials` and `aws-actions/amazon-ecr-login` with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`).
+* The plan role trust in `infra/terraform/bootstrap/main.tf` accepts any same-repository pull request. Before enabling the
+  plan job, add a `job_workflow_ref` condition on the OIDC token (`<owner>/<repo>/.github/workflows/ci.yml@refs/heads/main`)
+  or run the plan from a protected environment, so a pull request cannot change the workflow and reuse the role.

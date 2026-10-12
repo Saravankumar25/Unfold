@@ -48,8 +48,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], int]] = [
 # KEY = "value" style assignments where the key name looks sensitive.
 _ASSIGNMENT = re.compile(
     r"""(?ix)
-    (?P<key>[A-Za-z0-9_.\-]*(?:secret|passwd|password|pwd|token|api[_-]?key|apikey|access[_-]?key|
-        private[_-]?key|client[_-]?secret|auth)[A-Za-z0-9_.\-]*)
+    (?P<key>[A-Za-z0-9_.\-]{0,40}(?:secret|passwd|password|pwd|token|api[_-]?key|apikey|access[_-]?key|
+        private[_-]?key|client[_-]?secret|auth)[A-Za-z0-9_.\-]{0,40})
     (?P<sep>\s*[:=]\s*|\s*=>\s*)
     (?P<q>["']?)(?P<val>[^\s"'`,;]{8,})(?P=q)
     """

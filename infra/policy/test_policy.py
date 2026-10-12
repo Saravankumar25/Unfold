@@ -152,7 +152,7 @@ def test_environments_have_the_expected_shape(plans: dict[str, Plan], env: str) 
     assert {r.name for r in plan.resources if r.type == "aws_lambda_function"} == {"api", "this"}
     assert len([r for r in plan.resources if r.type == "aws_lambda_function"]) == 4  # api + 3 control handlers
     assert any(r.type == "aws_sqs_queue" and r.values.get("name", "").endswith("-jobs") for r in plan.resources)
-    assert len([r for r in plan.resources if r.type == "aws_iam_role"]) == 5  # api, worker task, execution, dispatcher, scheduler
+    assert len([r for r in plan.resources if r.type == "aws_iam_role"]) == 6  # api, worker task, export task, execution, dispatcher, scheduler
     table = next(r for r in plan.resources if r.type == "aws_dynamodb_table")
     assert table.values["deletion_protection_enabled"] is True
     assert env.split("/")[-1] in table.values["name"]
@@ -187,3 +187,33 @@ def test_rule_fires_on_its_violating_fixture(plans: dict[str, Plan], rule_id: st
 
 def test_clean_fixture_satisfies_every_rule(plans: dict[str, Plan]) -> None:
     assert evaluate(plans["fixture:clean"]) == {}
+
+
+# --- the export task role is least privilege and the dispatcher can pass it ----------------------------------------
+
+
+def _statements(plan: Plan, doc: str) -> list[dict[str, Any]]:
+    resource = next(r for r in plan.config["module.iam"] if r["type"] == "aws_iam_policy_document" and r["name"] == doc)
+    return [s for s in resource["expressions"]["statement"]]
+
+
+@pytest.mark.parametrize("env", ["envs/dev", "envs/prod"])
+def test_export_task_role_is_least_privilege(plans: dict[str, Plan], env: str) -> None:
+    statements = _statements(plans[env], "export_task")
+    assert "source_policy_documents" not in next(
+        r for r in plans[env].config["module.iam"] if r["name"] == "export_task" and r["type"] == "aws_iam_policy_document"
+    )["expressions"], "the export role must not inherit another role's document"
+    actions = {a for s in statements for a in s["actions"]["constant_value"]}
+    assert actions == {
+        "dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem",
+        "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListBucket", "s3:ListBucketMultipartUploads",
+    }  # fmt: skip
+    assert not any(a == "*" or a.endswith(":*") or a.split(":")[0] in {"ssm", "sqs", "ecs", "secretsmanager", "iam"} for a in actions)
+    assert all("*" not in str(s["resources"].get("constant_value", [])) for s in statements)  # no bare '*' resource
+
+
+@pytest.mark.parametrize("env", ["envs/dev", "envs/prod"])
+def test_dispatcher_can_pass_the_export_task_role(plans: dict[str, Plan], env: str) -> None:
+    pass_role = next(s for s in _statements(plans[env], "dispatcher") if s["sid"]["constant_value"] == "PassTaskRoles")
+    refs = set(pass_role["resources"]["references"])
+    assert {"aws_iam_role.export_task.arn", "aws_iam_role.worker_task.arn", "aws_iam_role.task_execution.arn"} <= refs

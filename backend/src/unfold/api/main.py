@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from unfold import __version__
+from unfold.api import proxy_auth
 from unfold.api.deps import API_PREFIX
 from unfold.api.errors import install_error_handling
 from unfold.api.routes import chat, exports, guide, projects, sessions
@@ -107,6 +108,8 @@ def create_app(
         openapi_url=None if settings.is_production else "/api/openapi.json",
     )
     install_error_handling(app)
+    if settings.is_production and settings.proxy_hmac_secret is not None:
+        proxy_auth.require_signed(app, settings.proxy_hmac_secret.get_secret_value().encode())
     for module in (sessions, projects, guide, chat, exports):
         app.include_router(module.router, prefix=API_PREFIX)
 

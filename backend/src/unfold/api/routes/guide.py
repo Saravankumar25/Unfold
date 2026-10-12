@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from unfold.api.deps import RuntimeDep, SessionDep, enforce_rate_limit, owned_project
+from unfold.api.deps import RuntimeDep, SessionDep, enforce_ip_limits, enforce_rate_limit, owned_project
 from unfold.api.routes.projects import latest_job
 from unfold.api.schemas import (
     ArchitectureOut,
@@ -218,6 +218,13 @@ async def regenerate_section(
             f"At most {cfg.max_regenerations_per_hour} chapter regenerations per project per hour."
         )
     await enforce_rate_limit(rt, session, "regenerate", cfg.max_regenerations_per_session_hour, 3600)
+    await enforce_ip_limits(
+        rt,
+        request,
+        "regenerate",
+        cfg.max_regenerations_per_ip_per_hour,
+        cfg.max_regenerations_global_per_hour,
+    )
     job, created = await rt.control.add_regeneration(
         JobRec(
             id=str(uuid.uuid4()),
@@ -228,8 +235,9 @@ async def regenerate_section(
             kind="regenerate",
             section_key=section_key,
         ),
-        # no analysis caps: a one-chapter redo is bounded by its own per-project and per-session limits above
-        # and by the single-regeneration marker, never by how many analyses the session has running
+        # a redo is not held back by how many analyses the session has running, but it does count against the
+        # global queue so a flood of them cannot starve new analyses
+        max_queued_global=cfg.max_queued_jobs_global,
     )
     if not created:  # a concurrent request won
         return _same_chapter(job, section_key)

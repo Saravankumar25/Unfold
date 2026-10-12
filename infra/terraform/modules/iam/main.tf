@@ -1,6 +1,7 @@
-# Four runtime roles, one per principal, each scoped to the exact ARNs it needs (decision 4.6 / section 6 #10):
+# Five runtime roles, one per principal, each scoped to the exact ARNs it needs (decision 4.6 / section 6 #10):
 #   api            Lambda unfold-api
-#   worker_task    Fargate analysis/export task (what the application code may do)
+#   worker_task    Fargate analysis task (what the application code may do)
+#   export_task    Fargate export task (Chromium over repository text: reads records, writes one export object)
 #   task_execution Fargate agent (image pull, log streams, injecting SSM secrets)
 #   dispatcher     Lambda dispatcher, task_stopped and sweeper handlers
 # The deploy roles live in bootstrap (separate state). Nothing here uses a wildcard action or an access key.
@@ -146,6 +147,50 @@ resource "aws_iam_role_policy" "worker_task" {
   policy = data.aws_iam_policy_document.data_plane.json
 }
 
+# --- export task ------------------------------------------------------------------------------------------------
+# Exactly what `run_export` calls: read the project, guide, chat and artifact records (GetItem, consistent Query on
+# the table, never an index), update the artifact record, write its own object (or delete it when the project
+# vanished mid-render). No other item writes, no model keys, queue, ECS or SSM.
+
+resource "aws_iam_role" "export_task" {
+  name                 = "${var.name}-export-task"
+  assume_role_policy   = data.aws_iam_policy_document.ecs_tasks_trust.json
+  permissions_boundary = var.permissions_boundary_arn
+}
+
+data "aws_iam_policy_document" "export_task" {
+  statement {
+    sid       = "ReadRecordsUpdateArtifact"
+    actions   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem"]
+    resources = [var.table_arn]
+  }
+
+  statement {
+    sid       = "ExportObjects"
+    actions   = ["s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
+    resources = ["${var.bucket_arn}/projects/*/exports/*"]
+  }
+
+  # delete_prefix lists the key (and any multipart uploads under it) before deleting
+  statement {
+    sid       = "ListExportPrefix"
+    actions   = ["s3:ListBucket", "s3:ListBucketMultipartUploads"]
+    resources = [var.bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["projects/*/exports/*"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "export_task" {
+  name   = "runtime"
+  role   = aws_iam_role.export_task.id
+  policy = data.aws_iam_policy_document.export_task.json
+}
+
 # --- task execution -------------------------------------------------------------------------------------------
 
 resource "aws_iam_role" "task_execution" {
@@ -285,7 +330,7 @@ data "aws_iam_policy_document" "dispatcher" {
   statement {
     sid       = "PassTaskRoles"
     actions   = ["iam:PassRole"]
-    resources = [aws_iam_role.worker_task.arn, aws_iam_role.task_execution.arn]
+    resources = [aws_iam_role.worker_task.arn, aws_iam_role.export_task.arn, aws_iam_role.task_execution.arn]
 
     condition {
       test     = "StringEquals"

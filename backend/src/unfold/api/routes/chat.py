@@ -20,7 +20,14 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from unfold.api.deps import RuntimeDep, SessionDep, enforce_rate_limit, owned_chat, owned_project
+from unfold.api.deps import (
+    RuntimeDep,
+    SessionDep,
+    enforce_ip_limits,
+    enforce_rate_limit,
+    owned_chat,
+    owned_project,
+)
 from unfold.api.schemas import (
     ChatDetailOut,
     ChatMessageOut,
@@ -31,7 +38,7 @@ from unfold.api.schemas import (
 )
 from unfold.chat.models import ChatEvent
 from unfold.chat.service import require_ready, run_turn
-from unfold.core.errors import ErrorCode, RateLimited, UnfoldError
+from unfold.core.errors import ErrorCode, UnfoldError
 from unfold.core.logging import get_logger
 from unfold.domain.enums import ChatMode
 from unfold.domain.models import EvidenceRef
@@ -162,10 +169,15 @@ async def post_message(
     cfg = rt.settings
     await enforce_rate_limit(rt, session, "chat", cfg.max_chat_messages_per_minute, 60)
     await enforce_rate_limit(rt, session, "chat_hour", cfg.max_chat_messages_per_session_per_hour, 3600)
-    if not await rt.limiter.hit("chat:global", cfg.max_chat_messages_global_per_day, 86_400):
-        raise RateLimited(
-            "The service is busy; try again later."
-        )  # the daily ceiling protects the model quota
+    # the daily global ceiling protects the model quota; the per-IP one stops a single network using it all up
+    await enforce_ip_limits(
+        rt,
+        request,
+        "chat",
+        cfg.max_chat_messages_per_ip_per_day,
+        cfg.max_chat_messages_global_per_day,
+        86_400,
+    )
     events = run_turn(
         rt,
         chat,

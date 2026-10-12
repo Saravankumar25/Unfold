@@ -876,7 +876,8 @@ class DynamoControlStore(ControlStore):
         if project is None or project.deleting_at is not None:
             raise NotFound("Project not found.")
         # shortcut: two simultaneous requests can both create a pending export (Postgres serialises them);
-        # both are valid and the per-project export rate limit bounds the cost.
+        # both are valid and the per-project export rate limit bounds the cost; upgrade to a marker item (as
+        # `add_regeneration` does) if duplicate exports show up in the export metrics or the rate limit is raised.
         raced = await self.pending_artifact(rec.project_id, rec.kind, rec.chat_id, reuse_since)
         if raced is not None:
             return raced

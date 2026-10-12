@@ -161,6 +161,7 @@ module "worker" {
   exporter_image_uri      = var.exporter_image_uri
   enable_export_task      = var.enable_export_task
   task_role_arn           = module.iam.worker_task_role_arn
+  export_task_role_arn    = module.iam.export_task_role_arn
   task_execution_role_arn = module.iam.task_execution_role_arn
   log_group_name          = local.worker_log_group
   analysis_cpu            = var.analysis_cpu

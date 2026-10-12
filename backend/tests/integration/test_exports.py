@@ -297,3 +297,29 @@ async def test_a_session_has_its_own_hourly_export_ceiling(
         assert over.status_code == 429 and over.json()["error"]["code"] == "RATE_LIMITED"
     await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
     await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))
+
+
+async def test_one_network_cannot_use_up_the_global_export_ceiling(
+    open_api: Callable[..., Any], project: Seeded, runtime: Runtime
+) -> None:
+    for prefix in ("export:ip:", "export:global"):
+        await runtime.limiter.delete_prefix(prefix)
+    await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
+    await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))
+
+    def finished(art: ArtifactRec) -> bool:
+        art.status = "failed"
+        return True
+
+    for art in await runtime.control.artifacts_of_project(project.project_id):
+        await runtime.control.update_artifact(art.id, finished)
+    async with open_api(max_exports_per_ip_per_hour=1) as client:
+        client.cookies.set("unfold_session", project.token)
+        base = f"{API}/projects/{project.project_id}"
+        assert (await client.post(f"{base}/exports/guide?format=md")).status_code == 202
+        over = await client.post(f"{base}/exports/guide?format=pdf")
+        assert over.status_code == 429 and over.json()["error"]["code"] == "RATE_LIMITED"
+    for prefix in ("export:ip:", "export:global"):
+        await runtime.limiter.delete_prefix(prefix)
+    await runtime.limiter.delete_prefix(project_rate_key("export", project.project_id))
+    await runtime.limiter.delete_prefix(session_rate_key("export", project.session_id))

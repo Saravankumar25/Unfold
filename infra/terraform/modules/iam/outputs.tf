@@ -13,3 +13,7 @@ output "task_execution_role_arn" {
 output "dispatcher_role_arn" {
   value = aws_iam_role.dispatcher.arn
 }
+
+output "export_task_role_arn" {
+  value = aws_iam_role.export_task.arn
+}

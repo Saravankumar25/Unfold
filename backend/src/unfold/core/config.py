@@ -175,6 +175,11 @@ class Settings(BaseSettings):
     max_chunks_per_project: int = 5000
     max_chat_messages_per_session_per_hour: int = 200
     max_chat_messages_global_per_day: int = 2000
+    max_chat_messages_per_ip_per_day: int = 600  # one network cannot use up the global daily ceiling
+    max_regenerations_per_ip_per_hour: int = 30
+    max_regenerations_global_per_hour: int = 200
+    max_exports_per_ip_per_hour: int = 30
+    max_exports_global_per_hour: int = 200
     max_exports_per_session_per_hour: int = 5
     task_stopped_resend_delay_seconds: int = 5
     # --- end phase 4 AWS profile

@@ -11,6 +11,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import time
+from typing import Any
+
+from fastapi.responses import JSONResponse
 
 HEADER = "x-unfold-client"
 MAX_SKEW_SECONDS = 60
@@ -38,3 +41,14 @@ def verified_ip(value: str | None, secret: bytes, *, now: float | None = None) -
         return None
     expected = hmac.new(secret, f"{ts}|{ip}".encode(), hashlib.sha256).hexdigest()
     return ip if hmac.compare_digest(expected, mac) else None
+
+
+def require_signed(app: Any, secret: bytes, *, open_paths: frozenset[str] = frozenset({"/health"})) -> None:
+    """Production on a public Function URL: refuse every request the Vercel proxy did not sign (except health),
+    so a caller who bypasses the proxy cannot spend the shared `unverified` quota or the model budget."""
+
+    @app.middleware("http")
+    async def _signed_only(request: Any, call_next: Any) -> Any:
+        if request.url.path in open_paths or verified_ip(request.headers.get(HEADER), secret):
+            return await call_next(request)
+        return JSONResponse({"error": {"code": "FORBIDDEN", "message": "Unsigned request."}}, status_code=403)

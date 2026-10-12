@@ -66,7 +66,7 @@ instance. Policy tests assert this (section 7).
 | `worker` | ECS cluster, task definitions `analysis` (also runs `cleanup` and regenerations) and `export` (when `enable_export_task`; without it the dispatcher fails a requested export with a message) | heavy work; no ECS service |
 | `api` | Lambda `unfold-<env>-api` (image, Function URL `RESPONSE_STREAM`, reserved concurrency) | API |
 | `control` | Lambdas dispatcher, task_stopped, sweeper (worker image, `awslambdaric` entry point), SQS event source (batch 1, max concurrency 2), EventBridge rule, Scheduler schedule + role | orchestration and recovery |
-| `iam` | roles api, worker-task, task-execution, dispatcher (+ scheduler role in `control`), all under a permissions boundary, no wildcard actions | least privilege |
+| `iam` | roles api, worker-task, export-task (own role: DynamoDB `GetItem`, `Query`, `UpdateItem` on the table; S3 put, delete and list only under `projects/*/exports/*`; no SSM, SQS, ECS or index access; the dispatcher may pass it), task-execution, dispatcher (+ scheduler role in `control`), all under a permissions boundary, no wildcard actions | least privilege |
 | `secrets` | names and ARNs only (no `aws_ssm_parameter`) | secrets never enter state |
 | `observability` | log groups (14 d), 4 alarms, 2 metric filters, SNS topic, 2 budgets | operations |
 | `bootstrap` (own state) | state bucket, lock table, GitHub OIDC provider, plan/apply/images roles, runtime boundary | CI without keys |

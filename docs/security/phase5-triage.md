@@ -92,9 +92,11 @@ the PDF renderer and the frontend proxy. Result: no Critical or High finding. Fi
 | L-1 | Public `/ready` named failing dependencies | in production the body is only `status` | existing readiness tests |
 | L-2 | `PROXY_HMAC_SECRET` only had to be non-empty | production refuses fewer than 32 characters | `test_api_refuses_a_short_proxy_secret_in_production` |
 
-Open, accepted: the export task still shares the worker task role (data-plane rights on the table and `projects/*`).
-A separate least-privilege export role is a phase 6 hardening item; it needs a real account to test the `PassRole`
-change. Chromium sandboxing on Fargate is not available without extra capabilities.
+Done after the review: the export task has its own role `<name>-export-task` (permissions boundary, no secrets, SSM, SQS or ECS). It
+can `GetItem`, `Query` and `UpdateItem` on the table (no index), and put, delete and list objects only under
+`projects/*/exports/*`; the dispatcher's `PassRole` statement lists it. Offline plan tests cover the action set and the
+`PassRole`; a real `RunTask` with the new role needs a deployment. Open, accepted: Chromium sandboxing on Fargate is
+not available without extra capabilities.
 Not read line by line: the chat route and the dispatcher and sweeper handlers (covered by the red team in `redteam.md`).
 
 ## 7. Phase 5 items not run before the merge
@@ -103,3 +105,27 @@ Not read line by line: the chat route and the dispatcher and sweeper handlers (c
   Fargate size need a real deployment; they are phase 6 verification items (`docs/deploy-log.md`).
 * The full multi-agent `claude-security` scan was replaced by the focused audit in section 6 plus the red team; run
   it once against `main` before the first prod apply if the budget allows.
+
+## 8. Second review (three parallel read-only audits: API and auth, ingestion and LLM, infra, CI, frontend, dependencies)
+
+The `claude-security` workflow could not run in this environment; the same ground was covered by three manual audits.
+`pip-audit`: 0 vulnerabilities. `npm audit --omit=dev`: 2 low (`katex`, inherited by `mermaid`; math rendering is not
+used, and the suggested fix is a downgrade, so it is not applied). Findings and what was done:
+
+| Severity | Finding | Fix | Test |
+|---|---|---|---|
+| High | `redact()` regex backtracked super-quadratically: one 10 000 character token took 33 s and could pin a worker (and block the API event loop through chat) | key groups bounded to 40 characters | `tests/unit/test_security_regex_bounds.py` |
+| Medium | fence-tag stripper quadratic on repeated unclosed tag openers | bounded to 200 characters | same file |
+| Medium | tar.gz members skipped as oversized were still decompressed without a cap | stream total capped at 4x the extraction limit (`ZIP_BOMB_DETECTED`) | `test_a_tar_whose_skipped_members_decompress_far_beyond_the_limit_is_refused` |
+| Medium | Function URL is public; an unsigned caller only landed in the shared `unverified` bucket and could spend quota | in production every route except `/health` refuses unsigned requests (403) | `tests/unit/test_proxy_signed_only.py` |
+| Medium | regeneration and export had no global or per-IP ceilings; regenerations bypassed the global queue cap | per-IP and global limits, regeneration counts against `max_queued_jobs_global` | `test_one_network_cannot_use_up_the_global_export_ceiling` |
+| Medium | one network could exhaust the global daily chat ceiling | per-IP daily chat limit | existing chat limit tests |
+| Low | Mermaid directive could be rebuilt from the text around a removed one | directives removed until stable | `test_mermaid_directives_cannot_be_rebuilt...` |
+| Low | exports stayed downloadable after the project expired | expiry checked on download | |
+| Low | compose data stores bound to every interface | bound to `127.0.0.1` | |
+| Low | CI actions pinned by mutable tag | pinned to commit SHAs; plan-role trust note in `ci-additions.md` | |
+
+Accepted, with reasons: the dispatcher's concurrency cap is read then used without a lock, and reserved concurrency of
+1 is impossible (SQS event source mappings need at least 2); the Fargate vCPU quota is the hard stop and the overshoot
+is bounded (`operations.md` section 8). On the local Postgres stack the active-job cap is counted without a row lock
+(local development only).

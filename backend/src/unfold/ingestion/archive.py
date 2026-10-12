@@ -265,7 +265,13 @@ def _extract_tar(
     # Two passes over the stream: listing (headers only) then extraction; `r|gz` never seeks backwards.
     with tarfile.open(archive, "r:gz") as tf:
         infos = []
+        streamed = 0
         for ti in tf:
+            streamed += max(ti.size, 0)  # skipping a member still decompresses it: bound the whole stream
+            if streamed > 4 * limits.max_extracted_bytes:
+                raise SecurityRejection(
+                    "Archive expands far beyond the limit.", code=ErrorCode.ZIP_BOMB_DETECTED
+                )
             infos.append((ti.name, _tar_kind(ti)))
             if len(infos) > limits.max_file_count * 2:
                 raise SecurityRejection("Archive has too many entries.", code=ErrorCode.INPUT_TOO_LARGE)

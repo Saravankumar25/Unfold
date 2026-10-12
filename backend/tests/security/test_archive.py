@@ -167,3 +167,27 @@ def test_a_swapped_upload_is_refused_when_only_zip_is_allowed(tmp_path: Path) ->
     with pytest.raises(InputError) as exc:
         safe_extract(p, tmp_path / "out", LIMITS, only="zip")
     assert exc.value.code == ErrorCode.ZIP_INVALID
+
+
+def _big_tar(tmp_path: Path, members: int, size: int) -> Path:
+    p = tmp_path / "big.tar.gz"
+    with tarfile.open(p, "w:gz") as tf:
+        for i in range(members):
+            info = tarfile.TarInfo(f"f{i}.bin")
+            info.size = size
+            tf.addfile(info, io.BytesIO(b"\0" * size))
+    return p
+
+
+def test_a_tar_whose_skipped_members_decompress_far_beyond_the_limit_is_refused(tmp_path: Path) -> None:
+    """Oversized members are skipped, not written, so only the stream total can stop the decompression."""
+    limits = ExtractionLimits(
+        max_extracted_bytes=64 * 1024,
+        max_file_count=50,
+        max_single_file_bytes=1024,
+        max_path_depth=8,
+        max_compression_ratio=10_000,
+    )
+    with pytest.raises(SecurityRejection) as exc:
+        safe_extract(_big_tar(tmp_path, members=8, size=100 * 1024), tmp_path / "out", limits)
+    assert exc.value.code == ErrorCode.ZIP_BOMB_DETECTED

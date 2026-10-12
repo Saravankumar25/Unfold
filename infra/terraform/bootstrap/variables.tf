@@ -36,3 +36,9 @@ variable "apply_environments" {
   type        = list(string)
   default     = ["dev", "prod"]
 }
+
+variable "create_oidc_provider" {
+  description = "Create the account's GitHub OIDC provider; false reuses the one that already exists (one per account)."
+  type        = bool
+  default     = true
+}

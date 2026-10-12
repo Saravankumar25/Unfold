@@ -15,7 +15,7 @@ UNTRUSTED_POLICY = (
 )
 
 REMOVED = "[fence-tag-removed]"
-_TAG_LOOKALIKE = re.compile(r"</?\s*repository_data[^>]*>", re.I)
+_TAG_LOOKALIKE = re.compile(r"</?\s*repository_data[^>]{0,200}>", re.I)
 # Anything shaped like a tag with ASCII, fullwidth or small angle brackets; judged on its normalised look below.
 _CANDIDATE = re.compile(r"[<＜﹤][^<>＜＞﹤﹥]{0,200}[>＞﹥]")
 _LOOKALIKES = str.maketrans("оеарсіух", "oeapciyx")  # Cyrillic o e a p c i y x

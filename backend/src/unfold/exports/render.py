@@ -90,7 +90,10 @@ def sanitize_mermaid(source: str) -> str:
         end = next((i for i, ln in enumerate(lines[1:], start=1) if ln.strip() == "---"), None)
         lines = lines[end + 1 :] if end is not None else lines[1:]
     kept = [ln for ln in lines if not ln.lstrip().startswith("%%")]
-    return _INIT_DIRECTIVE.sub("", "\n".join(kept)).strip()[:20_000]
+    text = "\n".join(kept)
+    while (cleaned := _INIT_DIRECTIVE.sub("", text)) != text:  # removing one can join the text around it
+        text = cleaned
+    return text.strip()[:20_000]
 
 
 def _mermaid_figure(source: str, caption: str | None = None) -> str:

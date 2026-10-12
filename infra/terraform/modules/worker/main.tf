@@ -18,6 +18,7 @@ locals {
         image   = var.worker_image_uri
         cpu     = var.analysis_cpu
         memory  = var.analysis_memory
+        role    = var.task_role_arn
         secrets = var.secrets
       }
     },
@@ -26,6 +27,7 @@ locals {
         image   = var.exporter_image_uri
         cpu     = var.export_cpu
         memory  = var.export_memory
+        role    = var.export_task_role_arn
         secrets = {} # renders PDFs only, never calls a model: a compromised Chromium finds no keys to read
       }
     } : {},
@@ -41,7 +43,7 @@ resource "aws_ecs_task_definition" "this" {
   cpu                      = each.value.cpu
   memory                   = each.value.memory
   execution_role_arn       = var.task_execution_role_arn
-  task_role_arn            = var.task_role_arn
+  task_role_arn            = each.value.role
 
   runtime_platform {
     operating_system_family = "LINUX"
