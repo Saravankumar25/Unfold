@@ -120,7 +120,7 @@ decrypted values into state); the runbook is in `ci-additions.md` section 5. The
 | queued jobs globally | 20 | same |
 | concurrent analysis tasks | 1 (2 after the Fargate vCPU quota is raised) | dispatcher (`ListTasks`), Fargate quota |
 | ZIP / tarball / extracted | 50 MiB / 100 MiB / 300 MiB, 20 000 files, 1 MiB per file, ratio 100 | presigned policy, `inspect_upload`, worker extraction |
-| chunks per project | 5 000 | enforced in the analyze stage before embedding (`INPUT_TOO_LARGE`) |
+| chunks per project | 2 500 | enforced in the analyze stage before embedding (`INPUT_TOO_LARGE`) |
 | job wall clock / attempts | 1 800 s / 3 | worker watchdog, sweeper `StopTask`, claim attempt counter |
 | LLM calls / tokens per job | 150 (hard 195) / 1.5 M | conditional counter per job |
 | provider minute/day windows | per model (`DEFAULT_MODEL_LIMITS`) | DynamoDB fixed windows (approximate) + in-process slots |
